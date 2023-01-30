@@ -34,7 +34,8 @@
 #include "starboard/event.h"
 #include "starboard/speech_synthesis.h"
 #include "starboard/shared/starboard/audio_sink/audio_sink_internal.h"
-
+#include "starboard/shared/starboard/media/key_system_supportability_cache.h"
+#include "starboard/shared/starboard/media/mime_supportability_cache.h"
 #include "third_party/starboard/rdk/shared/window/window_internal.h"
 #include "third_party/starboard/rdk/shared/log_override.h"
 
@@ -128,6 +129,10 @@ void Application::Initialize() {
 
   SbAudioSinkPrivate::Initialize();
   libcobalt_api::Initialize();
+  using ::starboard::shared::starboard::media::KeySystemSupportabilityCache;
+  using ::starboard::shared::starboard::media::MimeSupportabilityCache;
+  MimeSupportabilityCache::GetInstance()->SetCacheEnabled(true);
+  KeySystemSupportabilityCache::GetInstance()->SetCacheEnabled(true);
 }
 
 void Application::Teardown() {

@@ -860,7 +860,7 @@ static void PrintPositionPerSink(GstElement* element)
         gst_query_parse_position(query, 0, &position);
       }
       gst_query_unref(query);
-      GST_INFO("Position from %s : %"GST_TIME_FORMAT, GST_ELEMENT_NAME(el), GST_TIME_ARGS(position));
+      GST_INFO("Position from %s : %" GST_TIME_FORMAT, GST_ELEMENT_NAME(el), GST_TIME_ARGS(position));
     }
     return TRUE;
   };

@@ -134,11 +134,21 @@ config("pedantic_warnings") {
 }
 
 config("no_pedantic_warnings") {
-  cflags_cc = [
-    "-Wno-literal-suffix",
-    "-Wno-deprecated-copy",
-    "-Wno-invalid-offsetof",
-    "-Wno-ignored-qualifiers",
-    "-Wno-pessimizing-move",
-  ]
+  if (!is_clang) {
+    cflags_cc = [
+      "-Wno-literal-suffix",
+      "-Wno-deprecated-copy",
+      "-Wno-invalid-offsetof",
+      "-Wno-ignored-qualifiers",
+      "-Wno-pessimizing-move",
+    ]
+  } else {
+    cflags = [
+      # Do not warn for implicit type conversions that may change a value.
+      "-Wno-conversion",
+      "-Wno-deprecated-declarations",
+      "-Wno-inconsistent-missing-override",
+      "-Wno-unknown-warning-option",
+    ]
+  }
 }

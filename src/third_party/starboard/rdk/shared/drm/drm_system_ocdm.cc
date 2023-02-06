@@ -565,7 +565,7 @@ void DrmSystemOcdm::UpdateSession(int ticket,
                                   int key_size,
                                   const void* session_id,
                                   int session_id_size) {
-  std::string id = {static_cast<const char*>(session_id), session_id_size};
+  std::string id = {static_cast<const char*>(session_id), static_cast<std::string::size_type>(session_id_size)};
   SB_LOG(INFO) << "Update: " << id;
   auto* session = GetSessionById(id);
   if (session)
@@ -573,7 +573,7 @@ void DrmSystemOcdm::UpdateSession(int ticket,
 }
 
 void DrmSystemOcdm::CloseSession(const void* session_id, int session_id_size) {
-  std::string id = {static_cast<const char*>(session_id), session_id_size};
+  std::string id = {static_cast<const char*>(session_id), static_cast<std::string::size_type>(session_id_size)};
   SB_LOG(INFO) << "Close: " << id;
   auto* session = GetSessionById(id);
   if (session)
@@ -666,7 +666,7 @@ std::set<std::string> DrmSystemOcdm::GetReadyKeysUnlocked() const {
       for (auto& key_with_status : session_key.second) {
         cached_ready_keys_.emplace(std::string{
             reinterpret_cast<const char*>(key_with_status.key.identifier),
-            key_with_status.key.identifier_size});
+            static_cast<std::string::size_type>(key_with_status.key.identifier_size)});
       }
     }
   }

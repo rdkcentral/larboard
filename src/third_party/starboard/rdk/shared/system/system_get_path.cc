@@ -169,12 +169,12 @@ bool GetExecutableDirectory(char* out_path, int path_size) {
 
 // Gets only the name portion of the current executable.
 bool GetExecutableName(char* out_path, int path_size) {
-  char path[kSbFileMaxPath] = {0};
-  if (!GetExecutablePath(path, kSbFileMaxPath)) {
+  std::vector<char> path(kSbFileMaxPath, 0);
+  if (!GetExecutablePath(path.data(), kSbFileMaxPath)) {
     return false;
   }
 
-  const char* last_slash = strrchr(path, '/');
+  const char* last_slash = strrchr(path.data(), '/');
   if (starboard::strlcpy<char>(out_path, last_slash + 1, path_size) >= path_size) {
     return false;
   }
@@ -189,12 +189,12 @@ bool GetTemporaryDirectory(char* out_path, int path_size) {
     return true;
   }
 
-  char binary_name[kSbFileMaxPath] = {0};
-  if (!GetExecutableName(binary_name, kSbFileMaxPath)) {
+  std::vector<char> binary_name(kSbFileMaxPath, 0);
+  if (!GetExecutableName(binary_name.data(), kSbFileMaxPath)) {
     return false;
   }
 
-  int result = SbStringFormatF(out_path, path_size, "/tmp/%s-%d", binary_name,
+  int result = SbStringFormatF(out_path, path_size, "/tmp/%s-%d", binary_name.data(),
                                static_cast<int>(getpid()));
   if (result < 0 || result >= path_size) {
     out_path[0] = '\0';

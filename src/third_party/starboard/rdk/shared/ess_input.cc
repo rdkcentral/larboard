@@ -351,6 +351,10 @@ SbKey KeyCodeToSbKey(uint16_t code) {
     case KEY_INFO:
      return kSbKeyInfo;
 
+    //[sky] mapping of the YouTube partner button
+    case KEY_KPLEFTPAREN:
+     return kSbKeyLaunchThisApplication;
+
     case KEY_UNKNOWN:
       break;
   }

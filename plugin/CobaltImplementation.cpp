@@ -98,9 +98,10 @@ private:
       , ClientIdentifier()
       , Language()
       , ContentDir()
-      , PreloadEnabled()
       , EssosContextDestroy()
-      , AutoSuspendDelay() {
+      , PreloadEnabled()
+      , AutoSuspendDelay()
+      , SbMainArgs() {
       Add(_T("url"), &Url);
       Add(_T("clientidentifier"), &ClientIdentifier);
       Add(_T("language"), &Language);
@@ -113,6 +114,7 @@ private:
       Add(_T("advertisingid"), &AdvertisingId);
       Add(_T("closurepolicy"), &ClosurePolicy);
       Add(_T("fireboltendpoint"), &FireboltEndpoint);
+      Add(_T("sbmainargs"), &SbMainArgs);
     }
     ~Config() {
     }
@@ -130,6 +132,7 @@ private:
     Core::JSON::VariantContainer AdvertisingId;
     Core::JSON::String ClosurePolicy;
     Core::JSON::String FireboltEndpoint;
+    Core::JSON::ArrayType<Core::JSON::String> SbMainArgs;
   };
 
   class NotificationSink: public Core::Thread {
@@ -347,6 +350,8 @@ private:
         return 0;
       }, this);
 
+      PrepareSbMainArgs(config);
+
       Run();
       return result;
     }
@@ -390,21 +395,30 @@ private:
       pthread_sigmask(SIG_UNBLOCK, &mask, nullptr);
       return (true);
     }
-    uint32_t Worker() override
-    {
-      const std::string cmdURL = "--url=" + _url;
-      std::vector<const char*> argv;
 
-      argv.push_back("Cobalt");
+    void PrepareSbMainArgs(const Config& config)
+    {
+      ASSERT(_sbMainArgs.empty());
 
       if (!_url.empty())
-        argv.push_back(cmdURL.c_str());
-      if (IsPreloadEnabled())
-        argv.push_back("--preload");
+        _sbMainArgs.push_back(std::string("--url=") + _url);
 
-#ifdef ENABLE_EVERGREEN_LITE
-      argv.push_back("--evergreen_lite");
-#endif
+      if (IsPreloadEnabled())
+        _sbMainArgs.push_back("--preload");
+
+      if (config.SbMainArgs.IsSet()) {
+        auto index(config.SbMainArgs.Elements());
+        while (index.Next())
+          _sbMainArgs.push_back(index.Current().Value());
+      }
+    }
+
+    uint32_t Worker() override
+    {
+      std::vector<const char*> argv;
+      argv.push_back("Cobalt");
+      for (const auto& arg: _sbMainArgs)
+        argv.push_back(arg.c_str());
 
       {
         std::string args_str;
@@ -429,6 +443,7 @@ private:
     CobaltImplementation &_parent;
     bool _preloadEnabled { false };
     uint16_t _autoSuspendDelayInSeconds { 30 };
+    std::vector<std::string> _sbMainArgs;
   };
 
 private:

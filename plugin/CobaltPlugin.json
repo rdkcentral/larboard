@@ -52,6 +52,21 @@
           ]
         }
       }
+    },
+    "advertisingid": {
+      "description": "Configure Identifier For Advertising",
+      "type": "object",
+      "required": [],
+      "properties": {
+        "ifa": {
+          "type": "string",
+          "description": "Advertising ID or IFA"
+        },
+        "lmt": {
+          "type": "string",
+          "description": "Limit advertising tracking, treated as boolean"
+        }
+      }
     }
   },
   "configuration": {
@@ -91,6 +106,16 @@
           "fireboltendpoint": {
             "type": "string",
             "description": "A URL that specifies access point to Firebolt Riple. Should include session id in the query."
+          },
+          "advertisingid": {
+            "$ref": "#/definitions/advertisingid"
+          },
+          "sbmainargs": {
+            "type": "array",
+            "description": "A list of additional arguments to pass to StarboardMain.",
+            "items": {
+              "type": "string"
+            }
           }
         }
       }

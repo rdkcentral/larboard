@@ -13,6 +13,7 @@ Cobalt plugin for Thunder framework.
 - [Introduction](#head.Introduction)
 - [Description](#head.Description)
 - [Configuration](#head.Configuration)
+- [Interfaces](#head.Interfaces)
 - [Methods](#head.Methods)
 - [Properties](#head.Properties)
 - [Notifications](#head.Notifications)
@@ -93,6 +94,20 @@ The table below lists configuration options of the plugin.
 | configuration?.systemproperties?.friendlyname | string | <sup>*(optional)*</sup> A friendly name for this actual device |
 | configuration?.systemproperties?.devicetype | string | <sup>*(optional)*</sup> The type of the device. (must be one of the following: *SetTopBox*, *OverTheTopBox*, *TV*) |
 | configuration?.fireboltendpoint | string | <sup>*(optional)*</sup> A URL that specifies access point to Firebolt Riple. Should include session id in the query |
+| configuration?.advertisingid | object | <sup>*(optional)*</sup> Configure Identifier For Advertising |
+| configuration?.advertisingid?.ifa | string | <sup>*(optional)*</sup> Advertising ID or IFA |
+| configuration?.advertisingid?.lmt | string | <sup>*(optional)*</sup> Limit advertising tracking, treated as boolean |
+| configuration?.sbmainargs | array | <sup>*(optional)*</sup> A list of additional arguments to pass to StarboardMain |
+| configuration?.sbmainargs[#] | string | <sup>*(optional)*</sup>  |
+
+<a name="head.Interfaces"></a>
+# Interfaces
+
+This plugin implements the following interfaces:
+
+- [Cobalt.json](https://github.com/rdkcentral/ThunderInterfaces/blob/R2/interfaces/Cobalt.json) (version 1.0.0)
+- [StateControl.json](https://github.com/rdkcentral/ThunderInterfaces/blob/R2/interfaces/StateControl.json) (version 1.0.0)
+- [Accessibility.json](https://github.com/rdkcentral/ThunderInterfaces/blob/R2/interfaces/Accessibility.json) (version 1.0.0)
 
 <a name="head.Methods"></a>
 # Methods

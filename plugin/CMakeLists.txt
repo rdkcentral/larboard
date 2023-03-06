@@ -28,10 +28,11 @@ set(PLUGIN_COBALT_AUTOSTART false CACHE STRING "Automatically start Cobalt plugi
 set(PLUGIN_COBALT_CLOSUREPOLICY "quit" CACHE STRING "Configures how to handle window close request")
 set(PLUGIN_COBALT_AUTOSTART "false" CACHE STRING "Automatically start Cobalt plugin")
 set(PLUGIN_COBALT_MODE "Local" CACHE STRING "Controls if the plugin should run in its own process, in process or remote")
-set(COBALT_LIMIT_AD_TRACKING false CACHE STRING "Disable Ad Tracking and measurement.")
+set(PLUGIN_COBALT_LIMIT_AD_TRACKING false CACHE STRING "Disable Ad Tracking and measurement.")
 
 option(PLUGIN_COBALT_ENABLE_FOCUS_IFACE "Enable support for focus change." OFF)
 option(PLUGIN_COBALT_EVEGREEN_LITE "Enable Evergreen Lite build configuration." OFF)
+option(PLUGIN_COBALT_EVEGREEN_COMPATIBLE "Enable Evergreen compatible configuration." OFF)
 
 if(PLUGIN_COBALT_ENABLE_FOCUS_IFACE)
     add_definitions(-DPLUGIN_COBALT_ENABLE_FOCUS_IFACE=1)
@@ -66,6 +67,10 @@ add_library(${MODULE_NAME} SHARED
 
 if (PLUGIN_COBALT_EVEGREEN_LITE)
     add_definitions(-DENABLE_EVERGREEN_LITE=1)
+    set(PLUGIN_COBALT_EVEGREEN_COMPATIBLE ON)
+endif()
+
+if (PLUGIN_COBALT_EVEGREEN_COMPATIBLE)
     find_library(COBALT_LIBRARY loader_app REQUIRED)
 else()
     find_library(COBALT_LIBRARY cobalt REQUIRED)

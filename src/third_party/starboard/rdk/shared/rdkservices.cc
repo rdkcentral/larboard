@@ -670,7 +670,7 @@ struct AdvertisingIdImpl {
     return false;
   }
 
-    bool GetIfaType(std::string &out) const {
+  bool GetIfaType(std::string &out) const {
     ::starboard::ScopedLock lock(mutex_);
     if (props_.IfaType.IsSet() && !props_.IfaType.Value().empty()) {
       out = props_.IfaType.Value();

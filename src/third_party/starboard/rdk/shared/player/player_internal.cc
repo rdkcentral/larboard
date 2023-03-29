@@ -1960,7 +1960,7 @@ bool PlayerImpl::WriteSample(SbMediaType sample_type, GstBuffer* buffer, uint64_
 
   GST_CAT_LEVEL_LOG (
     GST_CAT_DEFAULT, log_level, src,
-    "SampleType:%d %" GST_TIME_FORMAT " id:%llu b:%p",
+    "SampleType:%d %" GST_TIME_FORMAT " id:%" PRIu64 " b:%p",
     sample_type, GST_TIME_ARGS(GST_BUFFER_TIMESTAMP(buffer)), serial_id, buffer);
 
   gst_app_src_push_buffer(GST_APP_SRC(src), buffer);
@@ -2158,7 +2158,7 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
 
   if (keep_samples) {
     GST_INFO("Pending flushing operation. Storing sample");
-    GST_INFO("SampleType:%d %" GST_TIME_FORMAT " id:%llu b:%" GST_PTR_FORMAT,
+    GST_INFO("SampleType:%d %" GST_TIME_FORMAT " id:%" PRIu64 " b:%" GST_PTR_FORMAT,
              sample_type, GST_TIME_ARGS(GST_BUFFER_TIMESTAMP(buffer)), serial, buffer);
     PendingSample sample(sample_type, buffer, serial);
     buffer= nullptr;
@@ -2196,7 +2196,7 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
     SB_CHECK(sample.Type() == sample_type);
 
     if (serial != sample.SerialID()) {
-      GST_WARNING("Detected out-of-order sample. Expected serial: %llu, sample serial: %llu",
+      GST_WARNING("Detected out-of-order sample. Expected serial: %" PRIu64 ", sample serial: %" PRIu64 "",
                   serial, sample.SerialID());
     }
 
@@ -2623,7 +2623,7 @@ void PlayerImpl::WritePendingSamples() {
       }
 
       GstBuffer* buffer = keep_samples ? sample.CopyBuffer() : sample.TakeBuffer();
-      GST_INFO("Writing pending: SampleType:%d id:%llu b:%" GST_PTR_FORMAT, sample.Type(), sample.SerialID(), buffer);
+      GST_INFO("Writing pending: SampleType:%d id:%" PRIu64 " b:%" GST_PTR_FORMAT, sample.Type(), sample.SerialID(), buffer);
       prev_ts = GST_BUFFER_TIMESTAMP(buffer);
       if (WriteSample(sample.Type(), buffer, sample.SerialID())) {
         GST_INFO("Pending sample was written.");

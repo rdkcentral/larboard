@@ -432,7 +432,7 @@ void gst_cobalt_src_setup_and_add_app_src(SbMediaType media_type,
     src_elem = payloader;
   }
 
-  if (decryptor || payloader) {
+  {
     GstElement* queue = gst_element_factory_make("queue", nullptr);
     g_object_set (
       G_OBJECT (queue),
@@ -2872,9 +2872,7 @@ void PlayerImpl::AddBufferingProbe(GstClockTime target, int ticket) {
   }
 
   if (video_appsrc_) {
-    if (SbDrmSystemIsValid(drm_system_)) {
-      target +=  5 * 16 * GST_MSECOND;
-    }
+    target +=  10 * 16 * GST_MSECOND;
     if (add_probe(video_appsrc_, target, ticket, buffering_probe_callback) != 0u)
       buffering_state_ |= static_cast<int>(MediaType::kVideo);
   }

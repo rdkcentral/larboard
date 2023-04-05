@@ -429,16 +429,16 @@ static GstFlowReturn cobalt_ocdm_decryptor_transform_ip(GstBaseTransform* base, 
   GstBuffer* iv = nullptr;
   GstBuffer* key = nullptr;
   uint32_t subsample_count = 0u;
-  uint32_t encryption_scheme = kSbDrmEncryptionSchemeAesCtr;
 
   const GValue* value = nullptr;
 
-  if ( gst_structure_get_uint(info, "encryption_scheme", &encryption_scheme) ) {
-    if (encryption_scheme != kSbDrmEncryptionSchemeAesCtr) {
-      GST_ELEMENT_ERROR (self, STREAM, DECRYPT, ("Decryption failed"), ("Unsupported encryption scheme = %d", encryption_scheme));
-      goto exit;
-    }
+#if !(defined(ENABLE_CBCS) && ENABLE_CBCS)
+  const char* cipher_mode = gst_structure_get_string(info, "cipher-mode");
+  if ( g_strcmp0(cipher_mode, "cbcs") == 0 ) {
+    GST_ELEMENT_ERROR (self, STREAM, DECRYPT, ("Decryption failed"), ("Unsupported chipher-mode = %s", cipher_mode));
+    goto exit;
   }
+#endif
 
   value = gst_structure_get_value(info, "kid");
   if (!value) {

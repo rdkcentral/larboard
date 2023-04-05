@@ -124,6 +124,11 @@ bool enableNativeAudio() {
       gst_object_unref(GST_OBJECT(factory));
       enable_native_audio = true;
     }
+    else if ((factory = gst_element_factory_find("rialtomseaudiosink"))) {
+      guint rank = gst_plugin_feature_get_rank((GstPluginFeature*)factory);
+      gst_object_unref(GST_OBJECT(factory));
+      enable_native_audio = (rank >= GST_RANK_PRIMARY);
+    }
     g_once_init_leave (&init, 1);
   }
 
@@ -1950,6 +1955,21 @@ void PlayerImpl::SetupElement(GstElement* pipeline,
       g_object_set(G_OBJECT(element), "async", TRUE, nullptr);
     }
   }
+
+  if ( !self->max_video_capabilities_.empty() ) {
+    const gchar* klass_str =
+      gst_element_class_get_metadata (GST_ELEMENT_GET_CLASS (element), "klass");
+    if ( strstr(klass_str, "Sink") && strstr(klass_str, "Video") ) {
+      GObjectClass* oclass = G_OBJECT_GET_CLASS(element);
+      if ( g_object_class_find_property(oclass, "maxVideoWidth") &&
+           g_object_class_find_property(oclass, "maxVideoHeight") ) {
+        uint32_t width = 0, height = 0;
+        ParseMaxVideoCapabilities(self->max_video_capabilities_.c_str(), &width, &height, nullptr);
+        g_object_set(G_OBJECT(element), "maxVideoWidth", width, "maxVideoHeight", height, nullptr);
+      }
+    }
+  }
+
 }
 
 void PlayerImpl::MarkEOS(SbMediaType stream_type) {
@@ -2089,16 +2109,19 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
             sample_type == kSbMediaTypeVideo ? "video" : "audio");
     SB_DCHECK(drm_system_);
 
-    GST_LOG("Encryption scheme %s",
-            sample_infos[0].drm_info->encryption_scheme == kSbDrmEncryptionSchemeAesCtr ? "Ctr" :
-            (sample_infos[0].drm_info->encryption_scheme == kSbDrmEncryptionSchemeAesCbc ? "Cbc" : "Unknown") );
-
     GstBuffer* subsamples = nullptr;
     GstBuffer* iv = nullptr;
     GstBuffer* key = nullptr;
     uint32_t subsamples_count = 0u;
     uint32_t iv_size = 0u;
+
     const int8_t kEmptyArray[kMaxIvSize / 2] = {0};
+    const auto encryption_scheme = sample_infos[0].drm_info->encryption_scheme;
+    const char* cipher_mode =
+      (encryption_scheme == kSbDrmEncryptionSchemeAesCtr) ? "cenc" :
+      (encryption_scheme == kSbDrmEncryptionSchemeAesCbc  ? "cbcs" : "unknown");
+
+    GST_LOG("Encryption cipher-mode: %s", cipher_mode);
 
     key = gst_buffer_new_allocate(
         nullptr, sample_infos[0].drm_info->identifier_size, nullptr);
@@ -2144,8 +2167,16 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
       "iv", GST_TYPE_BUFFER, iv,
       "subsample_count", G_TYPE_UINT, subsamples_count,
       "subsamples", GST_TYPE_BUFFER, subsamples,
-      "encryption_scheme", G_TYPE_UINT, sample_infos[0].drm_info->encryption_scheme,
+      "cipher-mode", G_TYPE_STRING, cipher_mode,
       NULL);
+
+    if (encryption_scheme == kSbDrmEncryptionSchemeAesCbc) {
+      const auto& encryption_pattern = sample_infos[0].drm_info->encryption_pattern;
+      gst_structure_set(info,
+        "crypt_byte_block", G_TYPE_UINT, encryption_pattern.crypt_byte_block,
+        "skip_byte_block", G_TYPE_UINT, encryption_pattern.skip_byte_block,
+        NULL);
+    }
 
     gst_buffer_add_protection_meta(buffer, info);
 

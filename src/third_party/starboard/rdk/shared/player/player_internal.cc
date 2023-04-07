@@ -2866,7 +2866,7 @@ void PlayerImpl::AddBufferingProbe(GstClockTime target, int ticket) {
 
   buffering_state_ = 0;
 
-  if (audio_appsrc_) {
+  if (audio_appsrc_ && audio_codec_ != kSbMediaAudioCodecNone) {
     if (add_probe(audio_appsrc_, target, ticket, buffering_probe_callback) != 0u)
       buffering_state_ |= static_cast<int>(MediaType::kAudio);
   }

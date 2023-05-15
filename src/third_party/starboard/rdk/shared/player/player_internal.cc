@@ -116,7 +116,11 @@ unsigned getGstPlayFlag(const char* nick) {
 
 bool enableNativeAudio() {
   static bool enable_native_audio = false;
+#if __GNUC__ < 10
   static volatile gsize init = 0;
+#else
+  static gsize init = 0;
+#endif
 
   if (g_once_init_enter (&init)) {
     GstElementFactory* factory = gst_element_factory_find("brcmaudiosink");
@@ -903,7 +907,12 @@ static void PrintGstCaps(GstCaps* caps) {
 
 static GstElement* CreatePayloader() {
   static GstElementFactory* factory = nullptr;
+#if __GNUC__ < 10
   static volatile gsize init = 0;
+#else
+  static gsize init = 0;
+#endif
+
 
   if (g_once_init_enter (&init)) {
     factory = gst_element_factory_find("svppay");

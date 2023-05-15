@@ -2847,6 +2847,12 @@ void PlayerImpl::ConfigureLimitedVideo() {
     gst_object_unref(GST_OBJECT(factory));
   }
 
+  GstContext* context = gst_context_new("erm", FALSE);
+  GstStructure* context_structure = gst_context_writable_structure(context);
+  gst_structure_set(context_structure, "res-usage", G_TYPE_UINT, 0x0u, nullptr);
+  gst_element_set_context(GST_ELEMENT(pipeline_), context);
+  gst_context_unref(context);
+
   // enforce no audio
   audio_codec_ = kSbMediaAudioCodecNone;
 }

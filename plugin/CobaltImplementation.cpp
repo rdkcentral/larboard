@@ -56,7 +56,7 @@ static void SetThunderAccessPointIfNeeded() {
   if (Core::SystemInfo::GetEnvironment(envName, envVal))
     return;
 
-  Core::File file("/etc/WPEFramework/config.json", false);
+  Core::File file("/etc/WPEFramework/config.json");
   if (!file.Open(true))
     return;
 
@@ -227,7 +227,11 @@ private:
 
     void Schedule(const Core::Time& time)
     {
+#if THUNDER_VERSION == 4
+      _scheduled = _worker.Reschedule(time);
+#else
       _scheduled = _worker.Schedule(time);
+#endif /* Thunder R4 */
     }
 
     void Cancel()
@@ -385,7 +389,7 @@ private:
     uint16_t AutoSuspendDelayInSeconds() const { return _autoSuspendDelayInSeconds; }
 
   private:
-    bool Initialize() override
+    bool Initialize2()
     {
       sigset_t mask;
       sigemptyset(&mask);
@@ -395,6 +399,19 @@ private:
       pthread_sigmask(SIG_UNBLOCK, &mask, nullptr);
       return (true);
     }
+
+#if THUNDER_VERSION == 4
+    uint32_t Initialize() override
+    {
+      Initialize2();
+      return (Core::ERROR_NONE);
+    }
+#else
+    bool Initialize() override
+    {
+      return Initialize2();
+    }
+#endif /* Thunder R4 */
 
     void PrepareSbMainArgs(const Config& config)
     {

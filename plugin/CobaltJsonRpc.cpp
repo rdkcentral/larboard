@@ -23,6 +23,10 @@
 #include "Cobalt.h"
 #include "Module.h"
 
+#ifndef SYSLOG_GLOBAL
+#define SYSLOG_GLOBAL(CATEGORY, PARAMETERS) SYSLOG(CATEGORY, PARAMETERS)
+#endif /* SYSLOG_GLOBAL */
+
 namespace WPEFramework {
 namespace Plugin {
 
@@ -206,14 +210,14 @@ uint32_t Cobalt::get_accessibility(JsonObject &response) const
   Exchange::IDictionary *dict(
     _cobalt->QueryInterface<Exchange::IDictionary>());
   if (dict == nullptr) {
-    SYSLOG(Trace::Error, (_T("IDictionary is not implemented")));
+    SYSLOG_GLOBAL(Logging::Error, (_T("IDictionary is not implemented")));
   } else {
     std::string json;
     if (!dict->Get("settings", "accessibility", json)) {
-      SYSLOG(Trace::Error, (_T("Cannot get 'accessibility' setting")));
+      SYSLOG_GLOBAL(Logging::Error, (_T("Cannot get 'accessibility' setting")));
     }
     else if (!response.FromString(json)) {
-      SYSLOG(Trace::Error, (_T("Cannot convert to JSON object")));
+      SYSLOG_GLOBAL(Logging::Error, (_T("Cannot convert to JSON object")));
     }
     else {
       result = Core::ERROR_NONE;
@@ -239,14 +243,14 @@ uint32_t Cobalt::set_accessibility(const JsonObject &param)
     Exchange::IDictionary *dict(
       _cobalt->QueryInterface<Exchange::IDictionary>());
     if (dict == nullptr) {
-      SYSLOG(Trace::Error, (_T("IDictionary is not implemented")));
+      SYSLOG_GLOBAL(Logging::Error, (_T("IDictionary is not implemented")));
     } else {
       std::string json;
       if (!param.ToString(json)) {
-        SYSLOG(Trace::Error, (_T("Cannot convert to string")));
+        SYSLOG_GLOBAL(Logging::Error, (_T("Cannot convert to string")));
       }
       else if (!dict->Set("settings", "accessibility", json)) {
-        SYSLOG(Trace::Error, (_T("Cannot set 'accessibility' setting")));
+        SYSLOG_GLOBAL(Logging::Error, (_T("Cannot set 'accessibility' setting")));
       }
       else {
         result = Core::ERROR_NONE;

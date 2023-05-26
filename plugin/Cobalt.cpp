@@ -47,8 +47,11 @@ public:
   virtual uint8_t Processes() const {
     return (IsOperational() ? 1 : 0);
   }
-
+#if THUNDER_VERSION == 4
+  virtual bool IsOperational() const {
+#else
   virtual const bool IsOperational() const {
+#endif
     return _main.IsActive();
   }
 

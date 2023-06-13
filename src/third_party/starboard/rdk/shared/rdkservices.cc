@@ -134,8 +134,6 @@ public:
   }
 
   ServiceLink(const std::string callsign) : callsign_(callsign) {
-    if (getenv("THUNDER_ACCESS") != nullptr)
-      link_.reset(new JSONRPC::LinkType<Core::JSON::IElement>(callsign, nullptr, false, buildQuery()));
   }
 
   template <typename PARAMETERS>
@@ -148,28 +146,28 @@ public:
         return sendObject.FromString(envValue) ? Core::ERROR_NONE : Core::ERROR_GENERAL;
       }
     }
-    if (!link_)
+    if (!EnsureLink())
       return Core::ERROR_UNAVAILABLE;
     return link_->template Get<PARAMETERS>(waitTime, method, sendObject);
   }
 
   template <typename PARAMETERS, typename HANDLER, typename REALOBJECT>
   uint32_t Dispatch(const uint32_t waitTime, const string& method, const PARAMETERS& parameters, const HANDLER& callback, REALOBJECT* objectPtr) {
-    if (!link_)
+    if (!EnsureLink())
       return Core::ERROR_UNAVAILABLE;
     return link_->template Dispatch<PARAMETERS, HANDLER, REALOBJECT>(waitTime, method, parameters, callback, objectPtr);
   }
 
   template <typename HANDLER, typename REALOBJECT>
   uint32_t Dispatch(const uint32_t waitTime, const string& method, const HANDLER& callback, REALOBJECT* objectPtr) {
-    if (!link_)
+    if (!EnsureLink())
       return Core::ERROR_UNAVAILABLE;
     return link_->template Dispatch<void, HANDLER, REALOBJECT>(waitTime, method, callback, objectPtr);
   }
 
   template <typename INBOUND, typename METHOD, typename REALOBJECT>
   uint32_t Subscribe(const uint32_t waitTime, const string& eventName, const METHOD& method, REALOBJECT* objectPtr) {
-    if (!link_)
+    if (!EnsureLink())
       return enableEnvOverrides() ? Core::ERROR_NONE : Core::ERROR_UNAVAILABLE;
     return link_->template Subscribe<INBOUND, METHOD, REALOBJECT>(waitTime, eventName, method, objectPtr);
   }
@@ -182,6 +180,15 @@ public:
 
   void Teardown() {
     link_.reset();
+  }
+
+  bool EnsureLink() {
+    if (!link_) {
+      static const bool kHasThunderAccessEnv = (getenv("THUNDER_ACCESS") != nullptr);
+      if (kHasThunderAccessEnv)
+        link_.reset(new JSONRPC::LinkType<Core::JSON::IElement>(callsign_, nullptr, false, buildQuery()));
+    }
+    return link_;
   }
 };
 
@@ -213,6 +220,8 @@ SB_ONCE_INITIALIZE_FUNCTION(DeviceIdImpl, GetDeviceIdImpl);
 struct TextToSpeechImpl {
 private:
   ::starboard::atomic_bool is_enabled_ { false };
+  ::starboard::atomic_bool needs_refresh_ { true };
+  ::starboard::atomic_bool did_subscribe_ { false };
   int64_t speech_id_ { -1 };
   int32_t speech_request_num_ { 0 };
   ServiceLink tts_link_ { kTTSCallsign };
@@ -284,31 +293,10 @@ private:
   }
 
 public:
-  TextToSpeechImpl() {
-    uint32_t rc;
-    rc = tts_link_.Subscribe<StateInfo>(kDefaultTimeoutMs, "onttsstatechanged", &TextToSpeechImpl::OnStateChanged, this);
-    if (Core::ERROR_NONE != rc) {
-      SB_LOG(ERROR)
-          << "Failed to subscribe to '" << kTTSCallsign
-          << ".onttsstatechanged' event, rc=" << rc
-          << " ( " << Core::ErrorToString(rc) << " )";
-    }
-
-    IsTTSEnabledInfo info;
-    rc = tts_link_.Get(kDefaultTimeoutMs, "isttsenabled", info);
-    if (Core::ERROR_NONE == rc) {
-      is_enabled_.store( info.IsEnabled.Value() );
-    }
-    if (Core::SystemInfo::GetEnvironment(_T("CLIENT_IDENTIFIER"), client_id_) == true) {
-      std::string::size_type pos = client_id_.find(',');
-      if (pos != std::string::npos)
-        client_id_.erase(pos, std::string::npos);
-    } else {
-        client_id_ = "Cobalt";
-    }
-  }
+  TextToSpeechImpl() = default;
 
   void Speak(const std::string &text) {
+    Refresh();
     if (!is_enabled_.load())
       return;
 
@@ -324,6 +312,7 @@ public:
   }
 
   void Cancel() {
+    Refresh();
     if (!is_enabled_.load())
       return;
 
@@ -347,12 +336,62 @@ public:
     tts_link_.Dispatch(kDefaultTimeoutMs, "cancel", params, &TextToSpeechImpl::OnCancelResult, this);
   }
 
-  bool IsEnabled() const {
+  bool IsEnabled() {
+    Refresh();
     return is_enabled_.load();
   }
 
+  void Refresh() {
+    if (!needs_refresh_.load())
+      return;
+
+    uint32_t rc;
+    if (!did_subscribe_.load()) {
+      bool old_val = did_subscribe_.exchange(true);
+      if (old_val == false) {
+        rc = tts_link_.Subscribe<StateInfo>(kDefaultTimeoutMs, "onttsstatechanged", &TextToSpeechImpl::OnStateChanged, this);
+        if (Core::ERROR_UNAVAILABLE == rc || kPriviligedRequestErrorCode == rc) {
+          needs_refresh_.store(false);
+          SB_LOG(ERROR) << "Failed to subscribe to '" << kTTSCallsign
+                        << ".onstatechanged' event, rc=" << rc
+                        << " ( " << Core::ErrorToString(rc) << " )";
+          return;
+        }
+        if (Core::ERROR_NONE != rc && Core::ERROR_DUPLICATE_KEY != rc) {
+          did_subscribe_.store(false);
+          SB_LOG(ERROR) << "Failed to subscribe to '" << kTTSCallsign
+                        << ".onstatechanged' event, rc=" << rc
+                        << " ( " << Core::ErrorToString(rc) << " )."
+                        << " Going to try again next time.";
+          return;
+        }
+      }
+    }
+
+    IsTTSEnabledInfo info;
+    rc = tts_link_.Get(kDefaultTimeoutMs, "isttsenabled", info);
+    if (Core::ERROR_NONE == rc) {
+      is_enabled_.store( info.IsEnabled.Value() );
+    }
+    if (Core::SystemInfo::GetEnvironment(_T("CLIENT_IDENTIFIER"), client_id_) == true) {
+      std::string::size_type pos = client_id_.find(',');
+      if (pos != std::string::npos)
+        client_id_.erase(pos, std::string::npos);
+    } else {
+        client_id_ = "Cobalt";
+    }
+
+    needs_refresh_.store(false);
+  }
+
   void Teardown() {
+    if (did_subscribe_.load()) {
+      tts_link_.Unsubscribe(kDefaultTimeoutMs, "onttsstatechanged");
+      did_subscribe_.store(false);
+    }
     tts_link_.Teardown();
+    needs_refresh_.store(true);
+    is_enabled_.store(false);
   }
 };
 
@@ -696,20 +735,6 @@ private:
 SB_ONCE_INITIALIZE_FUNCTION(AdvertisingIdImpl, GetAdvertisingProperties);
 
 struct AuthServiceImpl {
-  AuthServiceImpl() {
-    const std::string method = std::string("status@") + kAuthServiceCallsign;
-    Core::JSON::String tmp;
-    uint32_t rc = ServiceLink(EMPTY_STRING)
-      .Get(kDefaultTimeoutMs, method, tmp);
-    if (Core::ERROR_NONE == rc) {
-      is_available_ = true;
-    } else if (access(kAuthServiceExperienceFile, R_OK) == 0) {
-      is_available_ = true;
-    } else {
-      SB_LOG(INFO) << "AuthService is not available";
-    }
-  }
-
   bool IsAvailable() const {
     return is_available_;
   }
@@ -746,12 +771,13 @@ struct AuthServiceImpl {
       return true;
     }
 
+    is_available_ = false;
     return false;
   }
 
 private:
   ::starboard::Mutex mutex_;
-  bool is_available_ { false };
+  bool is_available_ { true };
   std::string experience_;
 };
 
@@ -771,7 +797,12 @@ struct DisplayInfoImpl {
     return diagonal_size_in_inches_;
   }
   void Teardown() {
+    if (did_subscribe_.load()) {
+      display_info_.Unsubscribe(kDefaultTimeoutMs, "updated");
+      did_subscribe_.store(false);
+    }
     display_info_.Teardown();
+    needs_refresh_.store(true);
   }
 
 private:
@@ -1054,20 +1085,28 @@ private:
   }
 
 public:
-  NetworkInfoImpl() {
-    Refresh();
-  }
-
   bool IsDisconnected() {
+    Refresh();
     return !is_connected_.load();
   }
 
   bool IsConnectionTypeWireless() {
+    Refresh();
     return is_connection_type_wireless_.load();
   }
 
   void Teardown() {
+    if (did_subscribe_.load()) {
+      network_link_.Unsubscribe(kDefaultTimeoutMs, "onConnectionStatusChanged");
+      did_subscribe_.store(false);
+    }
     network_link_.Teardown();
+    needs_refresh_.store(true);
+    ::starboard::ScopedLock lock(mutex_);
+    if (event_id_ != kSbEventIdInvalid) {
+      SbEventCancel(event_id_);
+      event_id_ = kSbEventIdInvalid;
+    }
   }
 };
 

@@ -1991,12 +1991,8 @@ void PlayerImpl::MarkEOS(SbMediaType stream_type) {
 
   GST_DEBUG_OBJECT(src, "===> %d", SbThreadGetId());
   ::starboard::ScopedLock lock(mutex_);
-
-  // Flushing seek in progress so new data will be needed anyway.
-  if (state_ == State::kPrerollAfterSeek) {
-    GST_DEBUG_OBJECT(src, "===> Ignoring due to seek");
-    return;
-  }
+  if (state_ == State::kPrerollAfterSeek)
+    GST_DEBUG_OBJECT(src, "===> Mark EOS with State::kPrerollAfterSeek");
 
   if (stream_type == kSbMediaTypeVideo)
       eos_data_ |= static_cast<int>(MediaType::kVideo);

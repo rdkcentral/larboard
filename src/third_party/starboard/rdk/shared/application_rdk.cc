@@ -262,6 +262,7 @@ void Application::Inject(Event* e) {
 void Application::OnSuspend() {
   SbSpeechSynthesisCancel();
   DestroyNativeWindow();
+  TeardownJSONRPCLink();
   setTimerInterval(ess_timer_fd_, kSbTimeSecond);
 }
 

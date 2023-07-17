@@ -118,13 +118,13 @@ bool GetModelYear(char* out_value, int value_length) {
 }
 
 bool GetModelName(char* out_value, int value_length) {
-  const char* env = std::getenv("COBALT_MODEL_NAME");
-  if (env && CopyStringAndTestIfSuccess(out_value, value_length, env))
-    return true;
-
   std::string prop;
   if (SystemProperties::GetModelName(prop))
     return CopyStringAndTestIfSuccess(out_value, value_length, prop.c_str());
+
+  const char* env = std::getenv("COBALT_MODEL_NAME");
+  if (env && CopyStringAndTestIfSuccess(out_value, value_length, env))
+    return true;
 
   const char kPrefixStr[] = "MODEL_NUM=";
   const size_t kPrefixStrLength = SB_ARRAY_SIZE(kPrefixStr) - 1;
@@ -139,15 +139,15 @@ bool GetModelName(char* out_value, int value_length) {
 }
 
 bool GetOperatorName(char* out_value, int value_length) {
-  const char* env = std::getenv("COBALT_OPERATOR_NAME");
-  if (env && CopyStringAndTestIfSuccess(out_value, value_length, env))
-    return true;
-  
   std::string prop;
   if (SystemProperties::GetBrandName(prop)) {
     return CopyStringAndTestIfSuccess(
       out_value, value_length, prop.c_str());
   }
+
+  const char* env = std::getenv("COBALT_OPERATOR_NAME");
+  if (env && CopyStringAndTestIfSuccess(out_value, value_length, env))
+    return true;
 
   FILE* partnerId = fopen("/opt/www/authService/partnerId3.dat", "r");
   if (partnerId) {
@@ -170,15 +170,15 @@ bool GetOperatorName(char* out_value, int value_length) {
 }
 
 bool GetManufacturerName(char* out_value, int value_length) {
-    const char* env = std::getenv("COBALT_MANUFACTURE_NAME");
-    if (env && CopyStringAndTestIfSuccess(out_value, value_length, env))
-        return true;
-
     std::string prop;
     if (SystemProperties::GetIntegratorName(prop)) {
       return CopyStringAndTestIfSuccess(
         out_value, value_length, prop.c_str());
     }
+
+    const char* env = std::getenv("COBALT_MANUFACTURE_NAME");
+    if (env && CopyStringAndTestIfSuccess(out_value, value_length, env))
+        return true;
 
     const char kPrefixStr[] = "MANUFACTURE=";
     const size_t kPrefixStrLength = SB_ARRAY_SIZE(kPrefixStr) - 1;

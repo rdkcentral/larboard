@@ -114,6 +114,28 @@ unsigned getGstPlayFlag(const char* nick) {
   return flag->value;
 }
 
+bool isRialtoEnabled()
+{
+  static bool is_rialto_enabled = false;
+#if __GNUC__ < 10
+  static volatile gsize init = 0;
+#else
+  static gsize init = 0;
+#endif
+
+  if (g_once_init_enter (&init)) {
+    GstElementFactory *factory = gst_element_factory_find("rialtomsevideosink");
+    if (factory) {
+      guint rank = gst_plugin_feature_get_rank((GstPluginFeature *)factory);
+      gst_object_unref(GST_OBJECT(factory));
+      is_rialto_enabled = rank >= GST_RANK_PRIMARY;
+    }
+    g_once_init_leave (&init, 1);
+  }
+
+  return is_rialto_enabled;
+}
+
 bool enableNativeAudio() {
   static bool enable_native_audio = false;
 #if __GNUC__ < 10
@@ -128,10 +150,8 @@ bool enableNativeAudio() {
       gst_object_unref(GST_OBJECT(factory));
       enable_native_audio = true;
     }
-    else if ((factory = gst_element_factory_find("rialtomseaudiosink"))) {
-      guint rank = gst_plugin_feature_get_rank((GstPluginFeature*)factory);
-      gst_object_unref(GST_OBJECT(factory));
-      enable_native_audio = (rank >= GST_RANK_PRIMARY);
+    else {
+      enable_native_audio = isRialtoEnabled();
     }
     g_once_init_leave (&init, 1);
   }
@@ -417,7 +437,11 @@ void gst_cobalt_src_setup_and_add_app_src(SbMediaType media_type,
 
   GstElement* src_elem = appsrc;
   GstElement* decryptor = inject_decryptor ? CreateDecryptorElement(nullptr) : nullptr;
-  GstElement* payloader = (decryptor && media_type == kSbMediaTypeVideo) ? CreatePayloader() : nullptr;
+  GstElement* payloader = nullptr;
+  if (decryptor && media_type == kSbMediaTypeVideo && !isRialtoEnabled())
+  {
+    payloader = CreatePayloader();
+  }
 
   if (decryptor) {
     GST_DEBUG("Injecting decryptor element %" GST_PTR_FORMAT, decryptor);
@@ -1965,20 +1989,24 @@ void PlayerImpl::SetupElement(GstElement* pipeline,
     }
   }
 
-  if ( !self->max_video_capabilities_.empty() ) {
-    const gchar* klass_str =
-      gst_element_class_get_metadata (GST_ELEMENT_GET_CLASS (element), "klass");
-    if ( strstr(klass_str, "Sink") && strstr(klass_str, "Video") ) {
-      GObjectClass* oclass = G_OBJECT_GET_CLASS(element);
-      if ( g_object_class_find_property(oclass, "maxVideoWidth") &&
-           g_object_class_find_property(oclass, "maxVideoHeight") ) {
-        uint32_t width = 0, height = 0;
-        ParseMaxVideoCapabilities(self->max_video_capabilities_.c_str(), &width, &height, nullptr);
-        g_object_set(G_OBJECT(element), "maxVideoWidth", width, "maxVideoHeight", height, nullptr);
-      }
+  const gchar *klass_str = gst_element_class_get_metadata(GST_ELEMENT_GET_CLASS(element), "klass");
+  if (strstr(klass_str, "Sink")) {
+    GObjectClass *oclass = G_OBJECT_GET_CLASS(element);
+
+    if (strstr(klass_str, "Video")) {
+      if (!self->max_video_capabilities_.empty() &&
+          g_object_class_find_property(oclass, "maxVideoWidth") &&
+          g_object_class_find_property(oclass, "maxVideoHeight")) {
+            uint32_t width = 0, height = 0;
+            ParseMaxVideoCapabilities(self->max_video_capabilities_.c_str(), &width, &height, nullptr);
+            g_object_set(G_OBJECT(element), "maxVideoWidth", width, "maxVideoHeight", height, nullptr);
+        }
+    }
+
+    if (g_object_class_find_property(oclass, "has-drm")) {
+      g_object_set(G_OBJECT(element), "has-drm", self->drm_system_ != nullptr, nullptr);
     }
   }
-
 }
 
 void PlayerImpl::MarkEOS(SbMediaType stream_type) {
@@ -2825,30 +2853,32 @@ void PlayerImpl::HandleApplicationMessage(GstBus* bus, GstMessage* message) {
 }
 
 void PlayerImpl::ConfigureLimitedVideo() {
-  GstElementFactory* factory = gst_element_factory_find("westerossink");
-  if (factory) {
-    GstElement* video_sink = gst_element_factory_create(factory, nullptr);
-    if (video_sink) {
-      if (g_object_class_find_property(G_OBJECT_GET_CLASS(video_sink), "res-usage")) {
-        g_object_set(video_sink, "res-usage", 0x0u, nullptr);
+  if (!isRialtoEnabled()) {
+    GstElementFactory* factory = gst_element_factory_find("westerossink");
+    if (factory) {
+      GstElement* video_sink = gst_element_factory_create(factory, nullptr);
+      if (video_sink) {
+        if (g_object_class_find_property(G_OBJECT_GET_CLASS(video_sink), "res-usage")) {
+          g_object_set(video_sink, "res-usage", 0x0u, nullptr);
+        }
+        else {
+          GST_WARNING("'westerossink' has no 'res-usage' property, secondary video may steal decoder");
+        }
+        g_object_set(pipeline_, "video-sink", video_sink, nullptr);
       }
       else {
-        GST_WARNING("'westerossink' has no 'res-usage' property, secondary video may steal decoder");
+        GST_DEBUG("Failed to create 'westerossink'");
       }
-      g_object_set(pipeline_, "video-sink", video_sink, nullptr);
+      gst_object_unref(GST_OBJECT(factory));
     }
-    else {
-      GST_DEBUG("Failed to create 'westerossink'");
-    }
-    gst_object_unref(GST_OBJECT(factory));
+
+    GstContext* context = gst_context_new("erm", FALSE);
+    GstStructure* context_structure = gst_context_writable_structure(context);
+    gst_structure_set(context_structure, "res-usage", G_TYPE_UINT, 0x0u, nullptr);
+    gst_element_set_context(GST_ELEMENT(pipeline_), context);
+    gst_context_unref(context);
+
   }
-
-  GstContext* context = gst_context_new("erm", FALSE);
-  GstStructure* context_structure = gst_context_writable_structure(context);
-  gst_structure_set(context_structure, "res-usage", G_TYPE_UINT, 0x0u, nullptr);
-  gst_element_set_context(GST_ELEMENT(pipeline_), context);
-  gst_context_unref(context);
-
   // enforce no audio
   audio_codec_ = kSbMediaAudioCodecNone;
 }

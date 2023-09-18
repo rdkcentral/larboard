@@ -41,6 +41,10 @@
 
 #if SB_IS(EVERGREEN_COMPATIBLE)
 #include "third_party/crashpad/wrapper/wrapper.h"
+#include "starboard/common/paths.h"
+#include "starboard/elf_loader/elf_loader_constants.h"
+#include "starboard/shared/starboard/command_line.h"
+#include "starboard/shared/starboard/starboard_switches.h"
 #endif
 
 namespace third_party {
@@ -85,7 +89,17 @@ extern "C" SB_EXPORT_PLATFORM int main(int argc, char** argv) {
   third_party::starboard::rdk::shared::InstallStopSignalHandlers();
 
 #if SB_IS(EVERGREEN_COMPATIBLE)
-  third_party::crashpad::wrapper::InstallCrashpadHandler(true);
+  auto command_line = starboard::shared::starboard::CommandLine(argc, argv);
+  auto evergreen_content_path =
+    command_line.GetSwitchValue(starboard::elf_loader::kEvergreenContent);
+  std::string ca_certificates_path = evergreen_content_path.empty()
+    ? starboard::common::GetCACertificatesPath()
+    : starboard::common::GetCACertificatesPath(evergreen_content_path);
+  if (ca_certificates_path.empty()) {
+    SB_LOG(ERROR) << "Failed to get CA certificates path. Skip crashpad handler setup.";
+  } else {
+    third_party::crashpad::wrapper::InstallCrashpadHandler(true, ca_certificates_path);
+  }
 #endif
 
   int result = 0;

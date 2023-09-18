@@ -39,7 +39,6 @@
 #include "starboard/common/log.h"
 #include "starboard/common/string.h"
 #include "starboard/common/file.h"
-#include "starboard/character.h"
 #include "starboard/file.h"
 
 #include "third_party/starboard/rdk/shared/rdkservices.h"

@@ -43,6 +43,7 @@
 #include "starboard/time.h"
 #include "starboard/memory.h"
 #include "starboard/drm.h"
+#include "starboard/common/log.h"
 #include "third_party/starboard/rdk/shared/media/gst_media_utils.h"
 #include "third_party/starboard/rdk/shared/hang_detector.h"
 #include "third_party/starboard/rdk/shared/drm/gst_decryptor_ocdm.h"

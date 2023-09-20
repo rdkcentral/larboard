@@ -128,6 +128,8 @@ class DrmSystemOcdm : public SbDrmSystemPrivate {
   mutable std::set<std::string> cached_ready_keys_;
   SbEventId event_id_;
   ::starboard::Mutex mutex_;
+
+  std::vector<uint8_t> metrics_;
 };
 
 }  // namespace drm

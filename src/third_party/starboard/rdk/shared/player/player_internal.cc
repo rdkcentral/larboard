@@ -1943,7 +1943,8 @@ void PlayerImpl::SetupSource(GstElement* pipeline,
                              GstElement* source,
                              PlayerImpl* self) {
   ::starboard::ScopedLock lock(self->source_setup_mutex_);
-  SB_DCHECK(!self->source_);
+  if (self->source_)
+    return;
   self->source_ = source;
   static constexpr int kAsyncSourceFinishTimeMs = 50;
   GSource* src = g_timeout_source_new(kAsyncSourceFinishTimeMs);

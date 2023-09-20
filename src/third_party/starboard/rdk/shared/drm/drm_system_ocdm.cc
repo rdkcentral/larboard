@@ -55,7 +55,15 @@ using ScopedOcdmSession = std::unique_ptr<OpenCDMSession, OcdmSessionDeleter>;
 using OcdmGstSessionDecryptExFn =
   OpenCDMError(*)(struct OpenCDMSession*, GstBuffer*, GstBuffer*, const uint32_t, GstBuffer*, GstBuffer*, uint32_t, GstCaps*);
 
+using OcdmGstSessionDecryptBufferFn =
+  OpenCDMError(*)(struct OpenCDMSession* session, GstBuffer* buffer, GstCaps* caps);
+
+using OcdmGetMetricSystemDataFn =
+  OpenCDMError(*)(struct OpenCDMSystem* system, uint32_t* bufferLength, uint8_t* buffer);
+
 static OcdmGstSessionDecryptExFn g_ocdmGstSessionDecryptEx { nullptr };
+static OcdmGstSessionDecryptBufferFn g_ocdmGstSessionDecryptBuffer { nullptr };
+static OcdmGetMetricSystemDataFn g_ocdmGetMetricSystemData { nullptr };
 
 }  // namespace
 
@@ -304,6 +312,10 @@ int Session::Decrypt(
   if (!session)
     return ERROR_INVALID_SESSION;
 
+  if (g_ocdmGstSessionDecryptBuffer != nullptr) {
+    return g_ocdmGstSessionDecryptBuffer(session, buffer, caps);
+  }
+
   if (g_ocdmGstSessionDecryptEx != nullptr) {
     return g_ocdmGstSessionDecryptEx(session, buffer,
                                      sub_sample, sub_sample_count, iv,
@@ -517,11 +529,24 @@ DrmSystemOcdm::DrmSystemOcdm(
 
   static std::once_flag flag;
   std::call_once(flag, [](){
-    g_ocdmGstSessionDecryptEx = (OcdmGstSessionDecryptExFn)dlsym(RTLD_DEFAULT, "opencdm_gstreamer_session_decrypt_ex");
-    if (g_ocdmGstSessionDecryptEx) {
-      SB_LOG(INFO) << "Has opencdm_gstreamer_session_decrypt_ex";
+    g_ocdmGstSessionDecryptBuffer = (OcdmGstSessionDecryptBufferFn)dlsym(RTLD_DEFAULT, "opencdm_gstreamer_session_decrypt_buffer");
+    if (g_ocdmGstSessionDecryptBuffer) {
+      SB_LOG(INFO) << "Has opencdm_gstreamer_session_decrypt_buffer";
     } else {
-      SB_LOG(INFO) << "No opencdm_gstreamer_session_decrypt_ex. Fallback to opencdm_gstreamer_session_decrypt.";
+      SB_LOG(INFO) << "No opencdm_gstreamer_session_decrypt_buffer. Will try opencdm_gstreamer_session_decrypt_ex.";
+      g_ocdmGstSessionDecryptEx = (OcdmGstSessionDecryptExFn)dlsym(RTLD_DEFAULT, "opencdm_gstreamer_session_decrypt_ex");
+      if (g_ocdmGstSessionDecryptEx) {
+        SB_LOG(INFO) << "Has opencdm_gstreamer_session_decrypt_ex";
+      } else {
+        SB_LOG(INFO) << "No opencdm_gstreamer_session_decrypt_ex. Fallback to opencdm_gstreamer_session_decrypt.";
+      }
+    }
+
+    g_ocdmGetMetricSystemData = (OcdmGetMetricSystemDataFn)dlsym(RTLD_DEFAULT, "opencdm_get_metric_system_data");
+    if (g_ocdmGetMetricSystemData) {
+        SB_LOG(INFO) << "Has opencdm_get_metric_system_data";
+    } else {
+      SB_LOG(INFO) << "No opencdm_get_metric_system_data.";
     }
   });
 }
@@ -627,7 +652,7 @@ void DrmSystemOcdm::OnKeyUpdated(const std::string& session_id,
   ::starboard::ScopedLock lock(mutex_);
   auto session_key = session_keys_.find(session_id);
   KeyWithStatus key_with_status;
-  key_with_status.key = std::move(key_id);
+  key_with_status.key = key_id;
   key_with_status.status = status;
   if (session_key == session_keys_.end()) {
     session_keys_[session_id].emplace_back(std::move(key_with_status));
@@ -721,7 +746,20 @@ int DrmSystemOcdm::Decrypt(const std::string& id,
 }
 
 const void* DrmSystemOcdm::GetMetrics(int* size) {
+  if ( !g_ocdmGetMetricSystemData )
     return nullptr;
+
+  std::vector<uint8_t> tmp;
+  tmp.resize(4 * 1024);
+
+  uint32_t buffer_length = tmp.size();
+  uint8_t *buffer_ptr = tmp.data();
+
+  if ( g_ocdmGetMetricSystemData(ocdm_system_, &buffer_length, buffer_ptr) == ERROR_NONE )
+    metrics_.assign(buffer_ptr, buffer_ptr + buffer_length);
+
+  *size = static_cast<int>(metrics_.size());
+  return metrics_.data();
 }
 
 }  // namespace drm

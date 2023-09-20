@@ -468,6 +468,10 @@ static GstFlowReturn cobalt_ocdm_decryptor_transform_ip(GstBaseTransform* base, 
     subsamples = gst_value_get_buffer(value);
   }
 
+  if (!gst_structure_has_field(info, "initWithLast15")) {
+    gst_structure_set (info, "initWithLast15", G_TYPE_UINT, 0, NULL);
+  }
+
   ret = priv->Decrypt(self, buffer, subsamples, subsample_count, iv, key);
 
   GST_TRACE_OBJECT(self, "ret=%s", gst_flow_get_name(ret));

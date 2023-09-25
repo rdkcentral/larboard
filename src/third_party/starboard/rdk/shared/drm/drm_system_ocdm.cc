@@ -26,6 +26,7 @@
 #include "starboard/common/mutex.h"
 #include "starboard/shared/starboard/thread_checker.h"
 
+#include <websocket/URL.h>
 #include <opencdm/open_cdm.h>
 #include <opencdm/open_cdm_adapter.h>
 
@@ -312,14 +313,14 @@ int Session::Decrypt(
   if (!session)
     return ERROR_INVALID_SESSION;
 
-  if (g_ocdmGstSessionDecryptBuffer != nullptr) {
-    return g_ocdmGstSessionDecryptBuffer(session, buffer, caps);
-  }
-
   if (g_ocdmGstSessionDecryptEx != nullptr) {
     return g_ocdmGstSessionDecryptEx(session, buffer,
                                      sub_sample, sub_sample_count, iv,
                                      key, 0, caps);
+  }
+
+  if (g_ocdmGstSessionDecryptBuffer != nullptr) {
+    return g_ocdmGstSessionDecryptBuffer(session, buffer, caps);
   }
 
   return opencdm_gstreamer_session_decrypt(session, buffer,
@@ -749,14 +750,28 @@ const void* DrmSystemOcdm::GetMetrics(int* size) {
   if ( !g_ocdmGetMetricSystemData )
     return nullptr;
 
-  std::vector<uint8_t> tmp;
-  tmp.resize(4 * 1024);
+  int i = 1;
+  do {
+    uint32_t buffer_length =  i * 4 * 1024;
 
-  uint32_t buffer_length = tmp.size();
-  uint8_t *buffer_ptr = tmp.data();
+    std::vector<uint8_t> tmp;
+    tmp.resize(buffer_length);
 
-  if ( g_ocdmGetMetricSystemData(ocdm_system_, &buffer_length, buffer_ptr) == ERROR_NONE )
-    metrics_.assign(buffer_ptr, buffer_ptr + buffer_length);
+    auto rc = g_ocdmGetMetricSystemData(ocdm_system_, &buffer_length, tmp.data());
+    if ( rc == ERROR_BUFFER_TOO_SMALL && ++i <= 4 ) {
+      continue;
+    }
+
+    if ( rc == ERROR_NONE ) {
+      uint16_t out_length = (((buffer_length * 8) / 6) + 4) * sizeof(TCHAR);
+      metrics_.resize(out_length, '\0');
+      out_length = WPEFramework::Core::URL::Base64Encode(tmp.data(), buffer_length, reinterpret_cast<char*>(metrics_.data()), out_length, false);
+      metrics_.resize(out_length);
+    }  else  {
+      SB_LOG(ERROR) << "Failed to get drm metrics, rc = " << rc;
+    }
+
+  } while(false);
 
   *size = static_cast<int>(metrics_.size());
   return metrics_.data();

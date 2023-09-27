@@ -2557,7 +2557,7 @@ bool PlayerImpl::ChangePipelineState(GstState state) const {
   GstState current, pending;
   current = pending = GST_STATE_VOID_PENDING;
   gst_element_get_state(pipeline_, &current, &pending, 0);
-  if (current == state || pending == state) {
+  if ((current == state && pending == GST_STATE_VOID_PENDING) || pending == state) {
     GST_DEBUG_OBJECT(
       pipeline_, "Rejected state change to %s from %s with %s pending",
       gst_element_state_get_name(state),

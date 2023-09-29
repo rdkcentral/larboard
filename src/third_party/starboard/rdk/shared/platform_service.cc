@@ -33,11 +33,11 @@
 #include <memory>
 #include <string>
 
-#include "cobalt/extension/platform_service.h"
 #include "starboard/common/log.h"
 #include "starboard/common/string.h"
 #include "starboard/configuration.h"
 #include "starboard/shared/starboard/application.h"
+#include "starboard/extension/platform_service.h"
 
 #include "third_party/starboard/rdk/shared/firebolt/firebolt.h"
 #include "third_party/starboard/rdk/shared/log_override.h"

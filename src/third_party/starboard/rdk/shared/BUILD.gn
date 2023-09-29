@@ -267,7 +267,7 @@ static_library("starboard_platform") {
     "//starboard/shared/starboard/log_mutex.cc",
     "//starboard/shared/starboard/log_raw_format.cc",
     "//starboard/shared/starboard/media/media_can_play_mime_and_key_system.cc",
-    "//starboard/shared/starboard/media/media_get_audio_configuration_5_1.cc",
+    "//starboard/shared/starboard/media/media_get_audio_configuration.cc",
     "//starboard/shared/starboard/media/media_get_audio_output_count_single_audio_output.cc",
     "//starboard/shared/starboard/memory.cc",
     "//starboard/shared/starboard/queue_application.cc",
@@ -358,6 +358,7 @@ static_library("starboard_platform") {
     "platform_service.h",
     "player/player_create.cc",
     "player/player_destroy.cc",
+    "player/player_get_audio_configuration.cc",
     "player/player_get_current_frame.cc",
     "player/player_get_info.cc",
     "player/player_get_maximum_number_of_samples_per_write.cc",
@@ -397,13 +398,11 @@ static_library("starboard_platform") {
   if (target_platform == "rdk-rpi") {
     sources -= [
       "//starboard/shared/gles/system_gles2.cc",
-      "//starboard/shared/starboard/media/media_get_audio_configuration_5_1.cc",
       "//starboard/shared/starboard/media/media_get_audio_output_count_single_audio_output.cc",
     ]
     sources += [
       "//starboard/raspi/shared/system_gles2.cc",
       "//starboard/shared/starboard/media/media_get_audio_output_count_single_audio_output.cc",
-      "//starboard/shared/starboard/media/media_get_audio_configuration_stereo_only.cc",
     ]
   }
 

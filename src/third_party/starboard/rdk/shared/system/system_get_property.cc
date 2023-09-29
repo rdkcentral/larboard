@@ -255,6 +255,19 @@ bool GetAdvertisingId(char* out_value, int value_length) {
     return false;
 }
 
+#if SB_API_VERSION >= 15
+bool GetDeviceType(char* out_value, int value_length) {
+    std::string prop;
+    if (AuthService::GetExperience(prop) && prop == "Flex") {
+      prop = "OTT";
+    }
+    else if (!SystemProperties::GetDeviceType(prop)) {
+      prop = "STB";
+    }
+    return CopyStringAndTestIfSuccess(out_value, value_length, prop.c_str());
+}
+#endif
+
 }  // namespace
 
 bool SbSystemGetProperty(SbSystemPropertyId property_id,
@@ -305,7 +318,10 @@ bool SbSystemGetProperty(SbSystemPropertyId property_id,
     case kSbSystemPropertyLimitAdTracking:
       return GetLimitAdTracking(out_value, value_length);
 #endif
-
+#if SB_API_VERSION >= 15
+    case kSbSystemPropertyDeviceType:
+      return GetDeviceType(out_value, value_length);
+#endif
     default:
       SB_DLOG(WARNING) << __FUNCTION__
                        << ": Unrecognized property: " << property_id;

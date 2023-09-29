@@ -77,6 +77,13 @@ static void UninstallStopSignalHandlers() {
 }  // namespace starboard
 }  // namespace third_party
 
+#if SB_API_VERSION >= 15
+int SbRunStarboardMain(int argc, char** argv, SbEventHandleCallback callback) {
+  third_party::starboard::rdk::shared::Application application(callback);
+  int result = application.Run(argc, argv);
+  return result;
+}
+#endif  // SB_API_VERSION >= 15
 
 extern "C" SB_EXPORT_PLATFORM int main(int argc, char** argv) {
   tzset();
@@ -104,8 +111,12 @@ extern "C" SB_EXPORT_PLATFORM int main(int argc, char** argv) {
 
   int result = 0;
   {
+#if SB_API_VERSION >= 15
+    result = SbRunStarboardMain(argc, argv, SbEventHandle);
+#else
     third_party::starboard::rdk::shared::Application application;
     result = application.Run(argc, argv);
+#endif
   }
 
   third_party::starboard::rdk::shared::UninstallStopSignalHandlers();

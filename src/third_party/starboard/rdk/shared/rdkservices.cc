@@ -38,6 +38,7 @@
 #include "starboard/atomic.h"
 #include "starboard/event.h"
 #include "starboard/once.h"
+#include "starboard/common/atomic.h"
 #include "starboard/common/condition_variable.h"
 #include "starboard/common/mutex.h"
 #include "starboard/accessibility.h"

@@ -862,7 +862,11 @@ static int CompareColorMetadata(const SbMediaColorMetadata& lhs, const SbMediaCo
   return memcmp(&lhs, &rhs, sizeof(SbMediaColorMetadata));
 }
 
+#if SB_API_VERSION >= 15
+static void AddVideoInfoToGstCaps(const SbMediaVideoStreamInfo& info, GstCaps* caps) {
+#else
 static void AddVideoInfoToGstCaps(const SbMediaVideoSampleInfo& info, GstCaps* caps) {
+#endif
   AddColorMetadataToGstCaps(caps, info.color_metadata);
   gst_caps_set_simple (caps,
     "width", G_TYPE_INT, info.frame_width,
@@ -1142,7 +1146,11 @@ class PlayerImpl : public Player {
              SbMediaVideoCodec video_codec,
              SbMediaAudioCodec audio_codec,
              SbDrmSystem drm_system,
-             const SbMediaAudioSampleInfo& audio_sample_info,
+#if SB_API_VERSION >= 15
+             const SbMediaAudioStreamInfo& audio_info,
+#else   // SB_API_VERSION >= 15
+             const SbMediaAudioSampleInfo& audio_info,
+#endif
              const char* max_video_capabilities,
              SbPlayerDeallocateSampleFunc sample_deallocate_func,
              SbPlayerDecoderStatusFunc decoder_status_func,
@@ -1161,7 +1169,11 @@ class PlayerImpl : public Player {
   void SetVolume(double volume) override;
   void Seek(SbTime seek_to_timestamp, int ticket) override;
   bool SetRate(double rate) override;
+#if SB_API_VERSION >= 15
+  void GetInfo(SbPlayerInfo* info) override;
+#else   // SB_API_VERSION >= 15
   void GetInfo(SbPlayerInfo2* info) override;
+#endif
   void SetBounds(int zindex, int x, int y, int w, int h) override;
 
   GstElement* GetPipeline() const { return pipeline_;  }
@@ -1320,7 +1332,6 @@ class PlayerImpl : public Player {
   SbMediaVideoCodec video_codec_;
   SbMediaAudioCodec audio_codec_;
   SbDrmSystem drm_system_;
-  const SbMediaAudioSampleInfo audio_sample_info_;
   std::string max_video_capabilities_;
   SbPlayerDeallocateSampleFunc sample_deallocate_func_;
   SbPlayerDecoderStatusFunc decoder_status_func_;
@@ -1422,7 +1433,11 @@ PlayerImpl::PlayerImpl(SbPlayer player,
                        SbMediaVideoCodec video_codec,
                        SbMediaAudioCodec audio_codec,
                        SbDrmSystem drm_system,
-                       const SbMediaAudioSampleInfo& audio_sample_info,
+#if SB_API_VERSION >= 15
+                       const SbMediaAudioStreamInfo& audio_info,
+#else   // SB_API_VERSION >= 15
+                       const SbMediaAudioSampleInfo& audio_info,
+#endif
                        const char* max_video_capabilities,
                        SbPlayerDeallocateSampleFunc sample_deallocate_func,
                        SbPlayerDecoderStatusFunc decoder_status_func,
@@ -1436,7 +1451,6 @@ PlayerImpl::PlayerImpl(SbPlayer player,
       video_codec_(video_codec),
       audio_codec_(audio_codec),
       drm_system_(drm_system),
-      audio_sample_info_(audio_sample_info),
       sample_deallocate_func_(sample_deallocate_func),
       decoder_status_func_(decoder_status_func),
       player_status_func_(player_status_func),
@@ -1514,7 +1528,7 @@ PlayerImpl::PlayerImpl(SbPlayer player,
   need_first_segment_ack_ = has_enough_data_;
 
   if (audio_codec_ != kSbMediaAudioCodecNone) {
-    auto caps = CodecToGstCaps(audio_codec_, &audio_sample_info_);
+    auto caps = CodecToGstCaps(audio_codec_, &audio_info);
     if (!caps.empty() && caps[0].c_str()) {
       GstCaps* gst_caps = gst_caps_from_string(caps[0].c_str());
       gst_caps_replace(&audio_caps_, gst_caps);
@@ -2115,7 +2129,11 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
   sample_deallocate_func_(player_, context_, sample_infos[0].buffer);
 
   if (sample_infos[0].type == kSbMediaTypeVideo) {
+#if SB_API_VERSION >= 15
+    const auto& info = sample_infos[0].video_sample_info.stream_info;
+#else
     const auto& info = sample_infos[0].video_sample_info;
+#endif
     if (frame_width_ != info.frame_width ||
         frame_height_ != info.frame_height ||
         CompareColorMetadata(color_metadata_, info.color_metadata) != 0) {
@@ -2132,7 +2150,7 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
         gst_caps_unref(gst_caps);
       }
     }
-    if (!info.is_key_frame) {
+    if (!sample_infos[0].video_sample_info.is_key_frame) {
       GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
     }
   }
@@ -2490,7 +2508,11 @@ bool PlayerImpl::SetRate(double rate) {
   return success;
 }
 
+#if SB_API_VERSION >= 15
+void PlayerImpl::GetInfo(SbPlayerInfo* out_player_info) {
+#else   // SB_API_VERSION >= 15
 void PlayerImpl::GetInfo(SbPlayerInfo2* out_player_info) {
+#endif  // SB_API_VERSION >= 15
   gint64 duration = 0;
   if (gst_element_query_duration(pipeline_, GST_FORMAT_TIME, &duration) &&
       GST_CLOCK_TIME_IS_VALID(duration)) {
@@ -3012,7 +3034,11 @@ SbPlayerPrivate::SbPlayerPrivate(
     SbMediaVideoCodec video_codec,
     SbMediaAudioCodec audio_codec,
     SbDrmSystem drm_system,
-    const SbMediaAudioSampleInfo& audio_sample_info,
+#if SB_API_VERSION >= 15
+    const SbMediaAudioStreamInfo& audio_info,
+#else   // SB_API_VERSION >= 15
+    const SbMediaAudioSampleInfo& audio_info,
+#endif
     const char* max_video_capabilities,
     SbPlayerDeallocateSampleFunc sample_deallocate_func,
     SbPlayerDecoderStatusFunc decoder_status_func,
@@ -3026,7 +3052,7 @@ SbPlayerPrivate::SbPlayerPrivate(
                              video_codec,
                              audio_codec,
                              drm_system,
-                             audio_sample_info,
+                             audio_info,
                              max_video_capabilities,
                              sample_deallocate_func,
                              decoder_status_func,

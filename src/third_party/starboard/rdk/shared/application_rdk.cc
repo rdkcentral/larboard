@@ -95,8 +95,14 @@ static void setTimerInterval(int fd, SbTime time) {
   }
 }
 
+#if SB_API_VERSION >= 15
+Application::Application(SbEventHandleCallback sb_event_handle_callback)
+  : QueueApplication(sb_event_handle_callback)
+#else
 Application::Application()
-  : input_handler_(new EssInput)
+  : QueueApplication()
+#endif
+  , input_handler_(new EssInput)
   , hang_monitor_(new HangMonitor("Application")) {
   essos_context_recycle_ = !!getenv("COBALT_ESSOS_CONTEXT_DESTROY");
   BuildEssosContext();

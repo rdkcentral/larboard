@@ -32,7 +32,12 @@ bool GstRegistryHasElementForMediaType(SbMediaVideoCodec codec);
 bool GstRegistryHasElementForMediaType(SbMediaAudioCodec codec);
 std::vector<std::string> CodecToGstCaps(
     SbMediaAudioCodec codec,
-    const SbMediaAudioSampleInfo* info = nullptr);
+#if SB_API_VERSION >= 15
+    const SbMediaAudioStreamInfo* info = nullptr
+#else   // SB_API_VERSION >= 15
+    const SbMediaAudioSampleInfo* info = nullptr
+#endif
+);
 std::vector<std::string> CodecToGstCaps(SbMediaVideoCodec codec);
 
 }  // namespace media

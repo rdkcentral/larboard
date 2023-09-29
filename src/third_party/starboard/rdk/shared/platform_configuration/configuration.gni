@@ -32,6 +32,7 @@ import("//starboard/build/config/base_configuration.gni")
 
 cobalt_font_package = "limited"
 final_executable_type = "shared_library"
+starboard_level_final_executable_type = "shared_library"
 
 sb_api_version = 14
 sb_filter_based_player = false

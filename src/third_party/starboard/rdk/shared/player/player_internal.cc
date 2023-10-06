@@ -74,10 +74,8 @@ namespace {
 GST_DEBUG_CATEGORY(cobalt_gst_player_debug);
 #define GST_CAT_DEFAULT cobalt_gst_player_debug
 
-#if !defined(GST_HAS_HDR_SUPPORT)
-#if GST_CHECK_VERSION(1, 18, 0) || (defined(__has_include) &&  __has_include("gstreamer-1.0/gst/video/video-hdr.h"))
+#if !defined(GST_HAS_HDR_SUPPORT) && GST_CHECK_VERSION(1, 18, 0)
 #define GST_HAS_HDR_SUPPORT 1
-#endif
 #endif
 
 static void PrintGstCaps(GstCaps* caps);
@@ -115,14 +113,9 @@ unsigned getGstPlayFlag(const char* nick) {
   return flag->value;
 }
 
-bool isRialtoEnabled()
-{
+bool isRialtoEnabled() {
   static bool is_rialto_enabled = false;
-#if __GNUC__ < 10
-  static volatile gsize init = 0;
-#else
   static gsize init = 0;
-#endif
 
   if (g_once_init_enter (&init)) {
     GstElementFactory *factory = gst_element_factory_find("rialtomsevideosink");
@@ -139,11 +132,7 @@ bool isRialtoEnabled()
 
 bool enableNativeAudio() {
   static bool enable_native_audio = false;
-#if __GNUC__ < 10
-  static volatile gsize init = 0;
-#else
   static gsize init = 0;
-#endif
 
   if (g_once_init_enter (&init)) {
     GstElementFactory* factory = gst_element_factory_find("brcmaudiosink");
@@ -504,45 +493,6 @@ void gst_cobalt_src_setup_and_add_app_src(SbMediaType media_type,
       return GST_PAD_PROBE_OK;
     }, msg, [](gpointer data) { gst_message_unref(GST_MESSAGE(data)); });
 
-#if GST_CHECK_VERSION(1,18,0)
-  gst_pad_add_probe (
-    pad, GST_PAD_PROBE_TYPE_EVENT_BOTH,
-    [](GstPad * pad, GstPadProbeInfo * info, gpointer data) -> GstPadProbeReturn {
-      GstEvent *event = GST_PAD_PROBE_INFO_EVENT(info);
-      GstSegment *segment = reinterpret_cast<GstSegment*>(data);
-      switch ( GST_EVENT_TYPE(event) ) {
-        case GST_EVENT_SEEK:
-          break;
-        case GST_EVENT_SEGMENT: {
-          const GstSegment *src = nullptr;
-          gst_event_parse_segment(event, &src);
-          gst_segment_copy_into(src, segment);
-          // fallthrough
-        }
-        default:
-          return GST_PAD_PROBE_OK;
-      };
-      gdouble rate = 1.0;
-      GstSeekFlags flags = GST_SEEK_FLAG_NONE;
-      gst_event_parse_seek (event, &rate, NULL, &flags, NULL, NULL, NULL, NULL);
-      if ( !!(flags & GST_SEEK_FLAG_INSTANT_RATE_CHANGE) ) {
-        gdouble rate_multiplier = rate / segment->rate;
-        GstEvent *rate_change_event =
-          gst_event_new_instant_rate_change(rate_multiplier, (GstSegmentFlags)flags);
-        gst_event_set_seqnum (rate_change_event, gst_event_get_seqnum (event));
-        GstPad *peer_pad = gst_pad_get_peer(pad);
-        GST_DEBUG("Sending instant rate change pad: %" GST_PTR_FORMAT ", event: %" GST_PTR_FORMAT ", rate_multiplier: %.2f",
-                  peer_pad, rate_change_event, rate_multiplier);
-        if ( gst_pad_send_event (peer_pad, rate_change_event) != TRUE )
-          GST_PAD_PROBE_INFO_FLOW_RETURN(info) = GST_FLOW_NOT_SUPPORTED;
-        gst_object_unref(peer_pad);
-        gst_event_unref(event);
-        return GST_PAD_PROBE_HANDLED;
-      }
-      return GST_PAD_PROBE_OK;
-    }, gst_segment_new(), reinterpret_cast<GDestroyNotify>(gst_segment_free));
-#endif
-
   auto proxypad = GST_PAD(gst_proxy_pad_get_internal(GST_PROXY_PAD(pad)));
   gst_flow_combiner_add_pad(src->priv->flow_combiner, proxypad);
   gst_pad_set_chain_function(proxypad, static_cast<GstPadChainFunction>(gst_cobalt_src_chain_with_parent));
@@ -742,11 +692,7 @@ static GstVideoTransferFunction TransferIdToGstVideoTransferFunction(SbMediaTran
     case kSbMediaTransferId12BitBt2020:
       return GST_VIDEO_TRANSFER_BT2020_12;
     case kSbMediaTransferIdSmpteSt2084:
-#if GST_CHECK_VERSION(1, 18, 0)
       return GST_VIDEO_TRANSFER_SMPTE2084;
-#else
-      return GST_VIDEO_TRANSFER_SMPTE_ST_2084;
-#endif
     case kSbMediaTransferIdAribStdB67:
       return GST_VIDEO_TRANSFER_ARIB_STD_B67;
     case kSbMediaTransferIdUnspecified:
@@ -794,9 +740,8 @@ static void AddColorMetadataToGstCaps(GstCaps* caps, const SbMediaColorMetadata&
     GST_DEBUG ("Setting \"colorimetry\" to %s", tmp);
     g_free (tmp);
   }
-#if GST_CHECK_VERSION(1, 18, 0)
   GstVideoMasteringDisplayInfo mastering_display_info;
-  gst_video_mastering_display_info_init (&mastering_display_info);//  gst_video_mastering_display_metadata_init (&mastering_display_metadata);
+  gst_video_mastering_display_info_init (&mastering_display_info);
 
   mastering_display_info.display_primaries[0].x = (guint16)(color_metadata.mastering_metadata.primary_r_chromaticity_x * 50000);
   mastering_display_info.display_primaries[0].y = (guint16)(color_metadata.mastering_metadata.primary_r_chromaticity_y * 50000);
@@ -814,41 +759,11 @@ static void AddColorMetadataToGstCaps(GstCaps* caps, const SbMediaColorMetadata&
   gst_caps_set_simple (caps, "mastering-display-info", G_TYPE_STRING, tmp, NULL);
   GST_DEBUG ("Setting \"mastering-display-info\" to %s", tmp);
   g_free (tmp);
-#else
-  GstVideoMasteringDisplayMetadata mastering_display_metadata;
-  gst_video_mastering_display_metadata_init (&mastering_display_metadata);
-  mastering_display_metadata.Rx = color_metadata.mastering_metadata.primary_r_chromaticity_x;
-  mastering_display_metadata.Ry = color_metadata.mastering_metadata.primary_r_chromaticity_y;
-  mastering_display_metadata.Gx = color_metadata.mastering_metadata.primary_g_chromaticity_x;
-  mastering_display_metadata.Gy = color_metadata.mastering_metadata.primary_g_chromaticity_y;
-  mastering_display_metadata.Bx = color_metadata.mastering_metadata.primary_b_chromaticity_x;
-  mastering_display_metadata.By = color_metadata.mastering_metadata.primary_b_chromaticity_y;
-  mastering_display_metadata.Wx = color_metadata.mastering_metadata.white_point_chromaticity_x;
-  mastering_display_metadata.Wy = color_metadata.mastering_metadata.white_point_chromaticity_y;
-  mastering_display_metadata.max_luma = color_metadata.mastering_metadata.luminance_max;
-  mastering_display_metadata.min_luma = color_metadata.mastering_metadata.luminance_min;
-
-  if (gst_video_mastering_display_metadata_has_primaries(&mastering_display_metadata) &&
-      gst_video_mastering_display_metadata_has_luminance(&mastering_display_metadata) ) {
-    gchar *tmp =
-      gst_video_mastering_display_metadata_to_caps_string
-      (&mastering_display_metadata);
-    gst_caps_set_simple (caps, "mastering-display-metadata", G_TYPE_STRING, tmp, NULL);
-    GST_DEBUG ("Setting \"mastering-display-metadata\" to %s", tmp);
-    g_free (tmp);
-  }
-#endif
   if (color_metadata.max_cll && color_metadata.max_fall) {
     GstVideoContentLightLevel content_light_level;
-#if GST_CHECK_VERSION(1, 18, 0)
     content_light_level.max_content_light_level = color_metadata.max_cll;
     content_light_level.max_frame_average_light_level = color_metadata.max_fall;
     gchar *tmp = gst_video_content_light_level_to_string(&content_light_level);
-#else
-    content_light_level.maxCLL = color_metadata.max_cll;
-    content_light_level.maxFALL = color_metadata.max_fall;
-    gchar *tmp = gst_video_content_light_level_to_caps_string(&content_light_level);
-#endif
     gst_caps_set_simple (caps, "content-light-level", G_TYPE_STRING, tmp, NULL);
     GST_DEBUG ("setting \"content-light-level\" to %s", tmp);
     g_free (tmp);
@@ -936,12 +851,7 @@ static void PrintGstCaps(GstCaps* caps) {
 
 static GstElement* CreatePayloader() {
   static GstElementFactory* factory = nullptr;
-#if __GNUC__ < 10
-  static volatile gsize init = 0;
-#else
   static gsize init = 0;
-#endif
-
 
   if (g_once_init_enter (&init)) {
     factory = gst_element_factory_find("svppay");
@@ -2467,34 +2377,10 @@ bool PlayerImpl::SetRate(double rate) {
     need_instant_rate_change_ = ( rate != 1. );
     mutex_.Release();
 
-#if GST_CHECK_VERSION(1,18,0)
-    static const bool kEnableInstantRateChangeSeek = ([]()->bool {
-      if( !!getenv("COBALT_DISABLE_INSTANT_RATE_CHANGE_SEEK") )
-        return false;
-      if( !!getenv("COBALT_ENABLE_INSTANT_RATE_CHANGE_SEEK") )
-        return true;
-      auto *amlhalasink_factory = gst_element_factory_find("amlhalasink");
-      if ( amlhalasink_factory ) {
-        gst_object_unref(amlhalasink_factory);
-        return true;
-      }
-      return false;
-    })();
-    if (kEnableInstantRateChangeSeek) {
-      success = gst_element_seek(
-        pipeline_, rate, GST_FORMAT_TIME,
-        static_cast<GstSeekFlags>(GST_SEEK_FLAG_INSTANT_RATE_CHANGE),
-        GST_SEEK_TYPE_NONE, 0,
-        GST_SEEK_TYPE_NONE, 0);
-    }
-    else
-#endif
-    {
-      GstStructure* s = gst_structure_new(
+    GstStructure* s = gst_structure_new(
         kCustomInstantRateChangeEventName, "rate", G_TYPE_DOUBLE, rate, NULL);
-      success = gst_element_send_event(
+    success = gst_element_send_event(
         pipeline_, gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM_OOB, s));
-    }
 
     mutex_.Acquire();
   }

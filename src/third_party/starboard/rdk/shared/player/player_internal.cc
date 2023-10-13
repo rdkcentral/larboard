@@ -1098,6 +1098,19 @@ class PlayerImpl : public Player {
     kPresenting,
   };
 
+  static const char* PrivatePlayerStateToStr(State state) {
+#define CASE(x) case x: return #x
+    switch(state) {
+        CASE(State::kNull);
+        CASE(State::kInitial);
+        CASE(State::kInitialPreroll);
+        CASE(State::kPrerollAfterSeek);
+        CASE(State::kPresenting);
+    }
+#undef CASE
+    return "unknown";
+  }
+
   enum MediaTimestampIndex {
     kAudioIndex,
     kVideoIndex,
@@ -1215,19 +1228,22 @@ class PlayerImpl : public Player {
   SbTime MinTimestamp(MediaType* origin) const;
 
   void DecoderNeedsData(::starboard::ScopedLock&, MediaType media) const {
-    int need_data = static_cast<int>(media);
-    if (media != MediaType::kNone && (decoder_state_data_ & need_data) == need_data) {
-      GST_LOG("Already sent 'kSbPlayerDecoderStateNeedsData', ignoring new request");
+    SB_DCHECK(media != MediaType::kNone);
+
+    int need_data = static_cast<int>(media) & ~decoder_state_data_;
+    if (need_data == 0) {
+      GST_LOG("Already sent 'kSbPlayerDecoderStateNeedsData' for media type: %d, ignoring new request", media);
       return;
     }
-    if (media != MediaType::kNone && (eos_data_ & need_data) == need_data) {
+    if ((eos_data_ & need_data) == need_data) {
       GST_LOG("Stream(%d) already ended, ignoring needs data request", need_data);
       return;
     }
+
     decoder_state_data_ |= need_data;
     DispatchOnWorkerThread(new DecoderStatusTask(
       decoder_status_func_, player_, ticket_, context_,
-      kSbPlayerDecoderStateNeedsData, media));
+      kSbPlayerDecoderStateNeedsData, static_cast<MediaType>(need_data)));
   }
 
   void HandleApplicationMessage(GstBus* bus, GstMessage* message);
@@ -1665,9 +1681,9 @@ gboolean PlayerImpl::BusMessageCallback(GstBus* bus,
 
     case GST_MESSAGE_ASYNC_DONE: {
       if (GST_MESSAGE_SRC(message) == GST_OBJECT(self->pipeline_)) {
-        GST_INFO("===> ASYNC-DONE %s %d",
+        GST_INFO("===> ASYNC-DONE, pipeline state: %s, player state: %s",
                  gst_element_state_get_name(GST_STATE(self->pipeline_)),
-                 static_cast<int>(self->state_));
+                 PrivatePlayerStateToStr(self->state_));
 
         ::starboard::Mutex &mutex = self->mutex_;
         ::starboard::ScopedLock lock(mutex);

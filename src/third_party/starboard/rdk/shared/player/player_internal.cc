@@ -428,8 +428,7 @@ void gst_cobalt_src_setup_and_add_app_src(SbMediaType media_type,
   GstElement* src_elem = appsrc;
   GstElement* decryptor = inject_decryptor ? CreateDecryptorElement(nullptr) : nullptr;
   GstElement* payloader = nullptr;
-  if (decryptor && media_type == kSbMediaTypeVideo && !isRialtoEnabled())
-  {
+  if (decryptor && media_type == kSbMediaTypeVideo && !isRialtoEnabled()) {
     payloader = CreatePayloader();
   }
 
@@ -1088,6 +1087,7 @@ class PlayerImpl : public Player {
 
   GstElement* GetPipeline() const { return pipeline_;  }
   bool IsValid() const { return SbThreadIsValid(playback_thread_); }
+  bool HasMaxVideoCaps() const { return !max_video_capabilities_.empty(); }
 
  private:
   enum class State {
@@ -1258,7 +1258,7 @@ class PlayerImpl : public Player {
   GstElement* pipeline_{nullptr};
   int source_setup_id_{-1};
   int bus_watch_id_{-1};
-  SbThread playback_thread_;
+  SbThread playback_thread_ { kSbThreadInvalid };
   ::starboard::Mutex mutex_;
   ::starboard::Mutex source_setup_mutex_;
   ::starboard::Mutex seek_mutex_;
@@ -1335,6 +1335,18 @@ struct PlayerRegistry
       gst_object_unref(pipeline);
     }
   }
+
+  bool CanCreate(const char* max_video_capabilities) {
+    #if !defined(COBALT_BUILD_TYPE_GOLD)
+    bool has_max_video_caps_set = (max_video_capabilities && *max_video_capabilities);
+    ::starboard::ScopedLock lock(mutex_);
+    for(const auto& p: players_) {
+      if (p->HasMaxVideoCaps() == has_max_video_caps_set)
+        return false;
+    }
+    #endif
+    return true;
+  }
 };
 SB_ONCE_INITIALIZE_FUNCTION(PlayerRegistry, GetPlayerRegistry);
 
@@ -1395,7 +1407,7 @@ PlayerImpl::PlayerImpl(SbPlayer player,
   hang_monitor_source_id_ = g_source_attach(src, main_loop_context_);
   g_source_unref(src);
 
-  GST_INFO("Creating player with max capabilities: %s",
+  GST_INFO("Creating player with max capabilities: '%s'",
            max_video_capabilities);
 
   GstElementFactory* src_factory = gst_element_factory_find("cobaltsrc");
@@ -1471,6 +1483,9 @@ PlayerImpl::PlayerImpl(SbPlayer player,
 
   ChangePipelineState(GST_STATE_READY);
   g_main_context_pop_thread_default(main_loop_context_);
+
+  if (gst_element_get_state(pipeline_, nullptr, nullptr, 0) == GST_STATE_CHANGE_FAILURE)
+    return;
 
   playback_thread_ =
       SbThreadCreate(0, kSbThreadPriorityRealTime, kSbThreadNoAffinity, true,
@@ -2511,7 +2526,15 @@ bool PlayerImpl::ChangePipelineState(GstState state) const {
   }
   GST_INFO_OBJECT(pipeline_, "Changing state to %s",
                    gst_element_state_get_name(state));
-  return gst_element_set_state(pipeline_, state) != GST_STATE_CHANGE_FAILURE;
+  bool result = gst_element_set_state(pipeline_, state) != GST_STATE_CHANGE_FAILURE;
+  if (!result) {
+    GST_ERROR_OBJECT(
+      pipeline_, "Failed to change pipeline state to %s from %s with %s pending",
+      gst_element_state_get_name(state),
+      gst_element_state_get_name(current),
+      gst_element_state_get_name(pending));
+  }
+  return result;
 }
 
 void PlayerImpl::CheckBuffering(gint64 position) {
@@ -2932,21 +2955,24 @@ SbPlayerPrivate::SbPlayerPrivate(
     SbPlayerErrorFunc player_error_func,
     void* context,
     SbPlayerOutputMode output_mode,
-    SbDecodeTargetGraphicsContextProvider* provider)
-    : player_(new PlayerImpl(this,
-                             window,
-                             video_codec,
-                             audio_codec,
-                             drm_system,
-                             audio_info,
-                             max_video_capabilities,
-                             sample_deallocate_func,
-                             decoder_status_func,
-                             player_status_func,
-                             player_error_func,
-                             context,
-                             output_mode,
-                             provider)) {
-  if (  !static_cast<PlayerImpl&>(*player_).IsValid() )
-    player_.reset(nullptr);
+    SbDecodeTargetGraphicsContextProvider* provider) {
+  if ( third_party::starboard::rdk::shared::player::GetPlayerRegistry()->CanCreate(max_video_capabilities) ) {
+    player_.reset(
+      new PlayerImpl(this,
+                     window,
+                     video_codec,
+                     audio_codec,
+                     drm_system,
+                     audio_info,
+                     max_video_capabilities,
+                     sample_deallocate_func,
+                     decoder_status_func,
+                     player_status_func,
+                     player_error_func,
+                     context,
+                     output_mode,
+                     provider));
+    if (  !static_cast<PlayerImpl&>(*player_).IsValid() )
+      player_.reset(nullptr);
+  }
 }

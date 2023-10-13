@@ -30,6 +30,7 @@
 // limitations under the License.
 
 #include "starboard/player.h"
+#include "starboard/media.h"
 
 #include "third_party/starboard/rdk/shared/player/player_internal.h"
 
@@ -39,6 +40,9 @@ bool SbPlayerGetAudioConfiguration(
     SbPlayer player,
     int index,
     SbMediaAudioConfiguration* out_audio_configuration) {
+  if (index == 0) {
+    return SbMediaGetAudioConfiguration(index, out_audio_configuration);
+  }
   return false;
 }
 

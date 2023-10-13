@@ -41,7 +41,9 @@
 
 #if defined(HAS_CRYPTOGRAPHY)
 #include <cryptography/cryptography.h>
+#if defined(HAS_RFC_API)
 #include <rfcapi.h>
+#endif
 #endif
 
 namespace {
@@ -65,9 +67,6 @@ bool SbSystemSignWithCertificationSecretKey(const uint8_t* message,
 #if defined(HAS_CRYPTOGRAPHY)
   using namespace WPEFramework::Cryptography;
 
-  const char kDefaultKeyName[] = "0381000003810001.key";
-  const char kRFCParamName[] = "Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.Feature.Cobalt.AuthCertKeyName";
-
   third_party::starboard::rdk::shared::HangMonitor hang_monitor(__func__);
 
   std::string key_name;
@@ -76,6 +75,8 @@ bool SbSystemSignWithCertificationSecretKey(const uint8_t* message,
     key_name = env;
     SB_LOG(INFO) << "Using ENV set key name: '" << key_name << "'";
   } else {
+#if defined(HAS_RFC_API)
+    const char kRFCParamName[] = "Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.Feature.Cobalt.AuthCertKeyName";
     char *callerId = SbStringDuplicate("Cobalt");
     RFC_ParamData_t param;
     memset(&param, 0, sizeof (param));
@@ -85,9 +86,11 @@ bool SbSystemSignWithCertificationSecretKey(const uint8_t* message,
       SB_LOG(INFO) << "Using RFC provided key name: '" << key_name << "'";
     }
     SbMemoryDeallocate(callerId);
+#endif
   }
 
   if ( key_name.empty() ) {
+    const char kDefaultKeyName[] = "0381000003810001.key";
     key_name = kDefaultKeyName;
     SB_LOG(INFO) << "Using default key name: '" << key_name << "'";
   }

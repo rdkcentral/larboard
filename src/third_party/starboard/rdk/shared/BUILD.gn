@@ -35,6 +35,7 @@ declare_args() {
   rdk_enable_ocdm = true
   rdk_enable_cryptography = true
   rdk_enable_cbcs = false
+  rdk_enable_rfc_api = true
 }
 
 pkg_config("glib") {
@@ -428,12 +429,16 @@ static_library("starboard_platform") {
     configs += [
       ":cryptography",
     ]
+  }
+
+  if (rdk_enable_rfc_api) {
     libs += [
       "rfcapi",
     ]
     cflags += [
       "-I=/usr/include/wdmp-c",
     ]
+    defines = [ "HAS_RFC_API=1" ]
   }
 
   if (rdk_enable_securityagent) {

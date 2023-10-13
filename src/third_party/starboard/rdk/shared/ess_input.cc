@@ -476,9 +476,6 @@ void EssInput::CreateKey(unsigned int key, SbInputEventType type, unsigned int m
 
   SbInputData* data = new SbInputData();
   memset(data, 0, sizeof(*data));
-#if SB_API_VERSION < 13
-  data->timestamp = SbTimeGetMonotonicNow();
-#endif
   data->type = type;
   data->device_type = kSbInputDeviceTypeRemote;
   data->device_id = 1;  // kKeyboardDeviceId;

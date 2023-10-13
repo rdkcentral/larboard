@@ -31,12 +31,8 @@
 #include "starboard/speech_synthesis.h"
 #include "third_party/starboard/rdk/shared/rdkservices.h"
 
-#if SB_API_VERSION >= 12 || SB_HAS(SPEECH_SYNTHESIS)
-
 void SbSpeechSynthesisSpeak(const char* text) {
   if (!text)
     return;
   third_party::starboard::rdk::shared::TextToSpeech::Speak(text);
 }
-
-#endif

@@ -33,9 +33,7 @@
 
 #include "third_party/starboard/rdk/shared/player/player_internal.h"
 
-#if SB_API_VERSION >= 10
 int SbPlayerGetMaximumNumberOfSamplesPerWrite(SbPlayer player,
                                               SbMediaType /*sample_type*/) {
   return player->MaxNumberOfSamplesPerWrite();
 }
-#endif  // SB_API_VERSION >= 10

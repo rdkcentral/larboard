@@ -1059,12 +1059,10 @@ private:
 
       if (is_connected_.load() != has_connected_interface) {
         is_connected_.store(has_connected_interface);
-#if SB_API_VERSION >= 13
         if (has_connected_interface)
           Application::Get()->InjectOsNetworkConnectedEvent();
         else
           Application::Get()->InjectOsNetworkDisconnectedEvent();
-#endif
       }
     }
 

@@ -17,7 +17,6 @@
 
 #include "starboard/common/log.h"
 
-#if SB_API_VERSION >= 10
 int SbMediaGetMaxBufferCapacity(SbMediaVideoCodec codec,
                                 int resolution_width,
                                 int resolution_height,
@@ -45,4 +44,3 @@ int SbMediaGetMaxBufferCapacity(SbMediaVideoCodec codec,
   // must be larger than sum of 8k video budget and non-video budget.
   return 360 * 1024 * 1024;
 }
-#endif  // SB_API_VERSION >= 10

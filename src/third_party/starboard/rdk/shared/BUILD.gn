@@ -377,7 +377,6 @@ static_library("starboard_platform") {
     "speech/speech_synthesis_is_supported.cc",
     "speech/speech_synthesis_speak.cc",
     "system/system_egl.cc",
-    "system/system_get_connection_type.cc",
     "system/system_get_device_type.cc",
     "system/system_get_extensions.cc",
     "system/system_get_path.cc",
@@ -385,7 +384,6 @@ static_library("starboard_platform") {
     "system/system_has_capability.cc",
     "system/system_network_is_disconnected.cc",
     "system/system_request_conceal.cc",
-    "system/system_request_suspend.cc",
     "system/system_sign_with_certification_secret_key.cc",
     "window/window_create.cc",
     "window/window_destroy.cc",
@@ -398,11 +396,9 @@ static_library("starboard_platform") {
   if (target_platform == "rdk-rpi") {
     sources -= [
       "//starboard/shared/gles/system_gles2.cc",
-      "//starboard/shared/starboard/media/media_get_audio_output_count_single_audio_output.cc",
     ]
     sources += [
       "//starboard/raspi/shared/system_gles2.cc",
-      "//starboard/shared/starboard/media/media_get_audio_output_count_single_audio_output.cc",
     ]
   }
 

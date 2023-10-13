@@ -33,11 +33,6 @@
 
 #include "starboard/common/log.h"
 
-#if SB_API_VERSION >= 14
-  int SbMediaGetBufferAlignment() {
-#else  // SB_API_VERSION >= 14
-  int SbMediaGetBufferAlignment(SbMediaType type) {
-    SB_UNREFERENCED_PARAMETER(type);
-#endif  // SB_API_VERSION >= 10
+int SbMediaGetBufferAlignment() {
     return 1;
 }

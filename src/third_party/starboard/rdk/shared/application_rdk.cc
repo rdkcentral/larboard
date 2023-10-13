@@ -252,15 +252,9 @@ void Application::InjectInputEvent(SbInputData* data) {
 }
 
 void Application::Inject(Event* e) {
-#if SB_API_VERSION >= 13
   if (e && e->event && e->event->type == kSbEventTypeFreeze) {
     player::ForceStop();
   }
-#else
-  if (e && e->event && e->event->type == kSbEventTypeSuspend) {
-    player::ForceStop();
-  }
-#endif
 
   QueueApplication::Inject(e);
 }

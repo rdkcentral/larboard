@@ -14,13 +14,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "starboard/media.h"
 
-#include "starboard/common/log.h"
-
-#if SB_API_VERSION >= 14
-  int SbMediaGetBufferPadding() {
-#else   // SB_API_VERSION >= 14
-  int SbMediaGetBufferPadding(SbMediaType type) {
-    SB_UNREFERENCED_PARAMETER(type);
-#endif  // SB_API_VERSION >= 14
+int SbMediaGetBufferPadding() {
     return 0;
 }

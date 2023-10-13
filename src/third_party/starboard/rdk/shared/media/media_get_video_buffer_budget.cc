@@ -16,7 +16,6 @@
 
 #include "starboard/common/log.h"
 
-#if SB_API_VERSION >= 10
 int SbMediaGetVideoBufferBudget(SbMediaVideoCodec codec,
                                 int resolution_width,
                                 int resolution_height,
@@ -50,4 +49,3 @@ int SbMediaGetVideoBufferBudget(SbMediaVideoCodec codec,
   // lower than 8k (7680x4320).
   return 300 * 1024 * 1024;
 }
-#endif  // SB_API_VERSION >= 10

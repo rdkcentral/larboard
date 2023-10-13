@@ -33,8 +33,6 @@
 
 #include "starboard/configuration_constants.h"
 
-#if SB_API_VERSION >= 12
-
 // Determines the threshhold of allocation size that should be done with mmap
 // (if available), rather than allocated within the core heap.
 const size_t kSbDefaultMmapThreshold = 256 * 1024U;
@@ -161,9 +159,5 @@ const int kSbPreferredRgbaByteOrder = SB_PREFERRED_RGBA_BYTE_ORDER_RGBA;
 // The maximum number of users that can be signed in at the same time.
 const uint32_t kSbUserMaxSignedIn = 1;
 
-#endif  // SB_API_VERSION >= 12
-
-#if SB_API_VERSION >= 14
 // The maximum size the cache directory is allowed to use in bytes.
 const uint32_t kSbMaxSystemPathCacheDirectorySize = 24 << 20;  // 24MiB
-#endif  // SB_API_VERSION >= 14

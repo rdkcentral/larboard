@@ -18,8 +18,6 @@
 
 #include "starboard/common/log.h"
 
-#if SB_API_VERSION >= 10
 bool SbMediaIsBufferPoolAllocateOnDemand() {
   return true;
 }
-#endif  // SB_API_VERSION >= 10

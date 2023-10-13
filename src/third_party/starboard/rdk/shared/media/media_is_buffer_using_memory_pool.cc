@@ -16,8 +16,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "starboard/media.h"
 
-#if SB_API_VERSION >= 10
 bool SbMediaIsBufferUsingMemoryPool() {
   return true;
 }
-#endif  // SB_API_VERSION >= 10

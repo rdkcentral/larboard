@@ -30,10 +30,6 @@
 
 #include "starboard/speech_synthesis.h"
 
-#if SB_API_VERSION >= 12
-
 bool SbSpeechSynthesisIsSupported() {
   return true;
 }
-
-#endif

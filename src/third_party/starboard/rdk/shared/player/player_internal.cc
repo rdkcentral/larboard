@@ -1580,6 +1580,12 @@ gboolean PlayerImpl::BusMessageCallback(GstBus* bus,
       if (err->domain == GST_STREAM_ERROR && is_eos) {
         GST_WARNING("Got stream error. But all streams are ended, so reporting EOS. Error code %d: %s (%s).",
           err->code, err->message, debug);
+        if (self->state_ < State::kPresenting) {
+          self->DispatchOnWorkerThread(new PlayerStatusTask(
+              self->player_status_func_, self->player_, self->ticket_,
+              self->context_, kSbPlayerStatePresenting));
+          self->state_ = State::kPresenting;
+        }
         self->DispatchOnWorkerThread(new PlayerStatusTask(
           self->player_status_func_, self->player_, self->ticket_,
           self->context_, kSbPlayerStateEndOfStream));

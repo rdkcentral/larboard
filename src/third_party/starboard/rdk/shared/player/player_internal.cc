@@ -21,10 +21,11 @@
 #include <math.h>
 
 #include <glib.h>
+#include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
+#include <gst/audio/audio.h>
 #include <gst/audio/streamvolume.h>
 #include <gst/base/gstbytewriter.h>
-#include <gst/gst.h>
 #include <gst/base/gstflowcombiner.h>
 #include <gst/video/video.h>
 #include <gst/base/gstbasetransform.h>
@@ -2100,6 +2101,36 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
     if (!sample_infos[0].video_sample_info.is_key_frame) {
       GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
     }
+  }
+  else if (sample_infos[0].type == kSbMediaTypeAudio) {
+#if SB_API_VERSION >= 15
+    const auto& info = sample_infos[0].audio_sample_info;
+    if (info.discarded_duration_from_front || info.discarded_duration_from_back) {
+      guint64 start_clip = 0, end_clip = 0;
+      guint64 sample_rate;
+
+      // Matroska demux adds clipping scaled to 48kHz sample rate. Follow the same because of opusdec.
+      sample_rate = (info.stream_info.codec == kSbMediaAudioCodecOpus)
+        ? 48000 : info.stream_info.samples_per_second;
+
+      if (info.discarded_duration_from_front != kSbTimeMax) {
+        start_clip =
+          gst_util_uint64_scale_round(info.discarded_duration_from_front, sample_rate, kSbTimeSecond);
+      }
+
+      if (info.discarded_duration_from_back != kSbTimeMax) {
+        end_clip =
+          gst_util_uint64_scale_round(info.discarded_duration_from_back, sample_rate, kSbTimeSecond);
+      }
+
+      if (start_clip || end_clip) {
+        gst_buffer_add_audio_clipping_meta(buffer, GST_FORMAT_DEFAULT, start_clip, end_clip);
+        GST_DEBUG_OBJECT(
+          pipeline_, "Add audio clipping, rate: %" PRIu64 ", start: %" PRIu64 ", end %" PRIu64,
+          sample_rate, start_clip, end_clip);
+      }
+    }
+#endif
   }
 
   RecordTimestamp(sample_type, timestamp);

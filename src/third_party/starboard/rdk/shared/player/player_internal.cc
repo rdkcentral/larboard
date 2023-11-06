@@ -542,6 +542,19 @@ void gst_cobalt_src_setup_and_add_app_src(SbMediaType media_type,
     }, gst_segment_new(), reinterpret_cast<GDestroyNotify>(gst_segment_free));
 #endif
 
+  // Allocation query can stall streaming thread if sent during pre-roll.
+  // Drop the query since we don't use proposed allocation anyway.
+  gst_pad_add_probe (
+    pad, GST_PAD_PROBE_TYPE_QUERY_DOWNSTREAM,
+    [](GstPad * pad, GstPadProbeInfo * info, gpointer data) -> GstPadProbeReturn {
+      GstQuery* query = GST_PAD_PROBE_INFO_QUERY(info);
+      if (GST_QUERY_TYPE (query) == GST_QUERY_ALLOCATION) {
+        GST_DEBUG_OBJECT(pad, "Drop allocation query");
+        return GST_PAD_PROBE_DROP;
+      }
+      return GST_PAD_PROBE_OK;
+    }, nullptr, nullptr);
+
   auto proxypad = GST_PAD(gst_proxy_pad_get_internal(GST_PROXY_PAD(pad)));
   gst_flow_combiner_add_pad(src->priv->flow_combiner, proxypad);
   gst_pad_set_chain_function(proxypad, static_cast<GstPadChainFunction>(gst_cobalt_src_chain_with_parent));
@@ -2945,7 +2958,6 @@ void PlayerImpl::AddBufferingProbe(GstClockTime target, int ticket) {
   }
 
   if (video_appsrc_) {
-    target +=  10 * 16 * GST_MSECOND;
     if (add_probe(video_appsrc_, target, ticket, buffering_probe_callback) != 0u)
       buffering_state_ |= static_cast<int>(MediaType::kVideo);
   }

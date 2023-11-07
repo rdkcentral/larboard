@@ -1104,6 +1104,7 @@ class PlayerImpl : public Player {
     kInitialPreroll,
     kPrerollAfterSeek,
     kPresenting,
+    kEnded,
   };
 
   static const char* PrivatePlayerStateToStr(State state) {
@@ -1261,6 +1262,7 @@ class PlayerImpl : public Player {
   void SchedulePlayingStateUpdate();
   void AddBufferingProbe(GstClockTime target, int ticket);
   void HandleInititialSeek(::starboard::ScopedLock&);
+  void DidEnd();
 
   SbPlayer player_;
   SbWindow window_;
@@ -1572,9 +1574,7 @@ gboolean PlayerImpl::BusMessageCallback(GstBus* bus,
     case GST_MESSAGE_EOS:
       if (GST_MESSAGE_SRC(message) == GST_OBJECT(self->pipeline_)) {
         GST_INFO("EOS");
-        self->DispatchOnWorkerThread(new PlayerStatusTask(
-            self->player_status_func_, self->player_, self->ticket_,
-            self->context_, kSbPlayerStateEndOfStream));
+        self->DidEnd();
       }
       break;
 
@@ -1596,15 +1596,7 @@ gboolean PlayerImpl::BusMessageCallback(GstBus* bus,
       if (err->domain == GST_STREAM_ERROR && is_eos) {
         GST_WARNING("Got stream error. But all streams are ended, so reporting EOS. Error code %d: %s (%s).",
           err->code, err->message, debug);
-        if (self->state_ < State::kPresenting) {
-          self->DispatchOnWorkerThread(new PlayerStatusTask(
-              self->player_status_func_, self->player_, self->ticket_,
-              self->context_, kSbPlayerStatePresenting));
-          self->state_ = State::kPresenting;
-        }
-        self->DispatchOnWorkerThread(new PlayerStatusTask(
-          self->player_status_func_, self->player_, self->ticket_,
-          self->context_, kSbPlayerStateEndOfStream));
+        self->DidEnd();
       } else {
         GST_ERROR("Error %d: %s (%s)", err->code, err->message, debug);
         self->DispatchOnWorkerThread(new PlayerErrorTask(
@@ -1990,8 +1982,14 @@ void PlayerImpl::MarkEOS(SbMediaType stream_type) {
   else
       eos_data_ |= static_cast<int>(MediaType::kAudio);
 
-  gst_app_src_end_of_stream(GST_APP_SRC(src));
   RecordTimestamp(stream_type, kSbTimeMax);
+
+  if (eos_data_ == static_cast<int>(GetBothMediaTypeTakingCodecsIntoAccount())) {
+    if (audio_codec_ != kSbMediaAudioCodecNone)
+      gst_app_src_end_of_stream(GST_APP_SRC(audio_appsrc_));
+    if (video_codec_ != kSbMediaVideoCodecNone)
+      gst_app_src_end_of_stream(GST_APP_SRC(video_appsrc_));
+  }
 }
 
 bool PlayerImpl::WriteSample(SbMediaType sample_type, GstBuffer* buffer, uint64_t serial_id) {
@@ -3029,6 +3027,24 @@ void PlayerImpl::SchedulePlayingStateUpdate() {
   g_source_set_callback(src, update_callback, this, nullptr);
   playing_state_update_source_id_ = g_source_attach(src, main_loop_context_);
   g_source_unref(src);
+}
+
+void PlayerImpl::DidEnd() {
+  if (state_ < State::kPresenting) {
+    DispatchOnWorkerThread(
+      new PlayerStatusTask(
+        player_status_func_, player_, ticket_,
+        context_, kSbPlayerStatePresenting));
+    state_ = State::kPresenting;
+  }
+
+  if (state_ == State::kPresenting) {
+    DispatchOnWorkerThread(
+      new PlayerStatusTask(
+        player_status_func_, player_, ticket_,
+        context_, kSbPlayerStateEndOfStream));
+    state_ = State::kEnded;
+  }
 }
 
 }  // namespace

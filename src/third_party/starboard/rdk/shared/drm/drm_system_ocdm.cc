@@ -757,8 +757,10 @@ const void* DrmSystemOcdm::GetMetrics(int* size) {
     std::vector<uint8_t> tmp;
     tmp.resize(buffer_length);
 
+    const uint32_t kBufferTooSmallErrorCode = 4; // ERROR_BUFFER_TOO_SMALL
+
     auto rc = g_ocdmGetMetricSystemData(ocdm_system_, &buffer_length, tmp.data());
-    if ( rc == ERROR_BUFFER_TOO_SMALL && ++i <= 4 ) {
+    if ( rc == kBufferTooSmallErrorCode && ++i <= 4 ) {
       continue;
     }
 

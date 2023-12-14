@@ -2027,7 +2027,6 @@ void PlayerImpl::MarkEOS(SbMediaType stream_type) {
       eos_data_ |= static_cast<int>(MediaType::kAudio);
 
   gst_app_src_end_of_stream(GST_APP_SRC(src));
-  RecordTimestamp(stream_type, kSbTimeMax);
 }
 
 bool PlayerImpl::WriteSample(SbMediaType sample_type, GstBuffer* buffer, uint64_t serial_id) {
@@ -2665,7 +2664,8 @@ void PlayerImpl::CheckBuffering(gint64 position) {
 
   if (min_ts + kMarginNs <= position &&
       GST_STATE(pipeline_) == GST_STATE_PLAYING &&
-      GST_STATE_PENDING(pipeline_) != GST_STATE_PAUSED) {
+      GST_STATE_PENDING(pipeline_) != GST_STATE_PAUSED &&
+      eos_data_ == 0) {
     {
       ::starboard::ScopedLock lock(mutex_);
       DecoderNeedsData(lock, origin);

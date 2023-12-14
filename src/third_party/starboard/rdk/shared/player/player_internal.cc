@@ -1982,8 +1982,6 @@ void PlayerImpl::MarkEOS(SbMediaType stream_type) {
   else
       eos_data_ |= static_cast<int>(MediaType::kAudio);
 
-  RecordTimestamp(stream_type, kSbTimeMax);
-
   if (eos_data_ == static_cast<int>(GetBothMediaTypeTakingCodecsIntoAccount())) {
     if (audio_codec_ != kSbMediaAudioCodecNone)
       gst_app_src_end_of_stream(GST_APP_SRC(audio_appsrc_));

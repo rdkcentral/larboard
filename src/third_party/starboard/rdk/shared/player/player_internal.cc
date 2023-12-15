@@ -2664,7 +2664,8 @@ void PlayerImpl::CheckBuffering(gint64 position) {
 
   if (min_ts + kMarginNs <= position &&
       GST_STATE(pipeline_) == GST_STATE_PLAYING &&
-      GST_STATE_PENDING(pipeline_) != GST_STATE_PAUSED) {
+      GST_STATE_PENDING(pipeline_) != GST_STATE_PAUSED &&
+      eos_data_ == 0) {
     {
       ::starboard::ScopedLock lock(mutex_);
       DecoderNeedsData(lock, origin);

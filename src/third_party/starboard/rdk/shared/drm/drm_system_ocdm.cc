@@ -334,6 +334,11 @@ void Session::OnProcessChallenge(OpenCDMSession* ocdm_session,
                                  const char url[],
                                  const uint8_t challenge[],
                                  const uint16_t challenge_length) {
+  if (challenge_length == 0) {
+    Session::OnError(ocdm_session, user_data, "Empty challenge");
+    return;
+  }
+
   Session* session = static_cast<Session*>(user_data);
   std::string id;
   int ticket;

@@ -29,6 +29,7 @@
 #include <gst/base/gstflowcombiner.h>
 #include <gst/video/video.h>
 #include <gst/base/gstbasetransform.h>
+#include <gst/base/gstbaseparse.h>
 
 #include <map>
 #include <string>
@@ -1266,9 +1267,17 @@ class PlayerImpl : public Player {
     }
 
     decoder_state_data_ |= need_data;
+
+#if 1
+    if ((need_data & static_cast<int>(MediaType::kAudio)) != 0)
+      decoder_status_func_(player_, context_, kSbMediaTypeAudio, kSbPlayerDecoderStateNeedsData, ticket_);
+    if ((need_data & static_cast<int>(MediaType::kVideo)) != 0)
+      decoder_status_func_(player_, context_, kSbMediaTypeVideo, kSbPlayerDecoderStateNeedsData, ticket_);
+#else
     DispatchOnWorkerThread(new DecoderStatusTask(
       decoder_status_func_, player_, ticket_, context_,
       kSbPlayerDecoderStateNeedsData, static_cast<MediaType>(need_data)));
+#endif
   }
 
   gboolean HandleBusMessage(GstBus* bus, GstMessage* message);
@@ -1966,6 +1975,10 @@ void PlayerImpl::SetupElement(GstElement* pipeline,
     if (g_str_has_prefix(GST_ELEMENT_NAME(element), "brcmaudiosink")) {
       g_object_set(G_OBJECT(element), "async", TRUE, nullptr);
     }
+  }
+
+  if (GST_IS_BASE_PARSE(element)) {
+    gst_base_parse_set_pts_interpolation(GST_BASE_PARSE(element), FALSE);
   }
 
   const gchar *klass_str = gst_element_class_get_metadata(GST_ELEMENT_GET_CLASS(element), "klass");

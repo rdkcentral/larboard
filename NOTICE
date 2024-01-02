@@ -24,3 +24,10 @@ within this component.
 Copyright 2017 The Cobalt Authors. All Rights Reserved.
 Licensed under the Apache License, Version 2.0
 See https://cobalt.googlesource.com/cobalt/+/master/src/AUTHORS for the list of Cobalt authors.
+
+Code from ICU is:
+Copyright 2016-2023 Unicode, Inc.
+and
+Copyright (c) 1995-2016 International Business Machines Corporation and others
+All rights reserved.
+Licensed under UNICODE LICENSE V3 and the ICU License from https://github.com/unicode-org/icu/blob/main/LICENSE

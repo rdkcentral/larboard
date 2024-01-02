@@ -2155,14 +2155,17 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
     }
 
 #if SB_API_VERSION >= 15
+    const guint64 kMaxGstClockTime = G_MAXUINT64 / G_GUINT64_CONSTANT (2);
     const auto& info = sample_infos[0].audio_sample_info;
     guint64 start_clip = 0, end_clip = 0;
 
-    if (info.discarded_duration_from_front && info.discarded_duration_from_front != kSbTimeMax)
-      start_clip = info.discarded_duration_from_front * kSbTimeNanosecondsPerMicrosecond;
+    if (info.discarded_duration_from_front)
+      start_clip = (info.discarded_duration_from_front == kSbTimeMax)
+        ? kMaxGstClockTime : info.discarded_duration_from_front * kSbTimeNanosecondsPerMicrosecond;
 
-    if (info.discarded_duration_from_back && info.discarded_duration_from_back != kSbTimeMax)
-      end_clip = info.discarded_duration_from_back * kSbTimeNanosecondsPerMicrosecond;
+    if (info.discarded_duration_from_back)
+      end_clip = (info.discarded_duration_from_back == kSbTimeMax)
+        ? kMaxGstClockTime : info.discarded_duration_from_back * kSbTimeNanosecondsPerMicrosecond;
 
     if (start_clip || end_clip) {
       gst_buffer_add_audio_clipping_meta(buffer, GST_FORMAT_TIME, start_clip, end_clip);

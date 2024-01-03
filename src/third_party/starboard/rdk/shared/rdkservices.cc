@@ -43,6 +43,7 @@
 #include "starboard/common/mutex.h"
 #include "starboard/accessibility.h"
 #include "starboard/common/file.h"
+#include "starboard/shared/starboard/media/mime_supportability_cache.h"
 
 #include "third_party/starboard/rdk/shared/accessibility_data.h"
 #include "third_party/starboard/rdk/shared/log_override.h"
@@ -190,6 +191,20 @@ public:
         link_.reset(new JSONRPC::LinkType<Core::JSON::IElement>(callsign_, nullptr, false, buildQuery()));
     }
     return link_;
+  }
+};
+
+struct VariableTimeout {
+  const uint32_t min_ms;   // milliseconds
+  const uint64_t deadline; // ticks
+  VariableTimeout(uint32_t min, uint32_t max)
+    : min_ms(min), deadline(Core::Time::Now().Ticks() + max * Core::Time::TicksPerMillisecond) {
+  }
+  uint32_t value() const {
+    auto now = Core::Time::Now().Ticks();
+    return (now < deadline)
+      ? std::max(static_cast<uint32_t>((deadline - now) / Core::Time::TicksPerMillisecond), min_ms)
+      : min_ms;
   }
 };
 
@@ -822,12 +837,13 @@ void DisplayInfoImpl::Refresh() {
   if (!needs_refresh_.load())
     return;
 
+  VariableTimeout timeout(kDefaultTimeoutMs, 1000);
   uint32_t rc;
 
   if (!did_subscribe_.load()) {
     bool old_val = did_subscribe_.exchange(true);
     if (old_val == false) {
-      rc = display_info_.Subscribe<Core::JSON::String>(kDefaultTimeoutMs, "updated", &DisplayInfoImpl::OnUpdated, this);
+      rc = display_info_.Subscribe<Core::JSON::String>(timeout.value(), "updated", &DisplayInfoImpl::OnUpdated, this);
       if (Core::ERROR_UNAVAILABLE == rc || kPriviligedRequestErrorCode == rc) {
         needs_refresh_.store(false);
         SB_LOG(ERROR) << "Failed to subscribe to '" << kDisplayInfoCallsign
@@ -849,7 +865,7 @@ void DisplayInfoImpl::Refresh() {
   bool needs_refresh = false;
 
   Core::JSON::String resolution;
-  rc = ServiceLink(kPlayerInfoCallsign).Get(kDefaultTimeoutMs, "resolution", resolution);
+  rc = ServiceLink(kPlayerInfoCallsign).Get(timeout.value(), "resolution", resolution);
   if (Core::ERROR_NONE == rc && resolution.IsSet()) {
     if (resolution.Value().find("Resolution2160") != std::string::npos) {
       resolution_info_ = ResolutionInfo { 3840 , 2160 };
@@ -857,22 +873,22 @@ void DisplayInfoImpl::Refresh() {
       resolution_info_ = ResolutionInfo { 1920 , 1080 };
     }
   } else {
-    needs_refresh |= (Core::ERROR_ASYNC_FAILED == rc);
+    needs_refresh |= (Core::ERROR_ASYNC_FAILED == rc || Core::ERROR_TIMEDOUT  == rc);
     resolution_info_ = ResolutionInfo { 1920 , 1080 };
     SB_LOG(ERROR) << "Failed to get 'resolution', rc=" << rc << " ( " << Core::ErrorToString(rc) << " )";
   }
 
   Core::JSON::DecUInt16 widthincentimeters, heightincentimeters;
-  rc = display_info_.Get(kDefaultTimeoutMs, "widthincentimeters", widthincentimeters);
+  rc = display_info_.Get(timeout.value(), "widthincentimeters", widthincentimeters);
   if (Core::ERROR_NONE != rc) {
-    needs_refresh |= (Core::ERROR_ASYNC_FAILED == rc);
+    needs_refresh |= (Core::ERROR_ASYNC_FAILED == rc || Core::ERROR_TIMEDOUT  == rc);
     widthincentimeters.Clear();
     SB_LOG(ERROR) << "Failed to get 'DisplayInfo.widthincentimeters', rc=" << rc << " ( " << Core::ErrorToString(rc) << " )";
   }
 
-  rc = display_info_.Get(kDefaultTimeoutMs, "heightincentimeters", heightincentimeters);
+  rc = display_info_.Get(timeout.value(), "heightincentimeters", heightincentimeters);
   if (Core::ERROR_NONE != rc) {
-    needs_refresh |= (Core::ERROR_ASYNC_FAILED == rc);
+    needs_refresh |= (Core::ERROR_ASYNC_FAILED == rc || Core::ERROR_TIMEDOUT  == rc);
     heightincentimeters.Clear();
     SB_LOG(ERROR) << "Failed to get 'DisplayInfo.heightincentimeters', rc=" << rc << " ( " << Core::ErrorToString(rc) << " )";
   }
@@ -889,9 +905,9 @@ void DisplayInfoImpl::Refresh() {
 
     HdrTypes types;
 
-    uint32_t rc = display_info_.Get(kDefaultTimeoutMs, method, types);
+    uint32_t rc = display_info_.Get(timeout.value(), method, types);
     if (Core::ERROR_NONE != rc) {
-      needs_refresh |= (Core::ERROR_ASYNC_FAILED == rc);
+      needs_refresh |= (Core::ERROR_ASYNC_FAILED == rc || Core::ERROR_TIMEDOUT  == rc);
       SB_LOG(ERROR) << "Failed to get '" << method << "', rc=" << rc << " ( " << Core::ErrorToString(rc) << " )";
       return 0u;
     }
@@ -929,6 +945,9 @@ void DisplayInfoImpl::Refresh() {
 
   needs_refresh_.store(needs_refresh);
 
+  using ::starboard::shared::starboard::media::MimeSupportabilityCache;
+  MimeSupportabilityCache::GetInstance()->SetCacheEnabled(!needs_refresh);
+
   SB_LOG(INFO) << "Display info updated, resolution: "
                << resolution_info_.Width << 'x' << resolution_info_.Height
                << ", hdr caps: 0x" << std::hex << hdr_caps_
@@ -941,6 +960,10 @@ void DisplayInfoImpl::OnUpdated(const Core::JSON::String&) {
   if (needs_refresh_.load() == false) {
     needs_refresh_.store(true);
     SbEventSchedule([](void* data) {
+      using ::starboard::shared::starboard::media::MimeSupportabilityCache;
+      // Clear and disable mime cache until display info is updated
+      MimeSupportabilityCache::GetInstance()->SetCacheEnabled(false);
+      MimeSupportabilityCache::GetInstance()->ClearCachedMimeSupportabilities();
       Application::Get()->DisplayInfoChanged();
     }, nullptr, 0);
   }

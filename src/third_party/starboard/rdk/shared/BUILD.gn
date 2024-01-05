@@ -34,7 +34,6 @@ declare_args() {
   rdk_enable_securityagent = true
   rdk_enable_ocdm = true
   rdk_enable_cryptography = true
-  rdk_enable_cbcs = false
   rdk_enable_rfc_api = true
 }
 
@@ -447,10 +446,6 @@ static_library("starboard_platform") {
 
   if (rdk_enable_ocdm) {
     configs += [ ":ocdm" ]
-  }
-
-  if (rdk_enable_cbcs) {
-    defines += [ "ENABLE_CBCS=1" ]
   }
 
   public_deps = [

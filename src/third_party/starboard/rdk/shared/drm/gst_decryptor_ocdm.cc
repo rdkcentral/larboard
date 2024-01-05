@@ -432,14 +432,6 @@ static GstFlowReturn cobalt_ocdm_decryptor_transform_ip(GstBaseTransform* base, 
 
   const GValue* value = nullptr;
 
-#if !(defined(ENABLE_CBCS) && ENABLE_CBCS)
-  const char* cipher_mode = gst_structure_get_string(info, "cipher-mode");
-  if ( g_strcmp0(cipher_mode, "cbcs") == 0 ) {
-    GST_ELEMENT_ERROR (self, STREAM, DECRYPT, ("Decryption failed"), ("Unsupported chipher-mode = %s", cipher_mode));
-    goto exit;
-  }
-#endif
-
   value = gst_structure_get_value(info, "kid");
   if (!value) {
     GST_ELEMENT_ERROR (self, STREAM, DECRYPT_NOKEY, ("No key ID available for encrypted sample"), (NULL));

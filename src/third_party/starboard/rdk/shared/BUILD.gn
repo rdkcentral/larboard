@@ -33,8 +33,7 @@ import("//build/config/linux/pkg_config.gni")
 declare_args() {
   rdk_enable_securityagent = true
   rdk_enable_ocdm = true
-  rdk_enable_cryptography = true
-  rdk_enable_rfc_api = true
+  rdk_enable_rfc_api = false
 }
 
 pkg_config("glib") {
@@ -64,11 +63,9 @@ pkg_config("wpeframework") {
   ]
 }
 
-if (rdk_enable_cryptography) {
-  pkg_config("cryptography") {
-    packages = [ "WPEFrameworkCryptography" ]
-    defines = [ "HAS_CRYPTOGRAPHY=1" ]
-  }
+pkg_config("cryptography") {
+  packages = [ "WPEFrameworkCryptography" ]
+  defines = [ "HAS_CRYPTOGRAPHY=1" ]
 }
 
 if (rdk_enable_securityagent) {
@@ -422,13 +419,8 @@ static_library("starboard_platform") {
     ":glib",
     ":gstreamer",
     ":wpeframework",
+    ":cryptography",
   ]
-
-  if (rdk_enable_cryptography) {
-    configs += [
-      ":cryptography",
-    ]
-  }
 
   if (rdk_enable_rfc_api) {
     libs += [

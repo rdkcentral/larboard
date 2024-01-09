@@ -2551,7 +2551,7 @@ void PlayerImpl::GetInfo(SbPlayerInfo2* out_player_info) {
 
   CheckBuffering(position);
 
-  GST_DEBUG_OBJECT(
+  GST_LOG_OBJECT(
     pipeline_,"Current position: %" GST_TIME_FORMAT " (Seek position: %" GST_TIME_FORMAT ")",
     GST_TIME_ARGS(position),
     GST_TIME_ARGS(seek_position_ != kSbTimeMax ? seek_position_ * kSbTimeNanosecondsPerMicrosecond : GST_CLOCK_TIME_NONE));
@@ -2670,7 +2670,7 @@ void PlayerImpl::CheckBuffering(gint64 position) {
     return;
 
   constexpr SbTime kMarginNs =
-      350 * kSbTimeMillisecond * kSbTimeNanosecondsPerMicrosecond;
+      50 * kSbTimeMillisecond * kSbTimeNanosecondsPerMicrosecond;
 
   MediaType origin = MediaType::kNone;
   SbTime min_ts = MinTimestamp(&origin);
@@ -2687,12 +2687,9 @@ void PlayerImpl::CheckBuffering(gint64 position) {
       DecoderNeedsData(lock, origin);
       buf_target_min_ts_ = min_ts + kMarginNs;
     }
-
-    PrintPositionPerSink(pipeline_, GST_LEVEL_WARNING);
-    GST_WARNING_OBJECT(pipeline_, "Force setting to PAUSED. Pos: %" GST_TIME_FORMAT
-                " sample:%" GST_TIME_FORMAT,
-                GST_TIME_ARGS(position), GST_TIME_ARGS(min_ts + kMarginNs));
-
+    PrintPositionPerSink(pipeline_, GST_LEVEL_INFO);
+    GST_INFO_OBJECT(pipeline_, "Pause for buffering. Pos: %" GST_TIME_FORMAT
+                ", min ts:%" GST_TIME_FORMAT, GST_TIME_ARGS(position), GST_TIME_ARGS(min_ts));
     ChangePipelineState(GST_STATE_PAUSED);
   } else if (buf_target_min_ts_ != kSbTimeMax && min_ts > buf_target_min_ts_) {
     double rate;
@@ -2705,8 +2702,8 @@ void PlayerImpl::CheckBuffering(gint64 position) {
     GstState state, pending;
     gst_element_get_state(pipeline_, &state, &pending, 0);
     if (rate > .0 && state != GST_STATE_PLAYING && pending != GST_STATE_PLAYING) {
-      GST_LOG_OBJECT(
-        pipeline_, "Moving to playing, min_ts = %" GST_TIME_FORMAT " need %" GST_TIME_FORMAT,
+      GST_INFO_OBJECT(
+        pipeline_, "Resuming playback. min_ts: %" GST_TIME_FORMAT ", buff traget: %" GST_TIME_FORMAT,
         GST_TIME_ARGS(min_ts), GST_TIME_ARGS(buf_target_min_ts));
       ChangePipelineState(GST_STATE_PLAYING);
     }

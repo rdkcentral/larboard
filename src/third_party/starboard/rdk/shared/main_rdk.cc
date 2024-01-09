@@ -32,6 +32,7 @@
 #include <gst/gst.h>
 
 #include <signal.h>
+#include <sys/resource.h>
 
 #include "starboard/configuration.h"
 #include "starboard/shared/signal/crash_signals.h"
@@ -87,6 +88,10 @@ int SbRunStarboardMain(int argc, char** argv, SbEventHandleCallback callback) {
 
 extern "C" SB_EXPORT_PLATFORM int main(int argc, char** argv) {
   tzset();
+
+  rlimit stack_size;
+  stack_size.rlim_cur = 512 * 1024;
+  setrlimit(RLIMIT_STACK, &stack_size);
 
   GError* error = NULL;
   gst_init_check(NULL, NULL, &error);

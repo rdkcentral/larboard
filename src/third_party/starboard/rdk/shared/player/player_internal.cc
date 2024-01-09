@@ -3005,6 +3005,7 @@ void PlayerImpl::AddBufferingProbe(GstClockTime target, int ticket) {
   }
 
   if (video_appsrc_ && video_codec_ != kSbMediaVideoCodecNone) {
+    target +=  10 * 16 * GST_MSECOND;
     if (add_probe(video_appsrc_, target, ticket, buffering_probe_callback) != 0u)
       buffering_state_ |= static_cast<int>(MediaType::kVideo);
   }

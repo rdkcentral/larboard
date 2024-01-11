@@ -63,7 +63,13 @@ bool SbSystemSignWithCertificationSecretKey(const uint8_t* message,
   bool result = false;
 
 #if defined(HAS_CRYPTOGRAPHY)
+
+#if (THUNDER_VERSION_MAJOR > 4 || (THUNDER_VERSION_MAJOR == 4 && THUNDER_VERSION_MINOR >= 4))
+  using namespace WPEFramework::Exchange;
+#else
   using namespace WPEFramework::Cryptography;
+  using CryptographyVault = cryptographyvault;
+#endif
 
   const char kDefaultKeyName[] = "0381000003810001.key";
   const char kRFCParamName[] = "Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.Feature.Cobalt.AuthCertKeyName";
@@ -102,14 +108,15 @@ bool SbSystemSignWithCertificationSecretKey(const uint8_t* message,
     SB_LOG(ERROR) << "Failed to create ICryptography instance";
     return false;
   }
+  vault.reset( icrypto->Vault(CryptographyVault::CRYPTOGRAPHY_VAULT_DEFAULT) );
 
-  vault.reset( icrypto->Vault(cryptographyvault::CRYPTOGRAPHY_VAULT_DEFAULT) );
   if ( !vault ) {
     SB_LOG(ERROR) << "Failed to get default vault";
     return false;
   }
 
-  persistent.reset( vault->QueryInterface<WPEFramework::Cryptography::IPersistent>() );
+  persistent.reset( vault->QueryInterface<IPersistent>() );
+
   if ( !persistent ) {
     SB_LOG(ERROR) << "IPersistent is not implemented";
     return false;

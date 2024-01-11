@@ -824,6 +824,7 @@ struct DisplayInfoImpl {
 private:
   void Refresh();
   void OnUpdated(const Core::JSON::String&);
+  void ForceNeedsRefresh() {  needs_refresh_.store(true); }
 
   ServiceLink display_info_ { kDisplayInfoCallsign };
   ResolutionInfo resolution_info_ { };
@@ -832,6 +833,8 @@ private:
   ::starboard::atomic_bool needs_refresh_ { true };
   ::starboard::atomic_bool did_subscribe_ { false };
 };
+
+SB_ONCE_INITIALIZE_FUNCTION(DisplayInfoImpl, GetDisplayInfo);
 
 void DisplayInfoImpl::Refresh() {
   if (!needs_refresh_.load())
@@ -881,14 +884,14 @@ void DisplayInfoImpl::Refresh() {
   Core::JSON::DecUInt16 widthincentimeters, heightincentimeters;
   rc = display_info_.Get(timeout.value(), "widthincentimeters", widthincentimeters);
   if (Core::ERROR_NONE != rc) {
-    needs_refresh |= (Core::ERROR_ASYNC_FAILED == rc || Core::ERROR_TIMEDOUT  == rc);
+    needs_refresh |= (Core::ERROR_ASYNC_FAILED == rc);
     widthincentimeters.Clear();
     SB_LOG(ERROR) << "Failed to get 'DisplayInfo.widthincentimeters', rc=" << rc << " ( " << Core::ErrorToString(rc) << " )";
   }
 
   rc = display_info_.Get(timeout.value(), "heightincentimeters", heightincentimeters);
   if (Core::ERROR_NONE != rc) {
-    needs_refresh |= (Core::ERROR_ASYNC_FAILED == rc || Core::ERROR_TIMEDOUT  == rc);
+    needs_refresh |= (Core::ERROR_ASYNC_FAILED == rc);
     heightincentimeters.Clear();
     SB_LOG(ERROR) << "Failed to get 'DisplayInfo.heightincentimeters', rc=" << rc << " ( " << Core::ErrorToString(rc) << " )";
   }
@@ -943,10 +946,15 @@ void DisplayInfoImpl::Refresh() {
 
   hdr_caps_ = tv_caps & stb_caps;
 
-  needs_refresh_.store(needs_refresh);
+  needs_refresh_.store(false);
 
-  using ::starboard::shared::starboard::media::MimeSupportabilityCache;
-  MimeSupportabilityCache::GetInstance()->SetCacheEnabled(!needs_refresh);
+  if (needs_refresh) {
+    SbEventSchedule([](void* data) {
+      using ::starboard::shared::starboard::media::MimeSupportabilityCache;
+      MimeSupportabilityCache::GetInstance()->ClearCachedMimeSupportabilities();
+      GetDisplayInfo()->ForceNeedsRefresh();
+    }, nullptr, kSbTimeSecond);
+  }
 
   SB_LOG(INFO) << "Display info updated, resolution: "
                << resolution_info_.Width << 'x' << resolution_info_.Height
@@ -961,15 +969,12 @@ void DisplayInfoImpl::OnUpdated(const Core::JSON::String&) {
     needs_refresh_.store(true);
     SbEventSchedule([](void* data) {
       using ::starboard::shared::starboard::media::MimeSupportabilityCache;
-      // Clear and disable mime cache until display info is updated
-      MimeSupportabilityCache::GetInstance()->SetCacheEnabled(false);
+      // Clear mime cache until display info is updated
       MimeSupportabilityCache::GetInstance()->ClearCachedMimeSupportabilities();
       Application::Get()->DisplayInfoChanged();
     }, nullptr, 0);
   }
 }
-
-SB_ONCE_INITIALIZE_FUNCTION(DisplayInfoImpl, GetDisplayInfo);
 
 struct NetworkInfoImpl {
 private:

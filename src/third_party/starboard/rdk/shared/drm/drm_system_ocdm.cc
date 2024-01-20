@@ -755,9 +755,9 @@ const void* DrmSystemOcdm::GetMetrics(int* size) {
   if ( !g_ocdmGetMetricSystemData )
     return nullptr;
 
-  int i = 1;
-  do {
-    uint32_t buffer_length =  i * 4 * 1024;
+  const int kMaxRetry = 5;
+  for (int i = 0; i < kMaxRetry; ++i) {
+    uint32_t buffer_length =  ( 1 << i ) * 4 * 1024;
 
     std::vector<uint8_t> tmp;
     tmp.resize(buffer_length);
@@ -765,20 +765,21 @@ const void* DrmSystemOcdm::GetMetrics(int* size) {
     const uint32_t kBufferTooSmallErrorCode = 4; // ERROR_BUFFER_TOO_SMALL
 
     auto rc = g_ocdmGetMetricSystemData(ocdm_system_, &buffer_length, tmp.data());
-    if ( rc == kBufferTooSmallErrorCode && ++i <= 4 ) {
-      continue;
-    }
-
     if ( rc == ERROR_NONE ) {
       uint16_t out_length = (((buffer_length * 8) / 6) + 4) * sizeof(TCHAR);
       metrics_.resize(out_length, '\0');
       out_length = WPEFramework::Core::URL::Base64Encode(tmp.data(), buffer_length, reinterpret_cast<char*>(metrics_.data()), out_length, false);
       metrics_.resize(out_length);
-    }  else  {
-      SB_LOG(ERROR) << "Failed to get drm metrics, rc = " << rc;
+    } else if ( rc == kBufferTooSmallErrorCode && i < (kMaxRetry - 1) ) {
+      SB_LOG(INFO) << "GetMetrics: buffer is too small, rc = " << rc << ", i = " << i;
+      continue;
+    } else {
+      metrics_.resize(0);
+      SB_LOG(ERROR) << "GetMetrics: failed, rc = " << rc;
     }
 
-  } while(false);
+    break;
+  }
 
   *size = static_cast<int>(metrics_.size());
   return metrics_.data();

@@ -30,17 +30,21 @@
 #include <interfaces/json/JsonData_HDRProperties.h>
 #include <interfaces/json/JsonData_PlayerProperties.h>
 #include <interfaces/json/JsonData_DeviceIdentification.h>
+#include <interfaces/json/JsonData_DeviceInfo.h>
 
 #ifdef HAS_SECURITY_AGENT
 #include <securityagent/securityagent.h>
 #endif
 
 #include "starboard/atomic.h"
+#include "starboard/audio_sink.h"
 #include "starboard/event.h"
+#include "starboard/media.h"
 #include "starboard/once.h"
 #include "starboard/common/atomic.h"
 #include "starboard/common/condition_variable.h"
 #include "starboard/common/mutex.h"
+#include "starboard/common/media.h"
 #include "starboard/accessibility.h"
 #include "starboard/common/file.h"
 #include "starboard/shared/starboard/media/mime_supportability_cache.h"
@@ -67,6 +71,9 @@ const char kDeviceIdentificationCallsign[] = "DeviceIdentification.1";
 const char kNetworkCallsign[] = "org.rdk.Network.1";
 const char kTTSCallsign[] = "org.rdk.TextToSpeech.1";
 const char kAuthServiceCallsign[] = "org.rdk.AuthService.1";
+
+const char kDeviceInfoCallsign[] = "DeviceInfo.1";
+const char kBluetoothCallsign[] = "org.rdk.Bluetooth.1";
 
 const char kAuthServiceExperienceFile[] = "/opt/www/authService/experience.dat";
 
@@ -1139,6 +1146,213 @@ public:
 
 SB_ONCE_INITIALIZE_FUNCTION(NetworkInfoImpl, GetNetworkInfo);
 
+struct DeviceInfoImpl {
+
+  bool GetAudioConfiguration(int index, SbMediaAudioConfiguration* out_audio_configuration);
+
+  void Teardown() {
+    if (did_subscribe_.load()) {
+      bluetooth_.Unsubscribe(kDefaultTimeoutMs, "onStatusChanged");
+      did_subscribe_.store(false);
+    }
+    device_info_.Teardown();
+    bluetooth_.Teardown();
+    needs_refresh_.store(true);
+  }
+
+private:
+  struct DeviceDetailsData : public Core::JSON::Container {
+    DeviceDetailsData()
+      : Core::JSON::Container() {
+      Init();
+    }
+    DeviceDetailsData(const DeviceDetailsData& other)
+      : Core::JSON::Container()
+      , Name(other.Name)
+      , Devicetype(other.Devicetype) {
+      Init();
+    }
+    DeviceDetailsData& operator=(const DeviceDetailsData& rhs) {
+      Name = rhs.Name;
+      Devicetype = rhs.Devicetype;
+      return *this;
+    }
+    Core::JSON::String Name;
+    Core::JSON::String Devicetype;
+  private:
+    void Init() {
+      Add(_T("name"), &Name);
+      Add(_T("deviceType"), &Devicetype);
+    }
+  };
+  struct ConnectedDevicesData : public Core::JSON::Container {
+    ConnectedDevicesData()
+      : Core::JSON::Container() {
+      Add(_T("connectedDevices"), &Connecteddevices);
+    }
+    ConnectedDevicesData(const ConnectedDevicesData&) = delete;
+    ConnectedDevicesData& operator=(const ConnectedDevicesData&) = delete;
+    Core::JSON::ArrayType<DeviceDetailsData> Connecteddevices;
+  };
+
+  void OnBluetoothStatusChanged(const Core::JSON::String&) { ForceNeedsRefresh(); }
+  void Refresh();
+  void ForceNeedsRefresh() {  needs_refresh_.store(true); }
+  void InitAudioConfigurationForAudioPort(const std::string& port_name, SbMediaAudioConfiguration* out);
+
+  ServiceLink device_info_ { kDeviceInfoCallsign };
+  ServiceLink bluetooth_ { kBluetoothCallsign };
+
+  ::starboard::atomic_bool did_subscribe_ { false };
+  ::starboard::atomic_bool needs_refresh_ { true };
+  ::starboard::Mutex mutex_;
+
+  std::vector<SbMediaAudioConfiguration> audio_configurations_;
+
+  static constexpr SbMediaAudioConnector kAudioConnectorUnknown = static_cast<SbMediaAudioConnector>(0);
+};
+
+SB_ONCE_INITIALIZE_FUNCTION(DeviceInfoImpl, GetDeviceInfo);
+
+void DeviceInfoImpl::InitAudioConfigurationForAudioPort(const std::string& port_name, SbMediaAudioConfiguration* audio_configuration)
+{
+  if (!audio_configuration)
+    return;
+
+  const auto& connectorType = [](const std::string& name) {
+    if (strncasecmp(name.c_str(), "hdmi", 4) == 0)
+      return kSbMediaAudioConnectorHdmi;
+    else if (strncasecmp(name.c_str(), "spdif", 5) == 0)
+      return kSbMediaAudioConnectorSpdif;
+    else if (strncasecmp(name.c_str(), "bluetooth", 9) == 0)
+      return kSbMediaAudioConnectorBluetooth;
+#if SB_API_VERSION >= 15
+    else if (strncasecmp(name.c_str(), "speaker", 7) == 0)
+      return kSbMediaAudioConnectorBuiltIn;
+#endif
+    return kAudioConnectorUnknown;
+  };
+
+  memset(audio_configuration, 0, sizeof(SbMediaAudioConfiguration));
+
+  audio_configuration->connector = connectorType(port_name);
+  audio_configuration->coding_type = kSbMediaAudioCodingTypePcm;
+  audio_configuration->number_of_channels = SbAudioSinkGetMaxChannels();
+  return;
+}
+
+void DeviceInfoImpl::Refresh() {
+  if ( !needs_refresh_.load() || !needs_refresh_.exchange( false ) )
+    return;
+
+  std::vector<SbMediaAudioConfiguration> audio_configs;
+
+  uint32_t rc;
+  bool needs_refresh = false;
+  VariableTimeout timeout { kDefaultTimeoutMs, 1000 };
+
+  if (did_subscribe_.load() == false && did_subscribe_.exchange(true) == false) {
+    rc = bluetooth_.Subscribe<Core::JSON::String>(timeout.value(), "onStatusChanged", &DeviceInfoImpl::OnBluetoothStatusChanged, this);
+    if (Core::ERROR_NONE != rc && Core::ERROR_DUPLICATE_KEY != rc) {
+      SB_LOG(ERROR) << "Failed to subscribe to '" << kBluetoothCallsign
+                    << ".onStatusChanged' event, rc=" << rc
+                    << " ( " << Core::ErrorToString(rc) << " )";
+    }
+  }
+
+  using namespace WPEFramework::JsonData::DeviceInfo;
+  SupportedaudioportsData audio_ports;
+  rc = device_info_.Get(timeout.value(), "supportedaudioports", audio_ports);
+  if (Core::ERROR_NONE != rc) {
+    SB_LOG(ERROR) << "'" << kDeviceInfoCallsign << ".supportedaudioports' failed, rc = " << rc
+                  << " ( " << Core::ErrorToString(rc) << " )";
+    needs_refresh |= (Core::ERROR_ASYNC_FAILED == rc || Core::ERROR_TIMEDOUT  == rc);
+  } else if (audio_ports.SupportedAudioPorts.Length() == 0) {
+    SB_LOG(INFO) << "No supported audio ports.";
+  } else {
+    auto index(audio_ports.SupportedAudioPorts.Elements());
+    while (index.Next()) {
+      const auto& port_name = index.Current().Value();
+      SB_LOG(INFO) << "Supported audio port name: " << port_name;
+      SbMediaAudioConfiguration configuration;
+      InitAudioConfigurationForAudioPort(port_name, &configuration);
+      if (configuration.connector != kAudioConnectorUnknown)
+        audio_configs.push_back(std::move(configuration));
+    }
+  }
+
+  ConnectedDevicesData connected_devices;
+  rc = bluetooth_.Get(timeout.value(), "getConnectedDevices", connected_devices);
+  if (Core::ERROR_NONE != rc) {
+    SB_LOG(ERROR) << "'" << kBluetoothCallsign << ".getConnectedDevices' failed, rc = " << rc
+                  << " ( " << Core::ErrorToString(rc) << " )";
+    needs_refresh |= (Core::ERROR_ASYNC_FAILED == rc || Core::ERROR_TIMEDOUT  == rc);
+  } else if (connected_devices.Connecteddevices.Length() == 0) {
+    SB_LOG(INFO) << "No bluetooth connected devices.";
+  } else {
+    auto index(connected_devices.Connecteddevices.Elements());
+    while (index.Next()) {
+      const auto& isAudioOutputDeviceType = [](const std::string& type) -> bool {
+        return (strcasestr(type.c_str(), "audio") ||
+                strcasestr(type.c_str(), "headset") ||
+                strcasestr(type.c_str(), "headphones") ||
+                strcasestr(type.c_str(), "loudspeaker") ||
+                strcasestr(type.c_str(), "handsfree"));
+      };
+      const auto& device_details = index.Current();
+      SB_LOG(INFO) << "Bluetooth device name: " << device_details.Name.Value() << ", type: " << device_details.Devicetype.Value();
+      if (isAudioOutputDeviceType(device_details.Devicetype.Value())) {
+        SbMediaAudioConfiguration configuration;
+        InitAudioConfigurationForAudioPort("bluetooth", &configuration);
+        audio_configs.push_back(std::move(configuration));
+        break;
+      }
+    }
+  }
+
+  if (audio_configs.empty()) {
+      SbMediaAudioConfiguration configuration;
+      InitAudioConfigurationForAudioPort("", &configuration);
+      audio_configs.push_back(std::move(configuration));
+  }
+
+  if (needs_refresh) {
+    SbEventSchedule([](void* data) {
+      GetDeviceInfo()->ForceNeedsRefresh();
+    }, nullptr, kSbTimeSecond);
+  }
+
+  SB_LOG(INFO) << "Updated audio configuration:";
+  for (const auto& config : audio_configs) {
+    SB_LOG(INFO) << " connector: " << (uint32_t) config.connector << " (" << ::starboard::GetMediaAudioConnectorName(config.connector) << ")";
+  }
+
+  ::starboard::ScopedLock lock(mutex_);
+  std::swap(audio_configurations_, audio_configs);
+}
+
+bool DeviceInfoImpl::GetAudioConfiguration(int output_index, SbMediaAudioConfiguration* out_configuration) {
+  SB_DCHECK(output_index >= 0);
+  SB_DCHECK(out_configuration);
+
+  if (!out_configuration || output_index < 0)
+    return false;
+
+  Refresh();
+
+  ::starboard::ScopedLock lock(mutex_);
+  if (output_index < audio_configurations_.size()) {
+    *out_configuration = audio_configurations_[output_index];
+    return true;
+  }
+  else if (output_index == 0) {
+    InitAudioConfigurationForAudioPort("", out_configuration);
+    return true;
+  }
+
+  return false;
+}
+
 }  // namespace
 
 ResolutionInfo DisplayInfo::GetResolution() {
@@ -1265,10 +1479,15 @@ bool AuthService::GetExperience(std::string &out) {
   return GetAuthService()->GetExperience(out);
 }
 
+bool DeviceInfo::GetAudioConfiguration(int index, SbMediaAudioConfiguration* out_audio_configuration) {
+  return GetDeviceInfo()->GetAudioConfiguration(index, out_audio_configuration);
+}
+
 void TeardownJSONRPCLink() {
   GetDisplayInfo()->Teardown();
   GetTextToSpeech()->Teardown();
   GetNetworkInfo()->Teardown();
+  GetDeviceInfo()->Teardown();
 }
 
 }  // namespace shared

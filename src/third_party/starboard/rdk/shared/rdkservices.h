@@ -25,6 +25,7 @@
 
 struct SbAccessibilityCaptionSettings;
 struct SbAccessibilityDisplaySettings;
+struct SbMediaAudioConfiguration;
 
 namespace third_party {
 namespace starboard {
@@ -111,6 +112,10 @@ public:
   static bool GetExperience(std::string &out);
 };
 
+class DeviceInfo {
+public:
+  static bool GetAudioConfiguration(int index, SbMediaAudioConfiguration* out_audio_configuration);
+};
 
 void TeardownJSONRPCLink();
 

@@ -45,6 +45,9 @@ struct SB_EXPORT Player {
   virtual void SetBounds(int zindex, int x, int y, int w, int h) = 0;
 };
 
+void ForceStop();
+void AudioConfigurationChanged();
+
 }  // namespace player
 }  // namespace shared
 }  // namespace rdk
@@ -75,6 +78,7 @@ struct SbPlayerPrivate {
     using third_party::starboard::rdk::shared::player::Player;
     return Player::MaxNumberOfSamplesPerWrite();
   }
+
   std::unique_ptr<third_party::starboard::rdk::shared::player::Player> player_;
 };
 

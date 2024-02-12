@@ -52,6 +52,7 @@
 #include "third_party/starboard/rdk/shared/accessibility_data.h"
 #include "third_party/starboard/rdk/shared/log_override.h"
 #include "third_party/starboard/rdk/shared/application_rdk.h"
+#include "third_party/starboard/rdk/shared/player/player_internal.h"
 
 MODULE_NAME_DECLARATION(BUILD_REFERENCE);
 
@@ -1185,6 +1186,7 @@ private:
       Add(_T("deviceType"), &Devicetype);
     }
   };
+
   struct ConnectedDevicesData : public Core::JSON::Container {
     ConnectedDevicesData()
       : Core::JSON::Container() {
@@ -1195,10 +1197,51 @@ private:
     Core::JSON::ArrayType<DeviceDetailsData> Connecteddevices;
   };
 
-  void OnBluetoothStatusChanged(const Core::JSON::String&) { ForceNeedsRefresh(); }
+  struct StatusChangedData : public Core::JSON::Container {
+    StatusChangedData()
+      : Core::JSON::Container() {
+      Init();
+    }
+    StatusChangedData(const StatusChangedData& other)
+      : Core::JSON::Container()
+      , Name(other.Name)
+      , Newstatus(other.Newstatus)
+      , Devicetype(other.Devicetype)
+      , Connected(other.Connected) {
+      Init();
+    }
+    StatusChangedData& operator=(const StatusChangedData& rhs) {
+      Name = rhs.Name;
+      Devicetype = rhs.Devicetype;
+      Newstatus = rhs.Newstatus;
+      Connected = rhs.Connected;
+      return *this;
+    }
+    Core::JSON::String Name;
+    Core::JSON::String Newstatus;
+    Core::JSON::String Devicetype;
+    Core::JSON::Boolean Connected;
+  private:
+    void Init() {
+      Add(_T("name"), &Name);
+      Add(_T("newStatus"), &Newstatus);
+      Add(_T("deviceType"), &Devicetype);
+      Add(_T("connected"), &Connected);
+    }
+  };
+
+  void OnBluetoothStatusChanged(const StatusChangedData&);
   void Refresh();
   void ForceNeedsRefresh() {  needs_refresh_.store(true); }
   void InitAudioConfigurationForAudioPort(const std::string& port_name, SbMediaAudioConfiguration* out);
+
+  static bool IsAudioOutputDeviceType(const std::string& type) {
+    return (strcasestr(type.c_str(), "audio") ||
+            strcasestr(type.c_str(), "headset") ||
+            strcasestr(type.c_str(), "headphones") ||
+            strcasestr(type.c_str(), "loudspeaker") ||
+            strcasestr(type.c_str(), "handsfree"));
+  };
 
   ServiceLink device_info_ { kDeviceInfoCallsign };
   ServiceLink bluetooth_ { kBluetoothCallsign };
@@ -1241,6 +1284,39 @@ void DeviceInfoImpl::InitAudioConfigurationForAudioPort(const std::string& port_
   return;
 }
 
+void DeviceInfoImpl::OnBluetoothStatusChanged(const StatusChangedData& data) {
+  const char kConnectionChange[] = "CONNECTION_CHANGE";
+
+  SB_LOG(INFO) << "Bluetooth status changed, new status: " << data.Newstatus.Value();
+
+  if (data.Newstatus.Value().compare(0, sizeof(kConnectionChange), kConnectionChange) != 0)
+    return;
+
+  if (!IsAudioOutputDeviceType(data.Devicetype.Value()))
+    return;
+
+  SB_LOG(INFO) << "Audio device change."
+               << " name: '" << data.Name.Value() << "',"
+               << " type: '" << data.Devicetype.Value() << "',"
+               << " connected: " << (data.Connected.Value() ? "yes" : "no");
+
+  const auto& hasBluetooth = [&]() -> bool {
+    ::starboard::ScopedLock lock(mutex_);
+    return std::find_if(audio_configurations_.begin(), audio_configurations_.end(), [](const SbMediaAudioConfiguration& cfg) {
+      return cfg.connector == kSbMediaAudioConnectorBluetooth;
+    }) != audio_configurations_.end();
+  };
+
+  ForceNeedsRefresh();
+
+  // Interrupt player only if new wireless device got connected
+  if (data.Connected.Value() && !hasBluetooth()) {
+    SbEventSchedule([](void*) {
+      player::AudioConfigurationChanged();
+    }, nullptr, 0);
+  }
+}
+
 void DeviceInfoImpl::Refresh() {
   if ( !needs_refresh_.load() || !needs_refresh_.exchange( false ) )
     return;
@@ -1252,7 +1328,7 @@ void DeviceInfoImpl::Refresh() {
   VariableTimeout timeout { kDefaultTimeoutMs, 1000 };
 
   if (did_subscribe_.load() == false && did_subscribe_.exchange(true) == false) {
-    rc = bluetooth_.Subscribe<Core::JSON::String>(timeout.value(), "onStatusChanged", &DeviceInfoImpl::OnBluetoothStatusChanged, this);
+    rc = bluetooth_.Subscribe<StatusChangedData>(timeout.value(), "onStatusChanged", &DeviceInfoImpl::OnBluetoothStatusChanged, this);
     if (Core::ERROR_NONE != rc && Core::ERROR_DUPLICATE_KEY != rc) {
       SB_LOG(ERROR) << "Failed to subscribe to '" << kBluetoothCallsign
                     << ".onStatusChanged' event, rc=" << rc
@@ -1292,16 +1368,9 @@ void DeviceInfoImpl::Refresh() {
   } else {
     auto index(connected_devices.Connecteddevices.Elements());
     while (index.Next()) {
-      const auto& isAudioOutputDeviceType = [](const std::string& type) -> bool {
-        return (strcasestr(type.c_str(), "audio") ||
-                strcasestr(type.c_str(), "headset") ||
-                strcasestr(type.c_str(), "headphones") ||
-                strcasestr(type.c_str(), "loudspeaker") ||
-                strcasestr(type.c_str(), "handsfree"));
-      };
       const auto& device_details = index.Current();
       SB_LOG(INFO) << "Bluetooth device name: " << device_details.Name.Value() << ", type: " << device_details.Devicetype.Value();
-      if (isAudioOutputDeviceType(device_details.Devicetype.Value())) {
+      if (IsAudioOutputDeviceType(device_details.Devicetype.Value())) {
         SbMediaAudioConfiguration configuration;
         InitAudioConfigurationForAudioPort("bluetooth", &configuration);
         audio_configs.push_back(std::move(configuration));

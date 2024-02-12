@@ -1113,6 +1113,7 @@ class PlayerImpl : public Player {
   GstElement* GetPipeline() const { return pipeline_;  }
   bool IsValid() const { return SbThreadIsValid(playback_thread_); }
   bool HasMaxVideoCaps() const { return !max_video_capabilities_.empty(); }
+  void AudioConfigurationChanged();
 
  private:
   enum class State {
@@ -1399,6 +1400,13 @@ struct PlayerRegistry
     }
     #endif
     return true;
+  }
+
+  void AudioConfigurationChanged() {
+    ::starboard::ScopedLock lock(mutex_);
+    for(const auto& p: players_) {
+      p->AudioConfigurationChanged();
+    }
   }
 };
 SB_ONCE_INITIALIZE_FUNCTION(PlayerRegistry, GetPlayerRegistry);
@@ -3069,11 +3077,25 @@ void PlayerImpl::DidEnd() {
   }
 }
 
+void PlayerImpl::AudioConfigurationChanged() {
+  GST_WARNING_OBJECT(pipeline_, "Emitting an error on audio configuration change.");
+  DispatchOnWorkerThread(
+    new PlayerErrorTask(
+      player_error_func_, player_, context_,
+      kSbPlayerErrorCapabilityChanged, "Audio device capability changed"));
+
+}
+
 }  // namespace
 
 void ForceStop() {
   using third_party::starboard::rdk::shared::player::GetPlayerRegistry;
   GetPlayerRegistry()->ForceStop();
+}
+
+void AudioConfigurationChanged() {
+  using third_party::starboard::rdk::shared::player::GetPlayerRegistry;
+  GetPlayerRegistry()->AudioConfigurationChanged();
 }
 
 }  // namespace player

@@ -1248,6 +1248,7 @@ private:
 
   ::starboard::atomic_bool did_subscribe_ { false };
   ::starboard::atomic_bool needs_refresh_ { true };
+  ::starboard::atomic_bool has_bluetooth_audio_connected_ { false };
   ::starboard::Mutex mutex_;
 
   std::vector<SbMediaAudioConfiguration> audio_configurations_;
@@ -1300,17 +1301,19 @@ void DeviceInfoImpl::OnBluetoothStatusChanged(const StatusChangedData& data) {
                << " type: '" << data.Devicetype.Value() << "',"
                << " connected: " << (data.Connected.Value() ? "yes" : "no");
 
-  const auto& hasBluetooth = [&]() -> bool {
+  const auto& hasBluetoothConnector = [&]() -> bool {
     ::starboard::ScopedLock lock(mutex_);
     return std::find_if(audio_configurations_.begin(), audio_configurations_.end(), [](const SbMediaAudioConfiguration& cfg) {
       return cfg.connector == kSbMediaAudioConnectorBluetooth;
     }) != audio_configurations_.end();
   };
 
+  has_bluetooth_audio_connected_.store(data.Connected.Value());
+
   ForceNeedsRefresh();
 
   // Interrupt player only if new wireless device got connected
-  if (data.Connected.Value() && !hasBluetooth()) {
+  if (data.Connected.Value() && !hasBluetoothConnector()) {
     SbEventSchedule([](void*) {
       player::AudioConfigurationChanged();
     }, nullptr, 0);
@@ -1357,32 +1360,38 @@ void DeviceInfoImpl::Refresh() {
     }
   }
 
-  ConnectedDevicesData connected_devices;
-  rc = bluetooth_.Get(timeout.value(), "getConnectedDevices", connected_devices);
-  if (Core::ERROR_NONE != rc) {
-    SB_LOG(ERROR) << "'" << kBluetoothCallsign << ".getConnectedDevices' failed, rc = " << rc
-                  << " ( " << Core::ErrorToString(rc) << " )";
-    needs_refresh |= (Core::ERROR_ASYNC_FAILED == rc || Core::ERROR_TIMEDOUT  == rc);
-  } else if (connected_devices.Connecteddevices.Length() == 0) {
-    SB_LOG(INFO) << "No bluetooth connected devices.";
+  if (has_bluetooth_audio_connected_.load()) {
+    SbMediaAudioConfiguration configuration;
+    InitAudioConfigurationForAudioPort("bluetooth", &configuration);
+    audio_configs.push_back(std::move(configuration));
   } else {
-    auto index(connected_devices.Connecteddevices.Elements());
-    while (index.Next()) {
-      const auto& device_details = index.Current();
-      SB_LOG(INFO) << "Bluetooth device name: " << device_details.Name.Value() << ", type: " << device_details.Devicetype.Value();
-      if (IsAudioOutputDeviceType(device_details.Devicetype.Value())) {
-        SbMediaAudioConfiguration configuration;
-        InitAudioConfigurationForAudioPort("bluetooth", &configuration);
-        audio_configs.push_back(std::move(configuration));
-        break;
+    ConnectedDevicesData connected_devices;
+    rc = bluetooth_.Get(timeout.value(), "getConnectedDevices", connected_devices);
+    if (Core::ERROR_NONE != rc) {
+      SB_LOG(ERROR) << "'" << kBluetoothCallsign << ".getConnectedDevices' failed, rc = " << rc
+                    << " ( " << Core::ErrorToString(rc) << " )";
+      needs_refresh |= (Core::ERROR_ASYNC_FAILED == rc || Core::ERROR_TIMEDOUT  == rc);
+    } else if (connected_devices.Connecteddevices.Length() == 0) {
+      SB_LOG(INFO) << "No bluetooth connected devices.";
+    } else {
+      auto index(connected_devices.Connecteddevices.Elements());
+      while (index.Next()) {
+        const auto& device_details = index.Current();
+        SB_LOG(INFO) << "Bluetooth device name: " << device_details.Name.Value() << ", type: " << device_details.Devicetype.Value();
+        if (IsAudioOutputDeviceType(device_details.Devicetype.Value())) {
+          SbMediaAudioConfiguration configuration;
+          InitAudioConfigurationForAudioPort("bluetooth", &configuration);
+          audio_configs.push_back(std::move(configuration));
+          break;
+        }
       }
     }
   }
 
   if (audio_configs.empty()) {
-      SbMediaAudioConfiguration configuration;
-      InitAudioConfigurationForAudioPort("", &configuration);
-      audio_configs.push_back(std::move(configuration));
+    SbMediaAudioConfiguration configuration;
+    InitAudioConfigurationForAudioPort("", &configuration);
+    audio_configs.push_back(std::move(configuration));
   }
 
   if (needs_refresh) {

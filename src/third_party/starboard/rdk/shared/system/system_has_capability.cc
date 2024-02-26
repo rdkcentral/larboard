@@ -14,13 +14,15 @@
 #include "starboard/system.h"
 
 #include "starboard/common/log.h"
+#include "starboard/file.h"
 
 bool SbSystemHasCapability(SbSystemCapabilityId capability_id) {
   switch (capability_id) {
     case kSbSystemCapabilityReversedEnterAndBack:
       return false;
     case kSbSystemCapabilityCanQueryGPUMemoryStats:
-      return true;
+      static bool gpu_stats_exists_cached = SbFileExists("/sys/fs/cgroup/gpu/gpu.usage_in_bytes");
+      return gpu_stats_exists_cached;
   }
 
   SB_DLOG(WARNING) << "Unrecognized capability: " << capability_id;

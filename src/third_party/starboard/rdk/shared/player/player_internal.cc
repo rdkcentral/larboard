@@ -416,6 +416,7 @@ void gst_cobalt_src_setup_and_add_app_src(SbMediaType media_type,
   gst_app_src_set_emit_signals(GST_APP_SRC(appsrc), FALSE);
   gst_app_src_set_callbacks(GST_APP_SRC(appsrc), callbacks, user_data, nullptr);
   gst_app_src_set_max_bytes(GST_APP_SRC(appsrc), max_bytes);
+  gst_base_src_set_format(GST_BASE_SRC(appsrc), GST_FORMAT_TIME);
 
   GstCobaltSrc* src = GST_COBALT_SRC(element);
   gchar* name = g_strdup_printf("src_%u", src->priv->pad_number);

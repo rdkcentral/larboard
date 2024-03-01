@@ -45,6 +45,7 @@
 #include <sys/eventfd.h>
 #include <sys/timerfd.h>
 #include <unistd.h>
+#include <malloc.h>
 
 namespace third_party {
 namespace starboard {
@@ -139,6 +140,8 @@ void Application::Initialize() {
   using ::starboard::shared::starboard::media::MimeSupportabilityCache;
   MimeSupportabilityCache::GetInstance()->SetCacheEnabled(true);
   KeySystemSupportabilityCache::GetInstance()->SetCacheEnabled(true);
+
+  ScheduleMemoryUsageCheck();
 }
 
 void Application::Teardown() {
@@ -386,6 +389,48 @@ void Application::FatalError() {
   SbEventSchedule([](void* data) {
     Application::Get()->Stop(0);
   }, nullptr, 0);
+}
+
+void Application::ReleaseMemory() {
+  Inject(new Event(kSbEventTypeLowMemory, NULL, [](void*) {
+    malloc_trim(0);
+  }));
+}
+
+void Application::ScheduleMemoryUsageCheck(SbTime delay) {
+  SbEventSchedule([](void* data) {
+    SbTime back_off_timeout = Application::Get()->CheckMemoryUsage();
+    if (back_off_timeout && back_off_timeout != kSbTimeMax)
+      Application::Get()->ScheduleMemoryUsageCheck(back_off_timeout);
+  }, nullptr, delay);
+}
+
+SbTime Application::CheckMemoryUsage() {
+  static const int64_t kCPUMemoryPressureLimit = ([]() -> int64_t {
+    const char* env = std::getenv("COBALT_CPU_MEM_PRESSURE_IN_MB");
+    int64_t limit_in_mb = SB_INT64_C(400);
+    if( env ) {
+      int64_t t = strtol(env, nullptr, 0);
+      if ( t >= 0 )
+        limit_in_mb = t;
+    }
+    int64_t total_in_bytes = SbSystemGetTotalCPUMemory();
+    return std::min(total_in_bytes, limit_in_mb * 1024 * 1024);
+  })();
+
+  if (!kCPUMemoryPressureLimit)
+    return kSbTimeMax;
+
+  int64_t usage_in_bytes = SbSystemGetUsedCPUMemory();
+  if (kCPUMemoryPressureLimit < usage_in_bytes) {
+    SB_LOG(INFO) << "Triggering memory pressure event. Current CPU mem. usage: "
+                 << uint64_t(usage_in_bytes / 1024) << " kb, pressure limit: "
+                 << uint64_t(kCPUMemoryPressureLimit / 1024) << " kb.";
+    ReleaseMemory();
+    return 5 * kSbTimeSecond;
+  }
+
+  return kSbTimeSecond;
 }
 
 }  // namespace shared

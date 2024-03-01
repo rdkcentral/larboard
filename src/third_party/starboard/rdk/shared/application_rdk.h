@@ -104,6 +104,10 @@ class Application : public ::starboard::shared::starboard::QueueApplication {
   void BuildEssosContext();
   void FatalError();
 
+  void ScheduleMemoryUsageCheck(SbTime delay = kSbTimeSecond);
+  SbTime CheckMemoryUsage();
+  void ReleaseMemory();
+
   static EssTerminateListener terminateListener;
   static EssKeyListener keyListener;
   static EssSettingsListener settingsListener;

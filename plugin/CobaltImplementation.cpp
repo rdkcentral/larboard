@@ -258,6 +258,7 @@ private:
       Block();
       SbRdkQuit();
       Wait(Thread::BLOCKED | Thread::STOPPED | Thread::STOPPING, Core::infinite);
+      std::quick_exit(0);
     }
 
     uint32_t Configure(PluginHost::IShell* service) {

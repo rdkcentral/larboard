@@ -34,8 +34,12 @@
 #include "starboard/egl.h"
 
 #include "third_party/starboard/rdk/shared/application_rdk.h"
+#include "third_party/starboard/rdk/shared/log_override.h"
 
+#include <mutex>
 #include <essos-app.h>
+
+EssAppPlatformDisplayType EssContextGetAppPlatformDisplayType( EssCtx *ctx ) __attribute__((weak));
 
 #if !defined(EGL_VERSION_1_0) || !defined(EGL_VERSION_1_1) || \
     !defined(EGL_VERSION_1_2) || !defined(EGL_VERSION_1_3) || \
@@ -44,6 +48,47 @@
 #endif
 
 namespace {
+
+#ifdef EGL_PLATFORM_WAYLAND_EXT
+static PFNEGLCREATEPLATFORMWINDOWSURFACEEXTPROC gEglCreatePlatformWindowSurfaceEXT;
+static PFNEGLGETPLATFORMDISPLAYEXTPROC gEglGetPlatformDisplayEXT;
+
+bool isExtensionSupported(const char* extension_list, const char* extension) {
+  int len = strlen(extension);
+  const char* ptr = extension_list;
+  while ((ptr = strstr(ptr, extension))) {
+    if (ptr[len] == ' ' || ptr[len] == '\0')
+      return true;
+    ptr += len;
+  }
+  return false;
+}
+
+bool resolveEglPlatfromExtFns() {
+  static std::once_flag flag;
+  std::call_once(flag, [] {
+    const char* extensions = eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS);
+    if (!isExtensionSupported(extensions, "EGL_EXT_platform_wayland")) {
+      SB_LOG(INFO) << "Wayland EGL platform extension is not supported. Supported extensions: " << extensions;
+    }
+    else {
+      gEglGetPlatformDisplayEXT = (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress("eglGetPlatformDisplayEXT");
+      gEglCreatePlatformWindowSurfaceEXT = (PFNEGLCREATEPLATFORMWINDOWSURFACEEXTPROC)eglGetProcAddress("eglCreatePlatformWindowSurfaceEXT");
+      if (!gEglGetPlatformDisplayEXT || !gEglCreatePlatformWindowSurfaceEXT) {
+        if (!gEglGetPlatformDisplayEXT)
+          SB_LOG(INFO) << "eglGetPlatformDisplayEXT is not available";
+        if (!gEglCreatePlatformWindowSurfaceEXT)
+          SB_LOG(INFO) << "eglCreatePlatformWindowSurfaceEXT is not available";
+        gEglGetPlatformDisplayEXT = nullptr;
+        gEglCreatePlatformWindowSurfaceEXT = nullptr;
+      } else {
+        SB_LOG(INFO) << "Successfully resolved EGL platform display extension functions.";
+      }
+    }
+  });
+  return gEglGetPlatformDisplayEXT && gEglCreatePlatformWindowSurfaceEXT;
+}
+#endif
 
 // Convenience functions that redirect to the intended function but "cast" the
 // type of the SbEglNative*Type parameter into the desired type. Depending on
@@ -69,16 +114,64 @@ SbEglSurface SbEglCreateWindowSurface(SbEglDisplay dpy,
                                       SbEglConfig config,
                                       SbEglNativeWindowType win,
                                       const SbEglInt32* attrib_list) {
-  return eglCreateWindowSurface(dpy, config, (EGLNativeWindowType)win,
-                                attrib_list);
+  SbEglSurface result = EGL_NO_SURFACE;
+
+#ifdef EGL_PLATFORM_WAYLAND_EXT
+  if (gEglCreatePlatformWindowSurfaceEXT) {
+    result = gEglCreatePlatformWindowSurfaceEXT(dpy, config, (EGLNativeWindowType)win,
+                                                attrib_list);
+    if (result == EGL_NO_SURFACE)
+      SB_LOG(WARNING) << "eglCreatePlatformWindowSurfaceEXT failed, err: " << eglGetError();
+  }
+#endif
+
+  if (result == EGL_NO_SURFACE) {
+    result = eglCreateWindowSurface(dpy, config, (EGLNativeWindowType)win,
+                                    attrib_list);
+    if (result == EGL_NO_SURFACE)
+      SB_LOG(ERROR) << "eglCreateWindowSurface failed, err: " << eglGetError();
+  }
+
+  return result;
 }
 
 SbEglDisplay SbEglGetDisplay(SbEglNativeDisplayType display_id) {
   NativeDisplayType display_type;
   EssCtx *ctx = third_party::starboard::rdk::shared::Application::Get()->GetEssCtx();
-  if (EssContextGetEGLDisplayType(ctx, &display_type))
-    return eglGetDisplay(reinterpret_cast<EGLNativeDisplayType>(display_type));
-  return eglGetDisplay(reinterpret_cast<EGLNativeDisplayType>(display_id));
+
+  if (EssContextGetEGLDisplayType(ctx, &display_type) == false) {
+    SB_LOG(ERROR) << "EssContextGetEGLDisplayType failed! Going to try display_id=" << display_id << '.';
+    display_type = reinterpret_cast<NativeDisplayType>(display_id);
+  }
+
+#ifdef EGL_PLATFORM_WAYLAND_EXT
+  if (EssContextGetAppPlatformDisplayType == nullptr) {
+    SB_LOG(INFO) << "'EssContextGetAppPlatformDisplayType' is not available. Fallback to eglGetDisplay.";
+  }
+  else if (EssContextGetAppPlatformDisplayType(ctx) != EssAppPlatformDisplayType_waylandExtension) {
+    SB_LOG(INFO) << "Essos app platform display type is not 'WaylandExtension' ("
+                 << EssContextGetAppPlatformDisplayType(ctx)
+                 << " != "
+                 << EssAppPlatformDisplayType_waylandExtension << ")."
+                 << " Fallback to eglGetDisplay.";
+  }
+  else if (!resolveEglPlatfromExtFns()) {
+    SB_LOG(INFO) << "eglGetPlatformDisplayEXT is not available or failed. Fallback to eglGetDisplay.";
+  }
+  else {
+    SbEglDisplay result = gEglGetPlatformDisplayEXT(EGL_PLATFORM_WAYLAND_EXT, reinterpret_cast<EGLNativeDisplayType>(display_type), nullptr);
+    if (result == EGL_NO_DISPLAY) {
+      SB_LOG(ERROR) << "eglGetPlatformDisplayEXT returned EGL_NO_DISPLAY. Fallback to eglGetDisplay.";
+      gEglGetPlatformDisplayEXT = nullptr;
+      gEglCreatePlatformWindowSurfaceEXT = nullptr;
+    } else {
+      SB_LOG(INFO) << "Using display=" << result << ", returned by eglGetPlatformDisplayEXT.";
+      return result;
+    }
+  }
+#endif
+
+  return eglGetDisplay(reinterpret_cast<EGLNativeDisplayType>(display_type));
 }
 
 const SbEglInterface g_sb_egl_interface = {

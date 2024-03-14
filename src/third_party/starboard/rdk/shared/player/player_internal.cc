@@ -2109,13 +2109,36 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
       sample_deallocate_func_(player_, context_, sample_infos[0].buffer);
       return;
   }
-  GstClockTime timestamp = sample_infos[0].timestamp * kSbTimeNanosecondsPerMicrosecond;
+
+#if defined(SB_RDK_ZERO_COPY_SAMPLE_WRITE) && SB_RDK_ZERO_COPY_SAMPLE_WRITE
+  using BufferInfo = std::tuple<SbPlayerDeallocateSampleFunc, SbPlayer, void*, const void*>;
+  GstBuffer* buffer =
+    gst_buffer_new_wrapped_full(
+      static_cast<GstMemoryFlags>(0),
+      const_cast<gpointer> (sample_infos[0].buffer),
+      sample_infos[0].buffer_size,
+      0,
+      sample_infos[0].buffer_size,
+      new BufferInfo(sample_deallocate_func_, player_, context_, sample_infos[0].buffer),
+      [](gpointer data) {
+        BufferInfo &info = *reinterpret_cast<BufferInfo*>(data);
+        auto deallocate_func = std::get<0>(info);
+        auto player = std::get<1>(info);
+        auto* context = std::get<2>(info);
+        const auto* buffer = std::get<3>(info);
+        deallocate_func(player, context, buffer);
+        delete &info;
+      });
+#else
   GstBuffer* buffer =
       gst_buffer_new_allocate(nullptr, sample_infos[0].buffer_size, nullptr);
   gsize sz = gst_buffer_fill(buffer, 0, sample_infos[0].buffer, sample_infos[0].buffer_size);
   SB_DCHECK(sz == sample_infos[0].buffer_size);
-  GST_BUFFER_TIMESTAMP(buffer) = timestamp;
   sample_deallocate_func_(player_, context_, sample_infos[0].buffer);
+#endif
+
+  GstClockTime timestamp = sample_infos[0].timestamp * kSbTimeNanosecondsPerMicrosecond;
+  GST_BUFFER_TIMESTAMP(buffer) = timestamp;
 
   if (sample_infos[0].type == kSbMediaTypeVideo) {
 #if SB_API_VERSION >= 15

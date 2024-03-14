@@ -24,6 +24,7 @@
 
 #include <gst/gst.h>
 #include <gst/base/gstbasetransform.h>
+#include <gst/base/gstbytereader.h>
 
 #include <opencdm/open_cdm.h>
 
@@ -130,9 +131,26 @@ struct _CobaltOcdmDecryptorPrivate : public DrmSystemOcdm::Observer {
         gst_buffer_unmap(key, &map_info);
       }
 
+      uint32_t total_clear = 0;
+      uint32_t total_encrypted = 0;
+      GstMapInfo sample_map;
+      if (gst_buffer_map(subsamples, &sample_map, GST_MAP_READ)) {
+        GstByteReader* reader = gst_byte_reader_new(sample_map.data, sample_map.size);
+        for (uint32_t i = 0; i < subsample_count; ++i) {
+          uint16_t clear = 0;
+          uint32_t encrypted = 0;
+          gst_byte_reader_get_uint16_be(reader, &clear);
+          gst_byte_reader_get_uint32_be(reader, &encrypted);
+          total_clear += clear;
+          total_encrypted += encrypted;
+        }
+        gst_byte_reader_free(reader);
+        gst_buffer_unmap(subsamples, &sample_map);
+      }
+
       GST_TRACE_OBJECT(self, "buf=(%" GST_PTR_FORMAT "), "
-                       "subsample_count=%u, subsamples=(%p), iv=(%p), key=(%p : %s)",
-                       buffer, subsample_count, subsamples, iv, key, md5sum);
+                       "subsample_count=%u, subsamples=(%p), clear=%u, encrypted=%u, iv=(%p), key=(%p : %s)",
+                       buffer, subsample_count, subsamples, total_clear, total_encrypted, iv, key, md5sum);
 
       g_free(md5sum);
     }

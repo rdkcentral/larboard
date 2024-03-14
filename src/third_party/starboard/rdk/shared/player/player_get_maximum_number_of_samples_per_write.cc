@@ -35,5 +35,7 @@
 
 int SbPlayerGetMaximumNumberOfSamplesPerWrite(SbPlayer player,
                                               SbMediaType /*sample_type*/) {
+  if (player == kSbPlayerInvalid)
+    return 0;
   return player->MaxNumberOfSamplesPerWrite();
 }

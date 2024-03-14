@@ -34,5 +34,7 @@
 #include "third_party/starboard/rdk/shared/player/player_internal.h"
 
 void SbPlayerWriteEndOfStream(SbPlayer player, SbMediaType stream_type) {
+  if (player == kSbPlayerInvalid)
+    return;
   player->player_->MarkEOS(stream_type);
 }

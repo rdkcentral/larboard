@@ -42,6 +42,8 @@ SB_EXPORT void SbPlayerWriteSample2(
                           SbMediaType sample_type,
                           const SbPlayerSampleInfo* sample_infos,
                           int number_of_sample_infos) {
+  if (player == kSbPlayerInvalid)
+    return;
   player->player_->WriteSample(sample_type, sample_infos,
                                number_of_sample_infos);
 }

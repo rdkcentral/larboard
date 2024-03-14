@@ -34,5 +34,7 @@
 #include "third_party/starboard/rdk/shared/player/player_internal.h"
 
 void SbPlayerSetVolume(SbPlayer player, double volume) {
+  if (player == kSbPlayerInvalid)
+    return;
   player->player_->SetVolume(volume);
 }

@@ -39,5 +39,7 @@ void SbPlayerSetBounds(SbPlayer player,
                        int y,
                        int width,
                        int height) {
+  if (player == kSbPlayerInvalid)
+    return;
   player->player_->SetBounds(z_index, x, y, width, height);
 }

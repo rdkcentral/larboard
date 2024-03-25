@@ -1592,8 +1592,8 @@ PlayerImpl::~PlayerImpl() {
   }
   g_main_loop_unref(main_loop_);
   g_main_context_unref(main_loop_context_);
-  g_object_unref(pipeline_);
   GST_INFO_OBJECT(pipeline_, "BYE BYE player");
+  g_object_unref(pipeline_);
 }
 
 // static

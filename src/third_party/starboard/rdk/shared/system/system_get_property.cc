@@ -51,7 +51,7 @@ namespace {
 const char kPlatformName[] = "Linux";
 
 bool CopyStringAndTestIfSuccess(char* out_value,
-                                int value_length,
+                                size_t value_length,
                                 const char* from_value) {
   if (strlen(from_value) + 1 > value_length)
     return false;
@@ -59,7 +59,7 @@ bool CopyStringAndTestIfSuccess(char* out_value,
   return true;
 }
 
-bool TryReadFromPropertiesFile(const char* prefix, size_t prefix_len, char* out_value, int value_length) {
+bool TryReadFromPropertiesFile(const char* prefix, size_t prefix_len, char* out_value, size_t value_length) {
   FILE* properties = fopen("/etc/device.properties", "r");
   if (!properties) {
     return false;

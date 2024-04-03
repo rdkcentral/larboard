@@ -1419,11 +1419,12 @@ bool DeviceInfoImpl::GetAudioConfiguration(int output_index, SbMediaAudioConfigu
   Refresh();
 
   ::starboard::ScopedLock lock(mutex_);
-  if (output_index < audio_configurations_.size()) {
-    *out_configuration = audio_configurations_[output_index];
+  size_t index = output_index;
+  if (index < audio_configurations_.size()) {
+    *out_configuration = audio_configurations_[index];
     return true;
   }
-  else if (output_index == 0) {
+  else if (index == 0) {
     InitAudioConfigurationForAudioPort("", out_configuration);
     return true;
   }

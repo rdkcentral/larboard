@@ -85,6 +85,8 @@ if (rdk_enable_ocdm) {
 static_library("starboard_platform") {
   check_includes = false
 
+  # has_pedantic_warnings = true
+
   defines = []
 
   sources = [

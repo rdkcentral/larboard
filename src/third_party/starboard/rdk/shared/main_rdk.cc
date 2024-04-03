@@ -60,7 +60,8 @@ static void RequestStop(int signal_id) {
 }
 
 static void InstallStopSignalHandlers() {
-  struct sigaction action = {0};
+  struct sigaction action;
+  memset (&action, 0, sizeof (action));
   action.sa_handler = RequestStop;
   action.sa_flags = 0;
   ::sigemptyset(&action.sa_mask);

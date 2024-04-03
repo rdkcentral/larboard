@@ -76,6 +76,7 @@ const CobaltExtensionConfigurationApi kConfigurationApi = {
     &::starboard::common::CobaltRasterizerTypeDefault,
     &::starboard::common::CobaltEnableJitDefault,
     &::starboard::common::CobaltFallbackSplashScreenTopicsDefault,
+    &::starboard::common::CobaltCanStoreCompiledJavascriptDefault,
 };
 
 }  // namespace

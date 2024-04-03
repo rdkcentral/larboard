@@ -24,5 +24,9 @@
 #include <core/core.h>
 #include <plugins/plugins.h>
 
+#if !defined(THUNDER_VERSION) && defined(THUNDER_VERSION_MAJOR)
+#define THUNDER_VERSION THUNDER_VERSION_MAJOR
+#endif
+
 #undef EXTERNAL
 #define EXTERNAL

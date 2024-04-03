@@ -40,9 +40,9 @@ namespace shared {
 namespace {
 
 #if defined(COBALT_BUILD_TYPE_GOLD)
-const uint32_t kMaxExpirationCount = 6;
+const int32_t kMaxExpirationCount = 6;
 #else
-const uint32_t kMaxExpirationCount = 18;
+const int32_t kMaxExpirationCount = 18;
 #endif
 
 pid_t get_tid() {

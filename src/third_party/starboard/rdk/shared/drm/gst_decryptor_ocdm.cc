@@ -248,7 +248,7 @@ struct _CobaltOcdmDecryptorPrivate : public DrmSystemOcdm::Observer {
     }
 
     if ( rc != 0 ) {
-      if ( rc == ERROR_INVALID_SESSION ) {
+      if ( rc == (int)ERROR_INVALID_SESSION ) {
         GST_DEBUG_OBJECT(self, "Invalid session. Probably due to player shutdown.");
         return GST_BASE_TRANSFORM_FLOW_DROPPED;
       }

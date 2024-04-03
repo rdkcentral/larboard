@@ -210,26 +210,27 @@ bool SbSystemGetPath(SbSystemPathId path_id, char* out_path, int path_size) {
     return false;
   }
 
-  char path[kSbFileMaxPath];
+  const int kPathSize = kSbFileMaxPath;
+  char path[kPathSize];
   path[0] = '\0';
 
   switch (path_id) {
     case kSbSystemPathContentDirectory:
-      if (!GetContentDirectory(path, kSbFileMaxPath)){
+      if (!GetContentDirectory(path, kPathSize)){
         return false;
       }
 #if SB_IS(EVERGREEN_COMPATIBLE)
-      if (!GetEvergreenContentPathOverride(path, kSbFileMaxPath)) {
+      if (!GetEvergreenContentPathOverride(path, kPathSize)) {
         return false;
       }
 #endif
       break;
 
     case kSbSystemPathCacheDirectory:
-      if (!GetCacheDirectory(path, kSbFileMaxPath)) {
+      if (!GetCacheDirectory(path, kPathSize)) {
         return false;
       }
-      if (starboard::strlcat<char>(path, "/cobalt", kSbFileMaxPath) >= kSbFileMaxPath) {
+      if (starboard::strlcat<char>(path, "/cobalt", kPathSize) >= kPathSize) {
         return false;
       }
       if (!SbDirectoryCreate(path)) {
@@ -238,17 +239,17 @@ bool SbSystemGetPath(SbSystemPathId path_id, char* out_path, int path_size) {
       break;
 
     case kSbSystemPathDebugOutputDirectory:
-      if (!SbSystemGetPath(kSbSystemPathTempDirectory, path, kSbFileMaxPath)) {
+      if (!SbSystemGetPath(kSbSystemPathTempDirectory, path, kPathSize)) {
         return false;
       }
-      if (starboard::strlcat<char>(path, "/log", kSbFileMaxPath) >= kSbFileMaxPath) {
+      if (starboard::strlcat<char>(path, "/log", kPathSize) >= kPathSize) {
         return false;
       }
       SbDirectoryCreate(path);
       break;
 
     case kSbSystemPathTempDirectory:
-      if (!GetTemporaryDirectory(path, kSbFileMaxPath)) {
+      if (!GetTemporaryDirectory(path, kPathSize)) {
         return false;
       }
       SbDirectoryCreate(path);
@@ -260,10 +261,10 @@ bool SbSystemGetPath(SbSystemPathId path_id, char* out_path, int path_size) {
     case kSbSystemPathFontConfigurationDirectory:
     case kSbSystemPathFontDirectory:
 #if SB_IS(EVERGREEN_COMPATIBLE)
-      if (!GetContentDirectory(path, kSbFileMaxPath)) {
+      if (!GetContentDirectory(path, kPathSize)) {
         return false;
       }
-      if (starboard::strlcat(path, "/fonts", kSbFileMaxPath) >= kSbFileMaxPath) {
+      if (starboard::strlcat(path, "/fonts", kPathSize) >= kPathSize) {
         return false;
       }
       break;
@@ -272,7 +273,7 @@ bool SbSystemGetPath(SbSystemPathId path_id, char* out_path, int path_size) {
 #endif
 
     case kSbSystemPathStorageDirectory:
-      if (!GetStorageDirectory(path, kSbFileMaxPath)) {
+      if (!GetStorageDirectory(path, kPathSize)) {
           return false;
       }
       break;

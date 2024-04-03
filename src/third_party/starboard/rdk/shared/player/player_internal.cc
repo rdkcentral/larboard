@@ -1134,6 +1134,7 @@ class PlayerImpl : public Player {
         CASE(State::kInitialPreroll);
         CASE(State::kPrerollAfterSeek);
         CASE(State::kPresenting);
+        CASE(State::kEnded);
     }
 #undef CASE
     return "unknown";
@@ -1260,7 +1261,7 @@ class PlayerImpl : public Player {
 
     int need_data = static_cast<int>(media) & ~decoder_state_data_;
     if (need_data == 0) {
-      GST_LOG_OBJECT(pipeline_, "Already sent 'kSbPlayerDecoderStateNeedsData' for media type: %d, ignoring new request", media);
+      GST_LOG_OBJECT(pipeline_, "Already sent 'kSbPlayerDecoderStateNeedsData' for media type: %d, ignoring new request", static_cast<int>(media));
       return;
     }
     if ((eos_data_ & need_data) == need_data) {
@@ -1953,8 +1954,8 @@ void PlayerImpl::OnVideoBufferUnderflow(PlayerImpl* self)
 {
   GST_WARNING_OBJECT(self->pipeline_,
     "Decoder need data state = 0x%x,"
-    " video appsrc level = %lld kb,"
-    " audio appsrc level = %lld kb",
+    " video appsrc level = %" G_GUINT64_FORMAT " kb,"
+    " audio appsrc level = %" G_GUINT64_FORMAT " kb",
     self->decoder_state_data_,
     gst_app_src_get_current_level_bytes(GST_APP_SRC(self->video_appsrc_)) / 1024,
     gst_app_src_get_current_level_bytes(GST_APP_SRC(self->audio_appsrc_)) / 1024);
@@ -2130,9 +2131,10 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
         delete &info;
       });
 #else
+  G_GNUC_UNUSED gsize sz;
   GstBuffer* buffer =
       gst_buffer_new_allocate(nullptr, sample_infos[0].buffer_size, nullptr);
-  gsize sz = gst_buffer_fill(buffer, 0, sample_infos[0].buffer, sample_infos[0].buffer_size);
+  sz = gst_buffer_fill(buffer, 0, sample_infos[0].buffer, sample_infos[0].buffer_size);
   SB_DCHECK(sz == sample_infos[0].buffer_size);
   sample_deallocate_func_(player_, context_, sample_infos[0].buffer);
 #endif
@@ -2305,7 +2307,7 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
         seek_pos_ns =  seek_position_ * kSbTimeNanosecondsPerMicrosecond;
   }
 
-  if (GST_CLOCK_TIME_IS_VALID(seek_pos_ns) && seek_pos_ns > GST_BUFFER_TIMESTAMP(buffer)) {
+  if (GST_CLOCK_TIME_IS_VALID(seek_pos_ns) && GstClockTime(seek_pos_ns) > GST_BUFFER_TIMESTAMP(buffer)) {
     // Set dummy duration to let sink drop out-of-segment samples
     GST_BUFFER_DURATION (buffer) = GST_SECOND / 60;
     GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DECODE_ONLY);
@@ -2666,7 +2668,7 @@ bool PlayerImpl::ChangePipelineState(GstState state) const {
         GST_INFO_OBJECT(pipeline_, "Ignore state change to playing: invalid min sample ts");
         return false;
       }
-      else if (seek_pos_ns > min_ts) {
+      else if (seek_pos_ns > GstClockTime(min_ts)) {
         GST_INFO_OBJECT(
           pipeline_,
           "Ignore state change to playing: no samples for seek time yet"

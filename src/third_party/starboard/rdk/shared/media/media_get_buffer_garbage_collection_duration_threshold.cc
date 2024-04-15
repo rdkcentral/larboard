@@ -34,5 +34,5 @@
 #include "starboard/common/log.h"
 
 SbTime SbMediaGetBufferGarbageCollectionDurationThreshold() {
-  return 40 * kSbTimeSecond;
+  return 170 * kSbTimeSecond;
 }

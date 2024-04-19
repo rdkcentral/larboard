@@ -1969,7 +1969,7 @@ void PlayerImpl::SetupElement(GstElement* pipeline,
     static bool disable_wait_video = !!getenv("COBALT_AML_DISABLE_WAIT_VIDEO");
     bool has_video = (self->video_codec_ != kSbMediaVideoCodecNone);
     if (has_video && g_str_has_prefix(GST_ELEMENT_NAME(element), "amlhalasink") && !disable_wait_video) {
-      g_object_set(element, "wait-video", TRUE, "a-wait-timeout", 4000, nullptr);
+      g_object_set(element, "wait-video", TRUE, "a-wait-timeout", 4000, "disable-xrun", TRUE, nullptr);
     }
     else
     if (has_video && g_str_has_prefix(GST_ELEMENT_NAME(element), "westerossink")) {

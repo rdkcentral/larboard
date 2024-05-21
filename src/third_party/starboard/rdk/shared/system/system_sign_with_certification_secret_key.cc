@@ -32,6 +32,7 @@
 #include <vector>
 #include <cstring>
 
+#include "starboard/file.h"
 #include "starboard/system.h"
 #include "starboard/string.h"
 #include "starboard/memory.h"
@@ -101,12 +102,27 @@ bool SbSystemSignWithCertificationSecretKey(const uint8_t* message,
     SB_LOG(INFO) << "Using default key name: '" << key_name << "'";
   }
 
+  const char *env_connection_point = std::getenv("COBALT_ICRYPTO_ACCESS_POINT");
+  std::string connection_point = env_connection_point ? env_connection_point : EMPTY_STRING;
+
+  if (env_connection_point != nullptr) {
+    if (SbFileExists(env_connection_point))
+      connection_point = env_connection_point;
+    else
+      SB_LOG(WARNING) << "ICrypto connection point ('" << env_connection_point << "') does not exist.";
+  }
+
+  if (connection_point.empty())
+    SB_LOG(INFO) << "Using ICrypto directly.";
+  else
+    SB_LOG(INFO) << "Using ICrypto connection point: '" << connection_point << "'.";
+
   ScopedRef<ICryptography> icrypto;
   ScopedRef<IVault> vault;
   ScopedRef<IPersistent> persistent;
   ScopedRef<IHash> hash;
 
-  icrypto.reset( ICryptography::Instance(EMPTY_STRING) );
+  icrypto.reset( ICryptography::Instance(connection_point) );
   if ( !icrypto ) {
     SB_LOG(ERROR) << "Failed to create ICryptography instance";
     return false;

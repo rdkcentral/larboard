@@ -355,6 +355,9 @@ SbKey KeyCodeToSbKey(uint16_t code) {
     case KEY_KPLEFTPAREN:
      return kSbKeyLaunchThisApplication;
 
+    case KEY_F8:
+     return kSbKeyMicrophone;
+
     case KEY_UNKNOWN:
       break;
   }

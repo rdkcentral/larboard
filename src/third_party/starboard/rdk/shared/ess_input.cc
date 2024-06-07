@@ -412,10 +412,10 @@ EssInput::~EssInput() {
 
 void EssInput::CreateKey(unsigned int key, SbInputEventType type, unsigned int modifiers, bool repeatable) {
   SbKey sb_key = KeyCodeToSbKey(key);
-  if (sb_key == kSbKeyUnknown) {
-    DeleteRepeatKey();
-    return;
-  }
+  // if (sb_key == kSbKeyUnknown) {
+  //   DeleteRepeatKey();
+  //   return;
+  // }
 
   SbInputData* data = new SbInputData();
   memset(data, 0, sizeof(*data));

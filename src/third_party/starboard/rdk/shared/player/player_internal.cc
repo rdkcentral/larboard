@@ -1271,7 +1271,7 @@ class PlayerImpl : public Player {
 
     decoder_state_data_ |= need_data;
 
-#if 1
+#if 0
     if ((need_data & static_cast<int>(MediaType::kAudio)) != 0)
       decoder_status_func_(player_, context_, kSbMediaTypeAudio, kSbPlayerDecoderStateNeedsData, ticket_);
     if ((need_data & static_cast<int>(MediaType::kVideo)) != 0)

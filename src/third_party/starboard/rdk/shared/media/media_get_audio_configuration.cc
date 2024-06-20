@@ -15,7 +15,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 //
-// Copyright 2016 The Cobalt Authors. All Rights Reserved.
+// Copyright 2023 The Cobalt Authors. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,12 +29,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "starboard/player.h"
+#include "starboard/media.h"
 
-#include "third_party/starboard/rdk/shared/player/player_internal.h"
+#include "third_party/starboard/rdk/shared/rdkservices.h"
 
-void SbPlayerWriteEndOfStream(SbPlayer player, SbMediaType stream_type) {
-  if (player == kSbPlayerInvalid)
-    return;
-  player->player_->MarkEOS(stream_type);
+bool SbMediaGetAudioConfiguration(
+    int output_index,
+    SbMediaAudioConfiguration* out_configuration) {
+  return third_party::starboard::rdk::shared::DeviceInfo::GetAudioConfiguration(output_index, out_configuration);
 }

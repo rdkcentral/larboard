@@ -33,10 +33,17 @@
 
 #include "third_party/starboard/rdk/shared/player/player_internal.h"
 
-void SbPlayerWriteSample2(SbPlayer player,
+#if SB_API_VERSION >= 15
+SB_EXPORT void SbPlayerWriteSamples(
+#else   // SB_API_VERSION >= 15
+SB_EXPORT void SbPlayerWriteSample2(
+#endif  // SB_API_VERSION >= 15
+                          SbPlayer player,
                           SbMediaType sample_type,
                           const SbPlayerSampleInfo* sample_infos,
                           int number_of_sample_infos) {
+  if (player == kSbPlayerInvalid)
+    return;
   player->player_->WriteSample(sample_type, sample_infos,
                                number_of_sample_infos);
 }

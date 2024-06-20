@@ -128,7 +128,7 @@ class GStreamerAudioSink : public SbAudioSinkPrivate {
   GstElement* audiosink_{nullptr};
   GMainLoop* mainloop_{nullptr};
   GMainContext* main_loop_context_{nullptr};
-  guint source_id_{0};
+  int source_id_{-1};
   bool destroying_{false};
   bool enough_data_{false};
   std::string file_name_;
@@ -193,7 +193,7 @@ GStreamerAudioSink::GStreamerAudioSink(
   appsrc_ = gst_element_factory_make("appsrc", "source");
   GstAppSrcCallbacks callbacks = {&GStreamerAudioSink::AppSrcNeedData,
                                   &GStreamerAudioSink::AppSrcEnoughData,
-                                  nullptr};
+                                  nullptr, nullptr};
   gst_app_src_set_callbacks(GST_APP_SRC(appsrc_), &callbacks, this, nullptr);
   gst_app_src_set_max_bytes(GST_APP_SRC(appsrc_),
                             kFramesPerRequest * GetBytesPerFrame());

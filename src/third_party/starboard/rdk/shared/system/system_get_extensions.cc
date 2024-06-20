@@ -32,11 +32,12 @@
 
 #include <cstring>
 
-#include "cobalt/extension/platform_service.h"
-#include "cobalt/extension/configuration.h"
-#include "cobalt/extension/crash_handler.h"
+
 #include "starboard/common/string.h"
 #include "starboard/common/log.h"
+#include "starboard/extension/configuration.h"
+#include "starboard/extension/crash_handler.h"
+#include "starboard/extension/platform_service.h"
 #include "third_party/starboard/rdk/shared/configuration.h"
 #include "third_party/starboard/rdk/shared/platform_service.h"
 #if SB_IS(EVERGREEN_COMPATIBLE)

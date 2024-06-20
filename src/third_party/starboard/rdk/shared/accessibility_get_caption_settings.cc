@@ -34,7 +34,6 @@
 
 #include "third_party/starboard/rdk/shared/rdkservices.h"
 
-#if SB_API_VERSION >= 12 || SB_HAS(CAPTIONS)
 bool SbAccessibilityGetCaptionSettings(
     SbAccessibilityCaptionSettings* caption_settings) {
   if (!caption_settings ||
@@ -45,4 +44,3 @@ bool SbAccessibilityGetCaptionSettings(
 
   return third_party::starboard::rdk::shared::Accessibility::GetCaptionSettings(caption_settings);
 }
-#endif  // SB_API_VERSION >= 12 || SB_HAS(CAPTIONS)

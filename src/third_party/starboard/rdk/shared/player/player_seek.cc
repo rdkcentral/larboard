@@ -33,6 +33,12 @@
 
 #include "third_party/starboard/rdk/shared/player/player_internal.h"
 
+#if SB_API_VERSION >= 15
+void SbPlayerSeek(SbPlayer player, SbTime seek_to_timestamp, int ticket) {
+#else   // SB_API_VERSION >= 15
 void SbPlayerSeek2(SbPlayer player, SbTime seek_to_timestamp, int ticket) {
+#endif  // SB_API_VERSION >= 15
+  if (player == kSbPlayerInvalid)
+    return;
   player->player_->Seek(seek_to_timestamp, ticket);
 }

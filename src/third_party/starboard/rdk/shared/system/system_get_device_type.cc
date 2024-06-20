@@ -14,6 +14,8 @@
 #include "starboard/system.h"
 #include "starboard/string.h"
 
+#if SB_API_VERSION < 15
+
 #include <core/Enumerate.h>
 
 #include "third_party/starboard/rdk/shared/rdkservices.h"
@@ -59,3 +61,5 @@ SbSystemDeviceType SbSystemGetDeviceType() {
   SB_LOG(INFO) << "DeviceType: 'SetTopBox'";
   return kSbSystemDeviceTypeSetTopBox;
 }
+
+#endif

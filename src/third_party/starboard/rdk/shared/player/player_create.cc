@@ -48,9 +48,17 @@ SbPlayerCreate(SbWindow window,
     return kSbPlayerInvalid;
   }
 
-  auto *max_video_capabilities = creation_param->video_sample_info.max_video_capabilities;
-  auto audio_codec = creation_param->audio_sample_info.codec;
-  auto video_codec = creation_param->video_sample_info.codec;
+  #if SB_API_VERSION >= 15
+  const auto& audio_info = creation_param->audio_stream_info;
+  const auto& video_info = creation_param->video_stream_info;
+  #else
+  const auto& audio_info = creation_param->audio_sample_info;
+  const auto& video_info = creation_param->video_sample_info;
+  #endif
+
+  auto *max_video_capabilities = video_info.max_video_capabilities;
+  auto audio_codec = audio_info.codec;
+  auto video_codec = video_info.codec;
   auto drm_system  = creation_param->drm_system;
   auto output_mode = creation_param->output_mode;
 
@@ -81,7 +89,7 @@ SbPlayerCreate(SbWindow window,
   }
 
   std::unique_ptr<SbPlayerPrivate> player { new SbPlayerPrivate(
-      window, video_codec, audio_codec, drm_system, creation_param->audio_sample_info,
+      window, video_codec, audio_codec, drm_system, audio_info,
       max_video_capabilities,
       sample_deallocate_func, decoder_status_func, player_status_func,
       player_error_func, context, output_mode, provider) };

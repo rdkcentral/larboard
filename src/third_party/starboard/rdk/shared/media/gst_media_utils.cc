@@ -185,7 +185,12 @@ std::vector<std::string> CodecToGstCaps(SbMediaVideoCodec codec) {
 }
 
 std::vector<std::string> CodecToGstCaps(SbMediaAudioCodec codec,
-                                        const SbMediaAudioSampleInfo* info) {
+#if SB_API_VERSION >= 15
+    const SbMediaAudioStreamInfo* info
+#else   // SB_API_VERSION >= 15
+    const SbMediaAudioSampleInfo* info
+#endif
+) {
   switch (codec) {
     default:
     case kSbMediaAudioCodecNone:

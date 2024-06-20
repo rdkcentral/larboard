@@ -61,83 +61,39 @@ struct APIContext
     Application::Get()->Link(link);
   }
 
-  void RequestSuspend() {
+  void RequestFreeze() {
     starboard::ScopedLock lock(mutex_);
     WaitForApp(lock);
     starboard::Semaphore sem;
-#if SB_API_VERSION >= 13
     Application::Get()->Freeze(
       &sem,
       [](void* ctx) {
         reinterpret_cast<starboard::Semaphore*>(ctx)->Put();
       });
-#else
-    Application::Get()->Suspend(
-      &sem,
-      [](void* ctx) {
-        reinterpret_cast<starboard::Semaphore*>(ctx)->Put();
-      });
-#endif
     sem.Take();
   }
 
-  void RequestResume() {
+  void RequestFocus() {
     starboard::ScopedLock lock(mutex_);
     WaitForApp(lock);
     starboard::Semaphore sem;
-#if SB_API_VERSION >= 13
     Application::Get()->Focus(
       &sem,
       [](void* ctx) {
         reinterpret_cast<starboard::Semaphore*>(ctx)->Put();
       });
-#else
-    Application::Get()->Unpause(
-      &sem,
-      [](void* ctx) {
-        reinterpret_cast<starboard::Semaphore*>(ctx)->Put();
-      });
-#endif
     sem.Take();
   }
 
-  void RequestPause() {
+  void RequestBlur() {
     starboard::ScopedLock lock(mutex_);
     WaitForApp(lock);
     starboard::Semaphore sem;
-#if SB_API_VERSION >= 13
     Application::Get()->Blur(
       &sem,
       [](void* ctx) {
         reinterpret_cast<starboard::Semaphore*>(ctx)->Put();
       });
-#else
-    Application::Get()->Pause(
-      &sem,
-      [](void* ctx) {
-        reinterpret_cast<starboard::Semaphore*>(ctx)->Put();
-      });
-#endif
-    sem.Take();
-  }
-
-  void RequestUnpause() {
-    starboard::ScopedLock lock(mutex_);
-    WaitForApp(lock);
-    starboard::Semaphore sem;
-#if SB_API_VERSION >= 13
-    Application::Get()->Focus(
-      &sem,
-      [](void* ctx) {
-        reinterpret_cast<starboard::Semaphore*>(ctx)->Put();
-      });
-#else
-    Application::Get()->Unpause(
-      &sem,
-      [](void* ctx) {
-        reinterpret_cast<starboard::Semaphore*>(ctx)->Put();
-      });
-#endif
     sem.Take();
   }
 
@@ -200,11 +156,7 @@ struct APIContext
     }
 
     if (should_invoke_default) {
-#if SB_API_VERSION >= 13
       Application::Get()->Conceal(NULL, NULL);
-#else
-      Application::Get()->Suspend(NULL, NULL);
-#endif
     }
   }
 
@@ -279,19 +231,19 @@ void SbRdkHandleDeepLink(const char* link) {
 }
 
 void SbRdkSuspend() {
-  GetContext()->RequestSuspend();
+  GetContext()->RequestFreeze();
 }
 
 void SbRdkResume() {
-  GetContext()->RequestResume();
+  GetContext()->RequestFocus();
 }
 
 void SbRdkPause() {
-  GetContext()->RequestPause();
+  GetContext()->RequestBlur();
 }
 
 void SbRdkUnpause() {
-  GetContext()->RequestUnpause();
+  GetContext()->RequestFocus();
 }
 
 void SbRdkQuit() {

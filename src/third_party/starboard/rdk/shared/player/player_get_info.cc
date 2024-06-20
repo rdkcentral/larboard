@@ -32,12 +32,16 @@
 #include "starboard/player.h"
 #include "third_party/starboard/rdk/shared/player/player_internal.h"
 
-#if SB_API_VERSION >= 10
-void SbPlayerGetInfo2(SbPlayer player, SbPlayerInfo2* out_player_info) {
+#if SB_API_VERSION >= 15
+void SbPlayerGetInfo(SbPlayer player, SbPlayerInfo* out_player_info) {
+  if (player == kSbPlayerInvalid)
+    return;
   player->player_->GetInfo(out_player_info);
 }
-#else
-void SbPlayerGetInfo(SbPlayer /*player*/, SbPlayerInfo* /*out_player_info*/) {
-  SB_NOTIMPLEMENTED();
+#else   // SB_API_VERSION >= 15
+void SbPlayerGetInfo2(SbPlayer player, SbPlayerInfo2* out_player_info) {
+  if (player == kSbPlayerInvalid)
+    return;
+  player->player_->GetInfo(out_player_info);
 }
-#endif  // SB_API_VERSION >= 10
+#endif  // SB_API_VERSION >= 15

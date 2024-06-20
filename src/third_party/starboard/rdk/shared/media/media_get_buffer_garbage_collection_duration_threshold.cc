@@ -33,8 +33,6 @@
 
 #include "starboard/common/log.h"
 
-#if SB_API_VERSION >= 10
 SbTime SbMediaGetBufferGarbageCollectionDurationThreshold() {
   return 170 * kSbTimeSecond;
 }
-#endif  // SB_API_VERSION >= 10

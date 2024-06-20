@@ -1,3 +1,4 @@
+//
 // Copyright 2020 Comcast Cable Communications Management, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +15,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 //
-// Copyright 2017 The Cobalt Authors. All Rights Reserved.
+// Copyright 2016 The Cobalt Authors. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,11 +31,39 @@
 
 #include "starboard/system.h"
 
-#include "third_party/starboard/rdk/shared/libcobalt.h"
+#include <unistd.h>
 
-#if SB_API_VERSION < 13
-void SbSystemRequestSuspend() {
-  // Route through conceal request. cobalt-plugin will call Suspend.
-  SbRdkRequestConceal();
+#include "starboard/common/file.h"
+#include "starboard/common/log.h"
+#include "starboard/common/string.h"
+
+int64_t SbSystemGetTotalCPUMemory() {
+
+  int64_t limit_in_bytes = INT64_MAX;
+
+  starboard::ScopedFile status_file(
+    "/sys/fs/cgroup/memory/memory.limit_in_bytes",
+    kSbFileOpenOnly | kSbFileRead);
+
+  if (status_file.IsValid()) {
+    const int kBufferSize = 512;
+    char buffer[kBufferSize];
+    int bytes_read = status_file.ReadAll(buffer, kBufferSize);
+    if (bytes_read == kBufferSize) {
+      bytes_read = kBufferSize - 1;
+    }
+    buffer[bytes_read] = '\0';
+    int64_t val = strtoll(buffer, nullptr, 10);
+    if (val > 0)
+      limit_in_bytes = val;
+  }
+
+  long pages = sysconf(_SC_PHYS_PAGES);     // NOLINT[runtime/int]
+  long page_size = sysconf(_SC_PAGE_SIZE);  // NOLINT[runtime/int]
+  if (pages == -1 || page_size == -1) {
+    SB_NOTREACHED();
+    return 0;
+  }
+
+  return std::min(limit_in_bytes, static_cast<int64_t>(pages) * page_size);
 }
-#endif  // SB_API_VERSION < 13

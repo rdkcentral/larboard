@@ -19,7 +19,11 @@ advertisingid.add("ifa", "@PLUGIN_COBALT_ADVERTISING_ID@")
 advertisingid.add("ifa_type", "@PLUGIN_COBALT_IFA_TYPE@")
 advertisingid.add("lmt", "@PLUGIN_COBALT_LIMIT_AD_TRACKING@")
 
-if boolean("@advertisingid@"):
+if (
+    "@PLUGIN_COBALT_ADVERTISING_ID@" or
+    "@PLUGIN_COBALT_IFA_TYPE@" or
+    "@PLUGIN_COBALT_LIMIT_AD_TRACKING@"
+):
     configuration.add("advertisingid", advertisingid)
 
 systemproperties = JSON()

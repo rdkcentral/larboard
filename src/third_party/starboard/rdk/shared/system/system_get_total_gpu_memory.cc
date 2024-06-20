@@ -1,3 +1,4 @@
+//
 // Copyright 2020 Comcast Cable Communications Management, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,14 +31,27 @@
 
 #include "starboard/system.h"
 
-#include "third_party/starboard/rdk/shared/rdkservices.h"
+#include "starboard/common/file.h"
+#include "starboard/common/log.h"
+#include "starboard/common/string.h"
 
-#if SB_API_VERSION < 14
-SbSystemConnectionType SbSystemGetConnectionType() {
-  if (third_party::starboard::rdk::shared::NetworkInfo::IsConnectionTypeWireless()) {
-    return kSbSystemConnectionTypeWireless;
-  } else {
-    return kSbSystemConnectionTypeWired;
+int64_t SbSystemGetTotalGPUMemory() {
+  starboard::ScopedFile status_file(
+    "/sys/fs/cgroup/gpu/gpu.limit_in_bytes",
+    kSbFileOpenOnly | kSbFileRead);
+
+  if (status_file.IsValid()) {
+    const int kBufferSize = 512;
+    char buffer[kBufferSize];
+    int bytes_read = status_file.ReadAll(buffer, kBufferSize);
+    if (bytes_read == kBufferSize) {
+      bytes_read = kBufferSize - 1;
+    }
+    buffer[bytes_read] = '\0';
+    int64_t limit_in_bytes = strtoll(buffer, nullptr, 10);
+    if (limit_in_bytes > 0)
+      return limit_in_bytes;
   }
+
+  return 0;
 }
-#endif  // #if SB_API_VERSION < 14

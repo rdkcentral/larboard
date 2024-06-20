@@ -34,5 +34,7 @@
 #include "third_party/starboard/rdk/shared/player/player_internal.h"
 
 bool SbPlayerSetPlaybackRate(SbPlayer player, double playback_rate) {
+  if (player == kSbPlayerInvalid)
+    return false;
   return player->player_->SetRate(playback_rate);
 }

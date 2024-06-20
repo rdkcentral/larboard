@@ -33,8 +33,6 @@
 
 #include "starboard/common/log.h"
 
-#if SB_API_VERSION >= 10
 int SbMediaGetAudioBufferBudget() {
   return 5 * 1024 * 1024;
 }
-#endif  // SB_API_VERSION >= 10

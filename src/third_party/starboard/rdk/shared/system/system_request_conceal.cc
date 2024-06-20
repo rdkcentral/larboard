@@ -32,8 +32,6 @@
 
 #include "third_party/starboard/rdk/shared/libcobalt.h"
 
-#if SB_API_VERSION >= 13
 void SbSystemRequestConceal() {
   SbRdkRequestConceal();
 }
-#endif  // SB_API_VERSION >= 13

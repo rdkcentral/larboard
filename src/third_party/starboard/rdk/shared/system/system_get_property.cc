@@ -39,7 +39,6 @@
 #include "starboard/common/log.h"
 #include "starboard/common/string.h"
 #include "starboard/common/file.h"
-#include "starboard/character.h"
 #include "starboard/file.h"
 
 #include "third_party/starboard/rdk/shared/rdkservices.h"
@@ -52,7 +51,7 @@ namespace {
 const char kPlatformName[] = "Linux";
 
 bool CopyStringAndTestIfSuccess(char* out_value,
-                                int value_length,
+                                size_t value_length,
                                 const char* from_value) {
   if (strlen(from_value) + 1 > value_length)
     return false;
@@ -60,7 +59,7 @@ bool CopyStringAndTestIfSuccess(char* out_value,
   return true;
 }
 
-bool TryReadFromPropertiesFile(const char* prefix, size_t prefix_len, char* out_value, int value_length) {
+bool TryReadFromPropertiesFile(const char* prefix, size_t prefix_len, char* out_value, size_t value_length) {
   FILE* properties = fopen("/etc/device.properties", "r");
   if (!properties) {
     return false;
@@ -256,6 +255,19 @@ bool GetAdvertisingId(char* out_value, int value_length) {
     return false;
 }
 
+#if SB_API_VERSION >= 15
+bool GetDeviceType(char* out_value, int value_length) {
+    std::string prop;
+    if (AuthService::GetExperience(prop) && prop == "Flex") {
+      prop = "OTT";
+    }
+    else if (!SystemProperties::GetDeviceType(prop)) {
+      prop = "STB";
+    }
+    return CopyStringAndTestIfSuccess(out_value, value_length, prop.c_str());
+}
+#endif
+
 }  // namespace
 
 bool SbSystemGetProperty(SbSystemPropertyId property_id,
@@ -295,18 +307,17 @@ bool SbSystemGetProperty(SbSystemPropertyId property_id,
 
     case kSbSystemPropertyCertificationScope:
       return GetCertificationScope(out_value, value_length);
-#if SB_API_VERSION < 13
-    case kSbSystemPropertyBase64EncodedCertificationSecret:
-      return false;
-#endif
 
-#if SB_API_VERSION >= 14
     case kSbSystemPropertyAdvertisingId:
       return GetAdvertisingId(out_value, value_length);
+
     case kSbSystemPropertyLimitAdTracking:
       return GetLimitAdTracking(out_value, value_length);
-#endif
 
+#if SB_API_VERSION >= 15
+    case kSbSystemPropertyDeviceType:
+      return GetDeviceType(out_value, value_length);
+#endif
     default:
       SB_DLOG(WARNING) << __FUNCTION__
                        << ": Unrecognized property: " << property_id;

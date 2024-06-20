@@ -53,7 +53,11 @@ namespace shared {
 
 class Application : public ::starboard::shared::starboard::QueueApplication {
  public:
+#if SB_API_VERSION >= 15
+  explicit Application(SbEventHandleCallback sb_event_handle_callback);
+#else
   Application();
+#endif  // SB_API_VERSION >= 15
   ~Application() override;
 
   static third_party::starboard::rdk::shared::Application* Get() {
@@ -99,6 +103,10 @@ class Application : public ::starboard::shared::starboard::QueueApplication {
   void DestroyNativeWindow();
   void BuildEssosContext();
   void FatalError();
+
+  void ScheduleMemoryUsageCheck(SbTime delay = kSbTimeSecond);
+  SbTime CheckMemoryUsage();
+  void ReleaseMemory();
 
   static EssTerminateListener terminateListener;
   static EssKeyListener keyListener;

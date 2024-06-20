@@ -18,7 +18,6 @@
 
 #include "starboard/common/log.h"
 
-#if SB_API_VERSION >= 10
 int SbMediaGetProgressiveBufferBudget(SbMediaVideoCodec codec,
                                       int resolution_width,
                                       int resolution_height,
@@ -29,4 +28,3 @@ int SbMediaGetProgressiveBufferBudget(SbMediaVideoCodec codec,
   SB_UNREFERENCED_PARAMETER(bits_per_pixel);
   return 12 * 1024 * 1024;
 }
-#endif  // SB_API_VERSION >= 10

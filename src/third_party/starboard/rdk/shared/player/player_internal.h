@@ -37,9 +37,16 @@ struct SB_EXPORT Player {
   virtual void SetVolume(double volume) = 0;
   virtual void Seek(SbTime seek_to_timestamp, int ticket) = 0;
   virtual bool SetRate(double rate) = 0;
+#if SB_API_VERSION >= 15
+  virtual void GetInfo(SbPlayerInfo* info) = 0;
+#else   // SB_API_VERSION >= 15
   virtual void GetInfo(SbPlayerInfo2* info) = 0;
+#endif
   virtual void SetBounds(int zindex, int x, int y, int w, int h) = 0;
 };
+
+void ForceStop();
+void AudioConfigurationChanged();
 
 }  // namespace player
 }  // namespace shared
@@ -52,7 +59,11 @@ struct SbPlayerPrivate {
                   SbMediaVideoCodec video_codec,
                   SbMediaAudioCodec audio_codec,
                   SbDrmSystem drm_system,
-                  const SbMediaAudioSampleInfo& audio_sample_info,
+#if SB_API_VERSION >= 15
+                  const SbMediaAudioStreamInfo& audio_info,
+#else   // SB_API_VERSION >= 15
+                  const SbMediaAudioSampleInfo& audio_info,
+#endif
                   const char* max_video_capabilities,
                   SbPlayerDeallocateSampleFunc sample_deallocate_func,
                   SbPlayerDecoderStatusFunc decoder_status_func,
@@ -67,6 +78,7 @@ struct SbPlayerPrivate {
     using third_party::starboard::rdk::shared::player::Player;
     return Player::MaxNumberOfSamplesPerWrite();
   }
+
   std::unique_ptr<third_party::starboard::rdk::shared::player::Player> player_;
 };
 

@@ -25,6 +25,7 @@
 
 struct SbAccessibilityCaptionSettings;
 struct SbAccessibilityDisplaySettings;
+struct SbMediaAudioConfiguration;
 
 namespace third_party {
 namespace starboard {
@@ -33,10 +34,10 @@ namespace shared {
 
 struct ResolutionInfo {
   ResolutionInfo() {}
-  ResolutionInfo(uint32_t w, uint32_t h)
+  ResolutionInfo(int32_t w, int32_t h)
     : Width(w), Height(h) {}
-  uint32_t Width { 1920 };
-  uint32_t Height { 1080 };
+  int32_t Width { 1920 };
+  int32_t Height { 1080 };
 };
 
 class DisplayInfo {
@@ -111,6 +112,10 @@ public:
   static bool GetExperience(std::string &out);
 };
 
+class DeviceInfo {
+public:
+  static bool GetAudioConfiguration(int index, SbMediaAudioConfiguration* out_audio_configuration);
+};
 
 void TeardownJSONRPCLink();
 

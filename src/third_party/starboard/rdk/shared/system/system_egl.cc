@@ -118,7 +118,7 @@ SbEglSurface SbEglCreateWindowSurface(SbEglDisplay dpy,
 
 #ifdef EGL_PLATFORM_WAYLAND_EXT
   if (gEglCreatePlatformWindowSurfaceEXT) {
-    result = gEglCreatePlatformWindowSurfaceEXT(dpy, config, (EGLNativeWindowType)win,
+    result = gEglCreatePlatformWindowSurfaceEXT(dpy, config, (void*)win,
                                                 attrib_list);
     if (result == EGL_NO_SURFACE)
       SB_LOG(WARNING) << "eglCreatePlatformWindowSurfaceEXT failed, err: " << eglGetError();

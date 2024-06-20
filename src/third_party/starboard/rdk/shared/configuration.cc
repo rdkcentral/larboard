@@ -30,8 +30,8 @@
 
 #include "third_party/starboard/rdk/shared/configuration.h"
 
-#include "cobalt/extension/configuration.h"
 #include "starboard/common/configuration_defaults.h"
+#include "starboard/extension/configuration.h"
 
 #include "third_party/starboard/rdk/shared/libcobalt.h"
 
@@ -76,6 +76,7 @@ const CobaltExtensionConfigurationApi kConfigurationApi = {
     &::starboard::common::CobaltRasterizerTypeDefault,
     &::starboard::common::CobaltEnableJitDefault,
     &::starboard::common::CobaltFallbackSplashScreenTopicsDefault,
+    &::starboard::common::CobaltCanStoreCompiledJavascriptDefault,
 };
 
 }  // namespace

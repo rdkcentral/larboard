@@ -32,6 +32,7 @@
 #include <gst/gst.h>
 
 #include <signal.h>
+#include <sys/resource.h>
 
 #include "starboard/configuration.h"
 #include "starboard/shared/signal/crash_signals.h"
@@ -41,6 +42,10 @@
 
 #if SB_IS(EVERGREEN_COMPATIBLE)
 #include "third_party/crashpad/wrapper/wrapper.h"
+#include "starboard/common/paths.h"
+#include "starboard/elf_loader/elf_loader_constants.h"
+#include "starboard/shared/starboard/command_line.h"
+#include "starboard/shared/starboard/starboard_switches.h"
 #endif
 
 namespace third_party {
@@ -55,7 +60,8 @@ static void RequestStop(int signal_id) {
 }
 
 static void InstallStopSignalHandlers() {
-  struct sigaction action = {0};
+  struct sigaction action;
+  memset (&action, 0, sizeof (action));
   action.sa_handler = RequestStop;
   action.sa_flags = 0;
   ::sigemptyset(&action.sa_mask);
@@ -73,9 +79,20 @@ static void UninstallStopSignalHandlers() {
 }  // namespace starboard
 }  // namespace third_party
 
+#if SB_API_VERSION >= 15
+int SbRunStarboardMain(int argc, char** argv, SbEventHandleCallback callback) {
+  third_party::starboard::rdk::shared::Application application(callback);
+  int result = application.Run(argc, argv);
+  return result;
+}
+#endif  // SB_API_VERSION >= 15
 
 extern "C" SB_EXPORT_PLATFORM int main(int argc, char** argv) {
   tzset();
+
+  rlimit stack_size;
+  stack_size.rlim_cur = 512 * 1024;
+  setrlimit(RLIMIT_STACK, &stack_size);
 
   GError* error = NULL;
   gst_init_check(NULL, NULL, &error);
@@ -85,13 +102,27 @@ extern "C" SB_EXPORT_PLATFORM int main(int argc, char** argv) {
   third_party::starboard::rdk::shared::InstallStopSignalHandlers();
 
 #if SB_IS(EVERGREEN_COMPATIBLE)
-  third_party::crashpad::wrapper::InstallCrashpadHandler(true);
+  auto command_line = starboard::shared::starboard::CommandLine(argc, argv);
+  auto evergreen_content_path =
+    command_line.GetSwitchValue(starboard::elf_loader::kEvergreenContent);
+  std::string ca_certificates_path = evergreen_content_path.empty()
+    ? starboard::common::GetCACertificatesPath()
+    : starboard::common::GetCACertificatesPath(evergreen_content_path);
+  if (ca_certificates_path.empty()) {
+    SB_LOG(ERROR) << "Failed to get CA certificates path. Skip crashpad handler setup.";
+  } else {
+    third_party::crashpad::wrapper::InstallCrashpadHandler(true, ca_certificates_path);
+  }
 #endif
 
   int result = 0;
   {
+#if SB_API_VERSION >= 15
+    result = SbRunStarboardMain(argc, argv, SbEventHandle);
+#else
     third_party::starboard::rdk::shared::Application application;
     result = application.Run(argc, argv);
+#endif
   }
 
   third_party::starboard::rdk::shared::UninstallStopSignalHandlers();

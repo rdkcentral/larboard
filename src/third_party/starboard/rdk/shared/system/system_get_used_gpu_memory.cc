@@ -29,12 +29,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "starboard/player.h"
+#include "starboard/system.h"
 
-#include "third_party/starboard/rdk/shared/player/player_internal.h"
+#include "starboard/common/file.h"
+#include "starboard/common/log.h"
+#include "starboard/common/string.h"
 
-void SbPlayerWriteEndOfStream(SbPlayer player, SbMediaType stream_type) {
-  if (player == kSbPlayerInvalid)
-    return;
-  player->player_->MarkEOS(stream_type);
+#include <cerrno>
+
+int64_t SbSystemGetUsedGPUMemory() {
+  starboard::ScopedFile status_file(
+    "/sys/fs/cgroup/gpu/gpu.usage_in_bytes",
+    kSbFileOpenOnly | kSbFileRead);
+
+  if (status_file.IsValid()) {
+    const int kBufferSize = 512;
+    char buffer[kBufferSize];
+    int bytes_read = status_file.ReadAll(buffer, kBufferSize);
+    if (bytes_read == kBufferSize) {
+      bytes_read = kBufferSize - 1;
+    }
+    buffer[bytes_read] = '\0';
+    int64_t usage_in_bytes = strtoll(buffer, nullptr, 10);
+    if (usage_in_bytes > 0 && errno != ERANGE)
+      return usage_in_bytes;
+  }
+
+  return 0;
 }

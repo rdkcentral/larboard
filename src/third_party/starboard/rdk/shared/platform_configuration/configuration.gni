@@ -32,8 +32,9 @@ import("//starboard/build/config/base_configuration.gni")
 
 cobalt_font_package = "limited"
 final_executable_type = "shared_library"
+starboard_level_final_executable_type = "shared_library"
 
-sb_api_version = 14
+sb_api_version = 15
 sb_filter_based_player = false
 gl_type = "system_gles2"
 
@@ -42,6 +43,9 @@ install_target_path =
 
 no_pedantic_warnings_config_path =
   "//third_party/starboard/rdk/shared/platform_configuration:no_pedantic_warnings"
+
+pedantic_warnings_config_path =
+  "//third_party/starboard/rdk/shared/platform_configuration:pedantic_warnings"
 
 speed_config_path =
   "//third_party/starboard/rdk/shared/platform_configuration:speed"

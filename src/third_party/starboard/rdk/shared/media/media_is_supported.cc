@@ -31,11 +31,8 @@
 
 #include <string>
 
-#if SB_API_VERSION >= 13
-#include "starboard/shared/starboard/media/media_support_internal.h"
-#endif
-
 #include "starboard/media.h"
+#include "starboard/shared/starboard/media/media_support_internal.h"
 
 #include "third_party/starboard/rdk/shared/drm/drm_system_ocdm.h"
 
@@ -62,13 +59,8 @@ std::string CodecToMimeType(SbMediaVideoCodec codec) {
     case kSbMediaVideoCodecVc1:
       return {};
 
-#if SB_API_VERSION < 11
-    case kSbMediaVideoCodecVp10:
-      return {{"video/webm"}};
-#else   // SB_API_VERSION < 11
     case kSbMediaVideoCodecAv1:
       return {};
-#endif  // SB_API_VERSION < 11
 
     case kSbMediaVideoCodecVp8:
     case kSbMediaVideoCodecVp9:

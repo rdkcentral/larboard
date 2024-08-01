@@ -73,6 +73,7 @@ const char* SbTimeZoneGetName() {
   /* Check TZ variable */
   if (gTimeZoneBufferPtr == NULL) {
     const char* tz = getenv("TZ");
+    if (tz && *tz == ':') ++tz;
     if (tz && isValidOlsonID(tz)) {
       strncpy(gTimeZoneBuffer, tz, sizeof(gTimeZoneBuffer));
       gTimeZoneBuffer[sizeof(gTimeZoneBuffer) - 1] = 0;

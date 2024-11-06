@@ -114,6 +114,7 @@ public:
 class DeviceInfo {
 public:
   static bool GetAudioConfiguration(int index, SbMediaAudioConfiguration* out_audio_configuration);
+  static bool GetBrandName(std::string& out);
 };
 
 void TeardownJSONRPCLink();

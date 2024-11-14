@@ -402,6 +402,12 @@ static_library("starboard_platform") {
     ]
   }
 
+  if (sb_is_evergreen_compatible) {
+    sources += [
+      "//starboard/shared/starboard/loader_app_metrics.cc",
+    ]
+  }
+
   if (final_executable_type == "shared_library") {
     sources += [
       "//starboard/shared/starboard/shared_main_adapter.cc"

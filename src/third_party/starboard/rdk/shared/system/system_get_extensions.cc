@@ -37,6 +37,7 @@
 #include "starboard/common/log.h"
 #include "starboard/extension/configuration.h"
 #include "starboard/extension/crash_handler.h"
+#include "starboard/extension/loader_app_metrics.h"
 #include "starboard/extension/platform_service.h"
 #include "third_party/starboard/rdk/shared/accessibility_extension.h"
 #include "third_party/starboard/rdk/shared/configuration.h"
@@ -44,6 +45,7 @@
 #if SB_IS(EVERGREEN_COMPATIBLE)
 #include "starboard/elf_loader/evergreen_config.h"
 #include "starboard/shared/starboard/crash_handler.h"
+#include "starboard/shared/starboard/loader_app_metrics.h"
 #endif
 
 const void* SbSystemGetExtension(const char* name) {
@@ -60,6 +62,9 @@ const void* SbSystemGetExtension(const char* name) {
   if (strcmp(name, kCobaltExtensionCrashHandlerName) == 0) {
     return starboard::common::GetCrashHandlerApi();
   }
+  if (strcmp(name, kStarboardExtensionLoaderAppMetricsName) == 0) {
+    return starboard::shared::starboard::GetLoaderAppMetricsApi();
+  }
 #endif
   if (strcmp(name, kCobaltExtensionConfigurationName) == 0) {
     return third_party::starboard::rdk::shared::GetConfigurationApi();
@@ -72,3 +77,4 @@ const void* SbSystemGetExtension(const char* name) {
   }
   return NULL;
 }
+

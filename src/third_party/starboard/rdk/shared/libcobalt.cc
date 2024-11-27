@@ -44,57 +44,35 @@ struct APIContext
   void OnInitialize()
   {
     starboard::ScopedLock lock(mutex_);
-    running_ = (nullptr != Application::Get());
+    SB_CHECK(nullptr != Application::Get());
+    state_ = kRunning;
     condition_.Broadcast();
   }
 
   void OnTeardown()
   {
     starboard::ScopedLock lock(mutex_);
-    running_ = false;
+    state_ = kStopped;
   }
 
   void SendLink(const char* link)
   {
     starboard::ScopedLock lock(mutex_);
-    WaitForApp(lock);
-    Application::Get()->Link(link);
+    if (WaitForApp() == kRunning) {
+      Application::Get()->Link(link);
+    }
   }
 
   void RequestFreeze() {
-    starboard::ScopedLock lock(mutex_);
-    WaitForApp(lock);
-    starboard::Semaphore sem;
-    Application::Get()->Freeze(
-      &sem,
-      [](void* ctx) {
-        reinterpret_cast<starboard::Semaphore*>(ctx)->Put();
-      });
-    sem.Take();
+    RequestAndWait(&Application::Freeze);
   }
 
   void RequestFocus() {
-    starboard::ScopedLock lock(mutex_);
-    WaitForApp(lock);
-    starboard::Semaphore sem;
-    Application::Get()->Focus(
-      &sem,
-      [](void* ctx) {
-        reinterpret_cast<starboard::Semaphore*>(ctx)->Put();
-      });
-    sem.Take();
+    RequestAndWait(&Application::Focus);
   }
 
   void RequestBlur() {
-    starboard::ScopedLock lock(mutex_);
-    WaitForApp(lock);
-    starboard::Semaphore sem;
-    Application::Get()->Blur(
-      &sem,
-      [](void* ctx) {
-        reinterpret_cast<starboard::Semaphore*>(ctx)->Put();
-      });
-    sem.Take();
+    RequestAndWait(&Application::Blur);
   }
 
   void RequestQuit()
@@ -102,7 +80,7 @@ struct APIContext
     starboard::ScopedLock lock(mutex_);
     stop_request_cb_ = nullptr;
     stop_request_cb_data_ = nullptr;
-    if (running_)
+    if (state_ == kRunning)
         Application::Get()->Stop(0);
   }
 
@@ -156,13 +134,16 @@ struct APIContext
     }
 
     if (should_invoke_default) {
-      Application::Get()->Conceal(NULL, NULL);
+      starboard::ScopedLock lock(mutex_);
+      if (state_ == kRunning) {
+        Application::Get()->Conceal(NULL, NULL);
+      }
     }
   }
 
   void SetCobaltExitStrategy(const char* strategy)
   {
-    if (running_) {
+    if (state_ == kRunning) {
       SB_LOG(WARNING) << "Ignore exit strategy change, app is already running.";
       return;
     }
@@ -182,13 +163,40 @@ struct APIContext
   }
 
 private:
-  void WaitForApp(starboard::ScopedLock &)
+  enum State {
+    kUninitialized,
+    kRunning,
+    kStopped
+  };
+
+  State WaitForApp()
   {
-    while ( running_ == false )
+    mutex_.DCheckAcquired();
+
+    while ( state_ == kUninitialized )
       condition_.Wait();
+
+    return state_;
   }
 
-  bool running_ { false };
+  void RequestAndWait(void (Application::*action)(void*, Application::EventHandledCallback)) {
+    mutex_.Acquire();
+    if (WaitForApp() == kRunning) {
+      starboard::Semaphore sem;
+      (Application::Get()->*action)(
+        &sem,
+        [](void* ctx) {
+          reinterpret_cast<starboard::Semaphore*>(ctx)->Put();
+        });
+      mutex_.Release();
+      sem.Take();
+    }
+    else {
+      mutex_.Release();
+    }
+  }
+
+  State state_ { kUninitialized };
   starboard::Mutex mutex_;
   starboard::ConditionVariable condition_;
   SbRdkCallbackFunc stop_request_cb_ { nullptr };

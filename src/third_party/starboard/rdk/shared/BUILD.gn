@@ -325,6 +325,8 @@ static_library("starboard_platform") {
     "drm/gst_decryptor_ocdm.cc",
     "ess_input.cc",
     "get_home_directory.cc",
+    "graphics.cc",
+    "graphics.h",
     "hang_detector.cc",
     "hang_detector.h",
     "libcobalt.cc",

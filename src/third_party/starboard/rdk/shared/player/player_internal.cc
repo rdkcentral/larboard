@@ -1216,7 +1216,7 @@ class PlayerImpl : public Player {
   static void OnVideoBufferUnderflow(PlayerImpl* self);
 
   bool ChangePipelineState(GstState state) const;
-  void DispatchOnWorkerThread(Task* task) const;
+  guint DispatchOnWorkerThread(Task* task) const;
   GstClockTime GetPosition() const;
   bool WriteSample(SbMediaType sample_type,
                    GstBuffer* buffer,
@@ -1712,11 +1712,10 @@ gboolean PlayerImpl::HandleBusMessage(GstBus* bus, GstMessage* message) {
             pending_oob_write_condition_.Broadcast();
           }
           GST_INFO_OBJECT(pipeline_, "===> Asuming preroll done");
-
-          UpdatePresentingState();
         }
 
         SchedulePlayingStateUpdate();
+        UpdatePresentingState();
       }
     } break;
 
@@ -1781,7 +1780,7 @@ void* PlayerImpl::ThreadEntryPoint(void* context) {
   return nullptr;
 }
 
-void PlayerImpl::DispatchOnWorkerThread(Task* task) const {
+guint PlayerImpl::DispatchOnWorkerThread(Task* task) const {
   GSource* src = g_source_new(&SourceFunctions, sizeof(GSource));
   g_source_set_ready_time(src, 0);
   g_source_set_callback(src,
@@ -1797,8 +1796,9 @@ void PlayerImpl::DispatchOnWorkerThread(Task* task) const {
       delete static_cast<Task*>(userData);
     }
   );
-  g_source_attach(src, main_loop_context_);
+  guint id = g_source_attach(src, main_loop_context_);
   g_source_unref(src);
+  return id;
 }
 
 // static
@@ -1994,6 +1994,8 @@ void PlayerImpl::MarkEOS(SbMediaType stream_type) {
       gst_app_src_end_of_stream(GST_APP_SRC(audio_appsrc_));
     if (video_codec_ != kSbMediaVideoCodecNone)
       gst_app_src_end_of_stream(GST_APP_SRC(video_appsrc_));
+
+    SchedulePlayingStateUpdate();
   }
 }
 
@@ -2350,6 +2352,7 @@ void PlayerImpl::HandleInititialSeek(::starboard::ScopedLock& lock) {
   if (state_ == State::kInitial) {
     // This is the initial seek to 0 which will trigger data pumping.
     SB_DCHECK(seek_position_ == .0);
+    AddBufferingProbe(0, ticket_);
     state_ = State::kInitialPreroll;
     DispatchOnWorkerThread(
       new PlayerStatusTask(player_status_func_, player_,
@@ -3001,7 +3004,7 @@ void PlayerImpl::AddBufferingProbe(GstClockTime target, int ticket) {
     GST_TRACE_OBJECT(pad, "Testing buffer: %" GST_PTR_FORMAT " for target time: %" GST_TIME_FORMAT " with ticket: %d", buffer, GST_TIME_ARGS(data->target_time), data->ticket);
 
     GstClockTime pts = GST_BUFFER_TIMESTAMP(buffer);
-    GstClockTime duration = GST_CLOCK_TIME_IS_VALID(GST_BUFFER_DURATION(buffer)) ? GST_BUFFER_DURATION(buffer) : GST_SECOND / 60;
+    GstClockTime duration = GST_CLOCK_TIME_IS_VALID(GST_BUFFER_DURATION(buffer)) ? GST_BUFFER_DURATION(buffer) : 0;
 
     if ( (pts + duration) >= data->target_time ) {
       GstObject* parent = gst_pad_get_parent(pad);
@@ -3024,6 +3027,8 @@ void PlayerImpl::AddBufferingProbe(GstClockTime target, int ticket) {
 
   buffering_state_ = 0;
 
+  target +=  160 * GST_MSECOND;
+
   if (audio_appsrc_ && audio_codec_ != kSbMediaAudioCodecNone) {
     if (add_probe(audio_appsrc_, target, ticket, buffering_probe_callback) != 0u)
       buffering_state_ |= static_cast<int>(MediaType::kAudio);
@@ -3032,7 +3037,6 @@ void PlayerImpl::AddBufferingProbe(GstClockTime target, int ticket) {
   }
 
   if (video_appsrc_ && video_codec_ != kSbMediaVideoCodecNone) {
-    target +=  10 * 16 * GST_MSECOND;
     if (add_probe(video_appsrc_, target, ticket, buffering_probe_callback) != 0u)
       buffering_state_ |= static_cast<int>(MediaType::kVideo);
     else
@@ -3046,10 +3050,9 @@ void PlayerImpl::SchedulePlayingStateUpdate() {
   if (playing_state_update_source_id_ != 0u)  // already scheduled
     return;
 
-  const auto update_callback = [](gpointer data) -> gboolean {
-    PlayerImpl* self = static_cast<PlayerImpl*>(data);
+  auto update_callback = [this]() {
     bool should_be_playing = false, can_play = false;
-    const char* reason = nullptr;
+    std::string reason;
 
     {
       GstState state, pending;
@@ -3057,43 +3060,42 @@ void PlayerImpl::SchedulePlayingStateUpdate() {
       bool need_preroll;
       guint src_id;
 
-      ret = gst_element_get_state(self->pipeline_, &state, &pending, 0);
-      need_preroll = (state == GST_STATE_PAUSED && pending == GST_STATE_PAUSED && ret == GST_STATE_CHANGE_ASYNC);
+      ret = gst_element_get_state(pipeline_, &state, &pending, 0);
+      need_preroll = (state <= GST_STATE_PAUSED && pending == GST_STATE_PAUSED && ret == GST_STATE_CHANGE_ASYNC);
 
-      ::starboard::ScopedLock lock(self->mutex_);
-      src_id = std::exchange(self->playing_state_update_source_id_, 0u);
-      should_be_playing = (self->rate_ || self->pending_rate_);
-      can_play = (self->buffering_state_ == 0 && !need_preroll && src_id != 0u && !GST_CLOCK_TIME_IS_VALID(self->buf_target_min_ts_));  // the update was canceled when src_id == 0
+      ::starboard::ScopedLock lock(mutex_);
+      src_id = std::exchange(playing_state_update_source_id_, 0u);
+      should_be_playing = (rate_ || pending_rate_);
+      // the update was canceled when src_id == 0
+      can_play = (!need_preroll && src_id != 0u) &&
+          ((buffering_state_ == 0 && !GST_CLOCK_TIME_IS_VALID(buf_target_min_ts_))
+           || eos_data_ == static_cast<int>(GetBothMediaTypeTakingCodecsIntoAccount()));
       if (!can_play) {
-        reason = ([&]{
+        reason  = ", reason: ";
+        reason += ([&]{
           if(!should_be_playing)
              return "paused";
-          if (self->buffering_state_ != 0)
+          if (buffering_state_ != 0)
             return "buffering";
           if (need_preroll)
             return "awaiting preroll";
           if (src_id == 0)
             return "canceled";
-          if (GST_CLOCK_TIME_IS_VALID(self->buf_target_min_ts_))
+          if (GST_CLOCK_TIME_IS_VALID(buf_target_min_ts_))
             return "min buffer ts is set";
           return "unknown";
         })();
       }
     }
 
-    GST_INFO_OBJECT(self->pipeline_, "Update pipeline state, should be playing: %s, can_play: %s (reason: %s)", should_be_playing ? "yes" : "no", can_play ? "yes" : "no", reason);
+    GST_INFO_OBJECT(pipeline_, "Update pipeline state, should be playing: %s, can_play: %s%s", should_be_playing ? "yes" : "no", can_play ? "yes" : "no", reason.c_str());
 
     if (should_be_playing && can_play)
-      self->ChangePipelineState(GST_STATE_PLAYING);
-
-    return G_SOURCE_REMOVE;
+      ChangePipelineState(GST_STATE_PLAYING);
   };
 
-  GSource* src = g_idle_source_new();
-  g_source_set_priority (src, G_PRIORITY_DEFAULT);
-  g_source_set_callback(src, update_callback, this, nullptr);
-  playing_state_update_source_id_ = g_source_attach(src, main_loop_context_);
-  g_source_unref(src);
+  playing_state_update_source_id_ =
+    DispatchOnWorkerThread(new FunctionTask(std::move(update_callback), "Playing state update"));
 }
 
 void PlayerImpl::DidEnd() {

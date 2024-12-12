@@ -29,7 +29,25 @@
 # limitations under the License.
 
 config("platform_configuration") {
-  configs = [
-    "//third_party/starboard/rdk/shared/platform_configuration",
-  ]
+  if (current_toolchain == default_toolchain &&
+      build_with_separate_cobalt_toolchain) {
+    configs = [
+      "//starboard/build/config/sabi",
+      "//starboard/build/config/modular/arm/${rdk_arm_call_convention}"
+    ]
+    cflags = [
+      "-fvisibility=hidden",
+      # Suppress warnings related to unused compilation flags in clang.
+      "-Wno-unused-command-line-argument",
+      # Let older Clangs ignore newer Clangs' warnings.
+      "-Wno-unknown-warning-option",
+    ]
+    ldflags = [
+      "-Wl,-Bsymbolic-functions"
+    ]
+  } else {
+    configs = [
+      "//third_party/starboard/rdk/shared/platform_configuration",
+    ]
+  }
 }

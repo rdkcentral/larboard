@@ -333,7 +333,6 @@ static_library("starboard_platform") {
     "libcobalt.h",
     "linux_key_mapping.cc",
     "linux_key_mapping.h",
-    "main_rdk.cc",
     "media/gst_media_utils.cc",
     "media/media_get_audio_buffer_budget.cc",
     "media/media_get_audio_configuration.cc",
@@ -371,6 +370,7 @@ static_library("starboard_platform") {
     "player/player_write_end_of_stream.cc",
     "player/player_write_sample.cc",
     "rdkservices.cc",
+    "run_starboard_main.cc",
     "speech/accessibility_get_text_to_speech_settings.cc",
     "speech/speech_synthesis_cancel.cc",
     "speech/speech_synthesis_is_supported.cc",
@@ -410,9 +410,15 @@ static_library("starboard_platform") {
     ]
   }
 
-  if (final_executable_type == "shared_library") {
+  if (final_executable_type == "shared_library" && !build_with_separate_cobalt_toolchain) {
     sources += [
       "//starboard/shared/starboard/shared_main_adapter.cc"
+    ]
+  }
+
+  if (!sb_is_modular) {
+    sources += [
+      "main_rdk.cc",
     ]
   }
 
@@ -497,5 +503,14 @@ if (final_executable_type == "shared_library" && sb_is_evergreen_compatible) {
       "//starboard/elf_loader:elf_loader_sandbox",
       "//starboard:starboard_headers_only"
     ]
+  }
+}
+
+if (sb_is_modular && !sb_is_evergreen) {
+  static_library("starboard_platform_with_main") {
+    check_includes = false
+    sources = [ "main_rdk.cc" ]
+    configs += [ "//starboard/build/config:starboard_implementation" ]
+    public_deps = [ ":starboard_platform" ]
   }
 }

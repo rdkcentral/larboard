@@ -33,11 +33,15 @@ config("platform_configuration") {
     "//starboard/build/config/sabi",
   ]
   cflags = []
-  ldflags = [
-    "-Wl,--version-script," + rebase_path("exported-symbols.map", root_build_dir),
-  ]
+  ldflags = []
   defines = []
   cflags_cc = []
+
+  if (!build_with_separate_cobalt_toolchain) {
+    ldflags += [
+      "-Wl,--version-script," + rebase_path("exported-symbols.map", root_build_dir),
+    ]
+  }
 
   if (current_toolchain == host_toolchain) {
     cflags += [
@@ -107,7 +111,8 @@ config("platform_configuration") {
     defines += [
       # Defined to get format macro constants from <inttypes.h>.
       "__STDC_FORMAT_MACROS",
-      "COBALT_LINUX",
+      # Enable GNU extensions to get prototypes like ffsl.
+      "_GNU_SOURCE=1",
     ]
   }
 }

@@ -29,10 +29,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <gst/gst.h>
-
 #include <signal.h>
 #include <sys/resource.h>
+
+#include <cstring>
 
 #include "starboard/configuration.h"
 #include "starboard/shared/signal/crash_signals.h"
@@ -78,12 +78,6 @@ static void UninstallStopSignalHandlers() {
 }  // namespace starboard
 }  // namespace third_party
 
-int SbRunStarboardMain(int argc, char** argv, SbEventHandleCallback callback) {
-  third_party::starboard::rdk::shared::Application application(callback);
-  int result = application.Run(argc, argv);
-  return result;
-}
-
 extern "C" SB_EXPORT_PLATFORM int main(int argc, char** argv) {
   tzset();
 
@@ -91,10 +85,6 @@ extern "C" SB_EXPORT_PLATFORM int main(int argc, char** argv) {
   getrlimit(RLIMIT_STACK, &stack_size);
   stack_size.rlim_cur = 2 * 1024 * 1024;
   setrlimit(RLIMIT_STACK, &stack_size);
-
-  GError* error = NULL;
-  gst_init_check(NULL, NULL, &error);
-  g_free(error);
 
   starboard::shared::signal::InstallSuspendSignalHandlers();
   third_party::starboard::rdk::shared::InstallStopSignalHandlers();
@@ -121,6 +111,5 @@ extern "C" SB_EXPORT_PLATFORM int main(int argc, char** argv) {
   third_party::starboard::rdk::shared::UninstallStopSignalHandlers();
   starboard::shared::signal::UninstallSuspendSignalHandlers();
 
-  gst_deinit();
   return result;
 }

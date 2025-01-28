@@ -139,7 +139,7 @@ bool GetModelName(char* out_value, int value_length) {
 
 bool GetOperatorName(char* out_value, int value_length) {
   std::string prop;
-  if (SystemProperties::GetBrandName(prop)) {
+  if (SystemProperties::GetBrandName(prop)|| DeviceInfo::GetBrandName(prop)) {
     return CopyStringAndTestIfSuccess(
       out_value, value_length, prop.c_str());
   }

@@ -1161,6 +1161,8 @@ struct DeviceInfoImpl {
     needs_refresh_.store(true);
   }
 
+  bool GetBrandName(std::string& out);
+
 private:
   struct DeviceDetailsData : public Core::JSON::Container {
     DeviceDetailsData()
@@ -1252,6 +1254,7 @@ private:
   ::starboard::Mutex mutex_;
 
   std::vector<SbMediaAudioConfiguration> audio_configurations_;
+  Core::OptionalType<std::string> brand_name_;
 
   static constexpr SbMediaAudioConnector kAudioConnectorUnknown = static_cast<SbMediaAudioConnector>(0);
 };
@@ -1432,6 +1435,33 @@ bool DeviceInfoImpl::GetAudioConfiguration(int output_index, SbMediaAudioConfigu
   return false;
 }
 
+bool DeviceInfoImpl::GetBrandName(std::string& out) {
+  if (!brand_name_.IsSet()) {
+    struct BrandNameInfo : public Core::JSON::Container {
+      BrandNameInfo() : Core::JSON::Container() {
+          Add(_T("brand"), &BrandName);
+      }
+      Core::JSON::String BrandName;
+    } info;
+    uint32_t rc = device_info_.Get(kDefaultTimeoutMs, "brandname", info);
+    if (Core::ERROR_NONE != rc) {
+      SB_LOG(ERROR) << "Failed to get '" << kDeviceInfoCallsign
+                    << ".brandname', rc=" << rc
+                    << " ( " << Core::ErrorToString(rc) << " ).";
+      if (rc == Core::ERROR_ASYNC_FAILED || rc == Core::ERROR_TIMEDOUT) {
+        brand_name_.Clear();
+      } else {
+      brand_name_ = "";
+      }
+    } else {
+      brand_name_ = info.BrandName.Value();
+      SB_LOG(INFO) << "Device brandname: " << brand_name_.Value();
+    }
+  }
+  out = brand_name_.Value();
+  return !out.empty();
+}
+
 }  // namespace
 
 ResolutionInfo DisplayInfo::GetResolution() {
@@ -1560,6 +1590,10 @@ bool AuthService::GetExperience(std::string &out) {
 
 bool DeviceInfo::GetAudioConfiguration(int index, SbMediaAudioConfiguration* out_audio_configuration) {
   return GetDeviceInfo()->GetAudioConfiguration(index, out_audio_configuration);
+}
+
+bool DeviceInfo::GetBrandName(std::string& out) {
+  return GetDeviceInfo()->GetBrandName(out);
 }
 
 void TeardownJSONRPCLink() {

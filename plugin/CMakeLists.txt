@@ -30,22 +30,11 @@ set(PLUGIN_COBALT_AUTOSTART "false" CACHE STRING "Automatically start Cobalt plu
 set(PLUGIN_COBALT_MODE "Local" CACHE STRING "Controls if the plugin should run in its own process, in process or remote")
 set(PLUGIN_COBALT_LIMIT_AD_TRACKING false CACHE STRING "Disable Ad Tracking and measurement.")
 
-option(PLUGIN_COBALT_ENABLE_FOCUS_IFACE "Enable support for focus change." OFF)
 option(PLUGIN_COBALT_EVEGREEN_LITE "Enable Evergreen Lite build configuration." OFF)
-option(PLUGIN_COBALT_EVEGREEN_COMPATIBLE "Enable Evergreen compatible configuration." OFF)
-
-if(PLUGIN_COBALT_ENABLE_FOCUS_IFACE)
-    add_definitions(-DPLUGIN_COBALT_ENABLE_FOCUS_IFACE=1)
-endif()
-
-if(NOT PLUGIN_COBALT_CLOSUREPOLICY)
-    add_definitions(-DPLUGIN_COBALT_ENABLE_CLOSUREPOLICY=0)
-else()
-    add_definitions(-DPLUGIN_COBALT_ENABLE_CLOSUREPOLICY=1)
-endif(NOT PLUGIN_COBALT_CLOSUREPOLICY)
 
 find_package(${NAMESPACE}Plugins REQUIRED)
 find_package(${NAMESPACE}Definitions REQUIRED)
+find_library(COBALT_LIBRARY loader_app REQUIRED)
 
 # find_package(JsonGenerator REQUIRED)
 # JsonGenerator(DOCS
@@ -64,17 +53,6 @@ add_library(${MODULE_NAME} SHARED
     CobaltJsonRpc.cpp
     Module.cpp
     )
-
-if (PLUGIN_COBALT_EVEGREEN_LITE)
-    add_definitions(-DENABLE_EVERGREEN_LITE=1)
-    set(PLUGIN_COBALT_EVEGREEN_COMPATIBLE ON)
-endif()
-
-if (PLUGIN_COBALT_EVEGREEN_COMPATIBLE)
-    find_library(COBALT_LIBRARY loader_app REQUIRED)
-else()
-    find_library(COBALT_LIBRARY cobalt REQUIRED)
-endif()
 
 target_link_libraries(${MODULE_NAME}
     PRIVATE

@@ -26,6 +26,7 @@
 #include "starboard/common/mutex.h"
 #include "starboard/event.h"
 #include "starboard/shared/starboard/drm/drm_system_internal.h"
+#include "starboard/common/ref_counted.h"
 
 struct _GstCaps;
 struct _GstBuffer;
@@ -41,7 +42,7 @@ namespace session {
 class Session;
 }
 
-class DrmSystemOcdm : public SbDrmSystemPrivate {
+class DrmSystemOcdm : public SbDrmSystemPrivate, public ::starboard::RefCountedThreadSafe<DrmSystemOcdm> {
  public:
   class Observer {
    public:
@@ -105,6 +106,8 @@ class DrmSystemOcdm : public SbDrmSystemPrivate {
                _GstCaps* caps);
   std::set<std::string> GetReadyKeys() const;
   KeysWithStatus GetSessionKeys(const std::string& session_id) const;
+
+  void Invalidate();
 
  private:
   session::Session* GetSessionById(const std::string& id) const;

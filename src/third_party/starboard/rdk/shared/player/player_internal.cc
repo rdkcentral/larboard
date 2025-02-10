@@ -50,6 +50,9 @@
 #include "third_party/starboard/rdk/shared/media/gst_media_utils.h"
 #include "third_party/starboard/rdk/shared/hang_detector.h"
 #include "third_party/starboard/rdk/shared/drm/gst_decryptor_ocdm.h"
+#if defined(HAS_OCDM)
+#include "third_party/starboard/rdk/shared/drm/drm_system_ocdm.h"
+#endif
 
 namespace third_party {
 namespace starboard {
@@ -1500,6 +1503,10 @@ PlayerImpl::PlayerImpl(SbPlayer player,
   }
 
   if (drm_system_) {
+#if defined(HAS_OCDM)
+    using third_party::starboard::rdk::shared::drm::DrmSystemOcdm;
+    reinterpret_cast<DrmSystemOcdm*>( drm_system_ )->AddRef();
+#endif
     GstContext* context = gst_context_new("cobalt-drm-system", FALSE);
     GstStructure* context_structure = gst_context_writable_structure(context);
     gst_structure_set(context_structure, "drm-system-instance", G_TYPE_POINTER, drm_system_, nullptr);
@@ -1561,6 +1568,12 @@ PlayerImpl::~PlayerImpl() {
   g_main_context_unref(main_loop_context_);
   GST_INFO_OBJECT(pipeline_, "BYE BYE player");
   g_object_unref(pipeline_);
+  if (drm_system_) {
+#if defined(HAS_OCDM)
+    using third_party::starboard::rdk::shared::drm::DrmSystemOcdm;
+    reinterpret_cast<DrmSystemOcdm*>( drm_system_ )->Release();
+#endif
+  }
 }
 
 // static

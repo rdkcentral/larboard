@@ -1442,8 +1442,8 @@ PlayerImpl::PlayerImpl(SbPlayer player,
   hang_monitor_source_id_ = g_source_attach(src, main_loop_context_);
   g_source_unref(src);
 
-  GST_INFO_OBJECT(pipeline_,"Creating player with max capabilities: '%s'",
-           max_video_capabilities);
+  GST_INFO_OBJECT(pipeline_,"Creating player with max capabilities: '%s', audio codec: 0x%x, video codec: 0x%x",
+                  max_video_capabilities, audio_codec_, video_codec_);
 
   GstElementFactory* src_factory = gst_element_factory_find("cobaltsrc");
   if (!src_factory) {

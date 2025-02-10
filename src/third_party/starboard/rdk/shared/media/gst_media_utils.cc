@@ -193,10 +193,22 @@ std::vector<std::string> CodecToGstCaps(SbMediaAudioCodec codec, const SbMediaAu
     case kSbMediaAudioCodecAac: {
       std::string primary_caps = "audio/mpeg, mpegversion=4";
       if (info) {
-        primary_caps +=
-            ", channels=" + std::to_string(info->number_of_channels);
-        primary_caps += ", rate=" + std::to_string(info->samples_per_second);
-        SB_LOG(INFO) << "Adding audio caps data from sample info.";
+        GstCaps* gst_caps = gst_caps_new_simple("audio/mpeg",
+          "mpegversion", G_TYPE_INT, 4,
+          "channels", G_TYPE_INT, info->number_of_channels,
+          "rate", G_TYPE_INT, info->samples_per_second,
+          nullptr);
+        if (info->audio_specific_config_size >= 2) {
+          uint16_t codec_priv_size = info->audio_specific_config_size;
+          const guint8* codec_priv = reinterpret_cast<const guint8*>(info->audio_specific_config);
+          gst_codec_utils_aac_caps_set_level_and_profile(gst_caps, codec_priv, codec_priv_size);
+        }
+        gchar* caps_str = gst_caps_to_string (gst_caps);
+        primary_caps = caps_str;
+        g_free (caps_str);
+        gst_caps_unref (gst_caps);
+
+        SB_LOG(INFO) << "AAC audio caps from sample info: " << primary_caps;
       }
       return {{primary_caps}, {"audio/aac"}};
     }
@@ -220,12 +232,45 @@ std::vector<std::string> CodecToGstCaps(SbMediaAudioCodec codec, const SbMediaAu
         g_free (caps_str);
         gst_caps_unref (gst_caps);
         gst_buffer_unref (tmp);
+
+        SB_LOG(INFO) << "Opus audio caps from sample info: " << primary_caps;
       }
       return {{primary_caps}};
     }
 
     case kSbMediaAudioCodecVorbis:
       return {{"audio/x-vorbis"}};
+
+    case kSbMediaAudioCodecMp3:
+      return {{"audio/mpeg, mpegversion=1, layer=3"}};
+
+    case kSbMediaAudioCodecFlac:
+      return {{"audio/x-flac"}};
+
+    case kSbMediaAudioCodecPcm: {
+      std::string primary_caps = "audio/x-raw";
+      if (info) {
+        // Starboard doesn't specify audio format in stream info.
+        // There are 2 types devices in SbMediaAudioSampleType, so below is the best guess...
+        const char* format = info->bits_per_sample == 32 ? "F32LE" : "S16LE";
+        int channels = info->number_of_channels;
+
+        GstCaps* gst_caps = gst_caps_new_simple("audio/x-raw",
+          "format", G_TYPE_STRING, format,
+          "rate", G_TYPE_INT, info->samples_per_second,
+          "channels", G_TYPE_INT, channels,
+          "layout", G_TYPE_STRING, "interleaved",
+          "channel-mask", GST_TYPE_BITMASK, gst_audio_channel_get_fallback_mask(channels),
+          nullptr);
+
+        gchar* caps_str = gst_caps_to_string (gst_caps);
+        primary_caps = caps_str;
+        g_free (caps_str);
+        gst_caps_unref (gst_caps);
+      }
+
+      return {{primary_caps}};
+    }
   }
 }
 

@@ -19,9 +19,7 @@
 #include <interfaces/IMemory.h>
 #include <interfaces/IBrowser.h>
 #include <interfaces/IDictionary.h>
-#if defined(PLUGIN_COBALT_ENABLE_FOCUS_IFACE) && PLUGIN_COBALT_ENABLE_FOCUS_IFACE
 #include <interfaces/IFocus.h>
-#endif
 
 extern "C" {
 
@@ -81,10 +79,8 @@ enum StateChangeCommand : uint16_t {
 class CobaltImplementation:
     public Exchange::IBrowser,
     public PluginHost::IStateControl,
-    public Exchange::IDictionary
-#if defined(PLUGIN_COBALT_ENABLE_FOCUS_IFACE) && PLUGIN_COBALT_ENABLE_FOCUS_IFACE
-    , public Exchange::IFocus
-#endif
+    public Exchange::IDictionary,
+    public Exchange::IFocus
 {
 private:
   class Config: public Core::JSON::Container {
@@ -227,11 +223,7 @@ private:
 
     void Schedule(const Core::Time& time)
     {
-#if THUNDER_VERSION == 4
       _scheduled = _worker.Reschedule(time);
-#else
-      _scheduled = _worker.Schedule(time);
-#endif /* Thunder R4 */
     }
 
     void Cancel()
@@ -342,11 +334,7 @@ private:
       SYSLOG(Logging::Notification, (_T("Preload is set to: %s\n"), _preloadEnabled ? "true" : "false"));
 
       if (config.ClosurePolicy.IsSet() == true) {
-#if defined(PLUGIN_COBALT_ENABLE_CLOSUREPOLICY) && PLUGIN_COBALT_ENABLE_CLOSUREPOLICY
         SbRdkSetCobaltExitStrategy(config.ClosurePolicy.Value().data());
-#else
-        SYSLOG(Logging::Notification, (_T("Ignore 'closurepolicy' configuration, support is disabled\n")));
-#endif
       }
 
       SbRdkSetConcealRequestHandler([](void* data)-> int {
@@ -390,7 +378,7 @@ private:
     uint16_t AutoSuspendDelayInSeconds() const { return _autoSuspendDelayInSeconds; }
 
   private:
-    bool Initialize2()
+    uint32_t Initialize() override
     {
       sigset_t mask;
       sigemptyset(&mask);
@@ -398,21 +386,8 @@ private:
       sigaddset(&mask, SIGUSR1);
       sigaddset(&mask, SIGCONT);
       pthread_sigmask(SIG_UNBLOCK, &mask, nullptr);
-      return (true);
-    }
-
-#if THUNDER_VERSION == 4
-    uint32_t Initialize() override
-    {
-      Initialize2();
       return (Core::ERROR_NONE);
     }
-#else
-    bool Initialize() override
-    {
-      return Initialize2();
-    }
-#endif /* Thunder R4 */
 
     void PrepareSbMainArgs(const Config& config)
     {
@@ -660,7 +635,6 @@ public:
     _adminLock.Unlock();
   }
 
-#if defined(PLUGIN_COBALT_ENABLE_FOCUS_IFACE) && PLUGIN_COBALT_ENABLE_FOCUS_IFACE
   // IFocus
   uint32_t Focused(const bool focused) override {
     _adminLock.Lock();
@@ -673,7 +647,6 @@ public:
     _adminLock.Unlock();
     return Core::ERROR_NONE;
   };
-#endif
 
   // IDictionary iface
   void Register(const string& nameSpace, struct IDictionary::INotification* sink) override  {  }
@@ -712,9 +685,7 @@ public:
   INTERFACE_ENTRY (Exchange::IBrowser)
   INTERFACE_ENTRY (PluginHost::IStateControl)
   INTERFACE_ENTRY (Exchange::IDictionary)
-#if defined(PLUGIN_COBALT_ENABLE_FOCUS_IFACE) && PLUGIN_COBALT_ENABLE_FOCUS_IFACE
   INTERFACE_ENTRY (Exchange::IFocus)
-#endif
   END_INTERFACE_MAP
 
 private:

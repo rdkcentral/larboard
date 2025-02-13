@@ -214,8 +214,16 @@ std::vector<std::string> CodecToGstCaps(SbMediaAudioCodec codec, const SbMediaAu
     }
 
     case kSbMediaAudioCodecAc3:
-    case kSbMediaAudioCodecEac3:
-      return {{"audio/x-eac3"}};
+    case kSbMediaAudioCodecEac3: {
+      std::string primary_caps = "audio/x-eac3";
+      if (info) {
+        primary_caps +=
+          ", channels=" + std::to_string(info->number_of_channels) +
+          ", rate=" + std::to_string(info->samples_per_second);
+        SB_LOG(INFO) << "(E)Ac3 audio caps from sample info: " << primary_caps << ", codec specific info size: " << info->audio_specific_config_size;
+      }
+      return {{primary_caps}};
+    }
 
     case kSbMediaAudioCodecOpus: {
       std::string primary_caps = "audio/x-opus, channel-mapping-family=0";
@@ -233,7 +241,7 @@ std::vector<std::string> CodecToGstCaps(SbMediaAudioCodec codec, const SbMediaAu
         gst_caps_unref (gst_caps);
         gst_buffer_unref (tmp);
 
-        SB_LOG(INFO) << "Opus audio caps from sample info: " << primary_caps;
+        SB_LOG(INFO) << "Opus audio caps from sample info: " << primary_caps << ", codec specific info size: " << info->audio_specific_config_size;
       }
       return {{primary_caps}};
     }
@@ -244,14 +252,65 @@ std::vector<std::string> CodecToGstCaps(SbMediaAudioCodec codec, const SbMediaAu
     case kSbMediaAudioCodecMp3:
       return {{"audio/mpeg, mpegversion=1, layer=3"}};
 
-    case kSbMediaAudioCodecFlac:
-      return {{"audio/x-flac"}};
+    case kSbMediaAudioCodecFlac: {
+      std::string primary_caps = "audio/x-flac";
+      if (info) {
+        GstCaps* gst_caps = gst_caps_new_simple("audio/x-flac",
+          "channels", G_TYPE_INT, info->number_of_channels,
+          "rate", G_TYPE_INT, info->samples_per_second,
+          nullptr);
+
+        // MP4 parser includes stream info block in audio_specific_config,
+        // see third_party/chromium/media/formats/mp4/box_definitions.cc:bool FlacSpecificBox::Parse
+        const uint16_t kFlacStreaminfoSize = 34;
+        if (info->audio_specific_config_size == kFlacStreaminfoSize) {
+          GValue array = G_VALUE_INIT;
+          GValue value = G_VALUE_INIT;
+          g_value_init (&array, GST_TYPE_ARRAY);
+          g_value_init (&value, GST_TYPE_BUFFER);
+
+          GstBuffer *block;
+          uint16_t block_plus_hdr_size = info->audio_specific_config_size + 4 + 4;
+          block = gst_buffer_new_allocate(nullptr, block_plus_hdr_size, nullptr);
+          if (block) {
+            GstMapInfo write_info;
+            gst_buffer_map (block, &write_info, GST_MAP_WRITE);
+
+            memcpy (write_info.data, "fLaC", 4); // marker
+            write_info.data[4] = 0x80; // is_last = true, type = 0x0
+            write_info.data[5] = 0x00;
+            write_info.data[6] = (info->audio_specific_config_size & 0xFF00) >> 8;
+            write_info.data[7] = (info->audio_specific_config_size & 0x00FF) >> 0;
+            memcpy(&write_info.data[8], info->audio_specific_config, info->audio_specific_config_size);
+
+            gst_buffer_unmap (block, &write_info);
+
+            gst_value_set_buffer (&value, block);
+            gst_value_array_append_value (&array, &value);
+            gst_buffer_unref (block);
+
+            gst_caps_set_value(gst_caps, "streamheader", &array);
+          }
+
+          g_value_reset (&value);
+          g_value_reset (&array);
+        }
+
+        gchar* caps_str = gst_caps_to_string (gst_caps);
+        primary_caps = caps_str;
+        g_free (caps_str);
+        gst_caps_unref (gst_caps);
+
+        SB_LOG(INFO) << "Flac audio caps from sample info: " << primary_caps << ", codec specific info size: " << info->audio_specific_config_size;
+      }
+      return {{primary_caps}};
+    }
 
     case kSbMediaAudioCodecPcm: {
       std::string primary_caps = "audio/x-raw";
       if (info) {
         // Starboard doesn't specify audio format in stream info.
-        // There are 2 types devices in SbMediaAudioSampleType, so below is the best guess...
+        // There are 2 types defined in SbMediaAudioSampleType, so below is the best guess...
         const char* format = info->bits_per_sample == 32 ? "F32LE" : "S16LE";
         int channels = info->number_of_channels;
 

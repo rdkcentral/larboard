@@ -43,8 +43,70 @@ struct CapsDeleter {
   void operator()(GstCaps* p) { gst_caps_unref(p); }
 };
 
+struct BufferDeleter {
+  void operator()(GstBuffer* p) { gst_buffer_unref(p); }
+};
+
 using UniqueFeatureList = std::unique_ptr<GList, FeatureListDeleter>;
 using UniqueCaps = std::unique_ptr<GstCaps, CapsDeleter>;
+using UniqueBuffer = std::unique_ptr<GstBuffer, BufferDeleter>;
+
+std::vector<UniqueBuffer>
+ParseXiphStreamHeaders (const void* codec_data, gsize codec_data_size) {
+  // Based on isomp4/matroska demuxers
+  std::vector<UniqueBuffer> res;
+  const guint8 *p = reinterpret_cast<const guint8*>(codec_data);
+  gint i, offset;
+  guint last, num_packets;
+  std::vector<guint> length;
+
+  if (codec_data == nullptr || codec_data_size == 0)
+    return {};
+
+  num_packets = p[0] + 1;
+  // unlikely number of packets
+  if (num_packets > 16) {
+    GST_WARNING("too many packets in Xiph header.");
+    return {};
+  }
+
+  length.resize(num_packets);
+  last = 0;
+  offset = 1;
+
+  // first packets, read length values
+  for (i = 0; i < num_packets - 1; i++) {
+    length[i] = 0;
+    while (offset < codec_data_size) {
+      length[i] += p[offset];
+      if (p[offset++] != 0xff)
+        break;
+    }
+    last += length[i];
+  }
+
+  if (offset + last > codec_data_size) {
+    GST_WARNING("Xiph header is out of codec data bounds.");
+    return { };
+  }
+
+  // last packet is the remaining size
+  length[i] = codec_data_size - offset - last;
+
+  for (i = 0; i < num_packets; i++) {
+    GstBuffer *header;
+    if (offset + length[i] > codec_data_size) {
+      GST_WARNING("Xiph header is out of codec data bounds.");
+      return { };
+    }
+    header = gst_buffer_new_wrapped (g_memdup (p + offset, length[i]), length[i]);
+    GST_BUFFER_FLAG_SET (header, GST_BUFFER_FLAG_HEADER);
+    res.push_back(UniqueBuffer { header });
+    offset += length[i];
+  }
+
+  return res;
+}
 
 UniqueFeatureList GetFactoryForCaps(GList* elements,
                                     UniqueCaps&& caps,
@@ -246,8 +308,41 @@ std::vector<std::string> CodecToGstCaps(SbMediaAudioCodec codec, const SbMediaAu
       return {{primary_caps}};
     }
 
-    case kSbMediaAudioCodecVorbis:
-      return {{"audio/x-vorbis"}};
+    case kSbMediaAudioCodecVorbis: {
+      std::string primary_caps = "audio/x-vorbis";
+      if (info) {
+        GstCaps* gst_caps = gst_caps_new_simple("audio/x-vorbis",
+          "channels", G_TYPE_INT, info->number_of_channels,
+          "rate", G_TYPE_INT, info->samples_per_second,
+          nullptr);
+
+        auto headers = ParseXiphStreamHeaders(info->audio_specific_config, info->audio_specific_config_size);
+        if (!headers.empty()) {
+          GValue array = G_VALUE_INIT;
+          GValue value = G_VALUE_INIT;
+
+          g_value_init (&array, GST_TYPE_ARRAY);
+          g_value_init (&value, GST_TYPE_BUFFER);
+
+          for (const auto &hdr : headers) {
+            gst_value_set_buffer (&value, hdr.get());
+            gst_value_array_append_value (&array, &value);
+          }
+
+          gst_caps_set_value(gst_caps, "streamheader", &array);
+          g_value_reset (&value);
+          g_value_reset (&array);
+        }
+
+        gchar* caps_str = gst_caps_to_string (gst_caps);
+        primary_caps = caps_str;
+        g_free (caps_str);
+        gst_caps_unref (gst_caps);
+
+        SB_LOG(INFO) << "Vorbis audio caps from sample info: " << primary_caps << ", codec specific info size: " << info->audio_specific_config_size;
+      }
+      return {{primary_caps}};
+    }
 
     case kSbMediaAudioCodecMp3:
       return {{"audio/mpeg, mpegversion=1, layer=3"}};
@@ -284,6 +379,8 @@ std::vector<std::string> CodecToGstCaps(SbMediaAudioCodec codec, const SbMediaAu
             memcpy(&write_info.data[8], info->audio_specific_config, info->audio_specific_config_size);
 
             gst_buffer_unmap (block, &write_info);
+
+            GST_BUFFER_FLAG_SET (block, GST_BUFFER_FLAG_HEADER);
 
             gst_value_set_buffer (&value, block);
             gst_value_array_append_value (&array, &value);

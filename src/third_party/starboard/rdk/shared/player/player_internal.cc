@@ -891,6 +891,17 @@ static GstElement* CreateGstElement(const gchar* factory_name, const gchar* name
   return result;
 }
 
+static void PushStreamHeaders(GstAppSrc* src, GstCaps* caps) {
+  const GstStructure* s = gst_caps_get_structure (caps, 0);
+  const GValue *streamheader = gst_structure_get_value (s, "streamheader");
+  g_return_if_fail (G_VALUE_HOLDS (streamheader, GST_TYPE_ARRAY));
+  for (guint i = 0; i < gst_value_array_get_size (streamheader); ++i) {
+    const GValue *header = gst_value_array_get_value (streamheader, i);
+    g_return_if_fail (G_VALUE_HOLDS (header, GST_TYPE_BUFFER));
+    gst_app_src_push_buffer(src, gst_buffer_ref(gst_value_get_buffer (header)));
+  }
+}
+
 }  // namespace
 
 // ********************************* Player ******************************** //
@@ -2153,6 +2164,8 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
         GstCaps* gst_caps = gst_caps_from_string(caps[0].c_str());
         PrintGstCaps(gst_caps);
         gst_app_src_set_caps(GST_APP_SRC(audio_appsrc_), gst_caps);
+        if ( audio_codec_ == kSbMediaAudioCodecVorbis )
+          PushStreamHeaders(GST_APP_SRC(audio_appsrc_), gst_caps);
         gst_caps_replace(&audio_caps_, gst_caps);
         gst_caps_unref(gst_caps);
       }

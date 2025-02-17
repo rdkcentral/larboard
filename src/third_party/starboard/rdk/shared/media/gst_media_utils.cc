@@ -35,6 +35,9 @@ namespace shared {
 namespace media {
 namespace {
 
+GST_DEBUG_CATEGORY(cobalt_gst_media_utils);
+#define GST_CAT_DEFAULT cobalt_gst_media_utils
+
 struct FeatureListDeleter {
   void operator()(GList* p) { gst_plugin_feature_list_free(p); }
 };
@@ -109,10 +112,16 @@ ParseXiphStreamHeaders (const void* codec_data, gsize codec_data_size) {
 }
 
 UniqueFeatureList GetFactoryForCaps(GList* elements,
-                                    UniqueCaps&& caps,
+                                    const UniqueCaps& caps,
                                     GstPadDirection direction) {
-  SB_DLOG(INFO) << __FUNCTION__ << ": " << gst_caps_to_string(caps.get());
   SB_DCHECK(direction != GST_PAD_UNKNOWN);
+#ifndef GST_DISABLE_GST_DEBUG
+  if (gst_debug_category_get_threshold(GST_CAT_DEFAULT) >= GST_LEVEL_DEBUG) {
+    gchar *caps_str = gst_caps_to_string(caps.get());
+    GST_DEBUG ("caps: %s", caps_str);
+    g_free(caps_str);
+  }
+#endif
   UniqueFeatureList candidates{
       gst_element_factory_list_filter(elements, caps.get(), direction, false)};
   return candidates;
@@ -122,6 +131,8 @@ template <typename C>
 bool GstRegistryHasElementForCodecImpl(C codec) {
   static_assert(std::is_same<C, SbMediaVideoCodec>::value ||
                 std::is_same<C, SbMediaAudioCodec>::value, "Invalid codec");
+  GST_DEBUG_CATEGORY_INIT(cobalt_gst_media_utils, "cobaltmediautils", 0,
+                          "Cobalt GStreamer Utils");
   auto type = std::is_same<C, SbMediaVideoCodec>::value
                   ? GST_ELEMENT_FACTORY_TYPE_MEDIA_VIDEO
                   : GST_ELEMENT_FACTORY_TYPE_MEDIA_AUDIO;
@@ -129,65 +140,52 @@ bool GstRegistryHasElementForCodecImpl(C codec) {
       GST_ELEMENT_FACTORY_TYPE_DECODER | type, GST_RANK_MARGINAL)};
 
   UniqueFeatureList elements;
-  std::vector<std::string> caps;
 
-  caps = CodecToGstCaps(codec);
-  if (caps.empty()) {
-    SB_DLOG(INFO) << "No caps for codec " << codec;
+  UniqueCaps caps { CodecToGstCaps(codec) };
+  if (!caps) {
+    GST_DEBUG("No caps for codec: %u", codec);
     return false;
   }
 
-  for (auto single_caps : caps) {
-    UniqueCaps gst_caps{gst_caps_from_string(single_caps.c_str())};
-    elements = std::move(GetFactoryForCaps(decoder_factories.get(),
-                                           std::move(gst_caps), GST_PAD_SINK));
-    if (elements) {
-      SB_DLOG(INFO) << "Found decoder for " << single_caps;
-      break;
-    }
-  }
-
+  elements = std::move(GetFactoryForCaps(decoder_factories.get(), caps, GST_PAD_SINK));
   if (elements) {
     // Decoder is there.
+    GST_DEBUG("Found decoder for codec: %u, caps: %" GST_PTR_FORMAT, codec, caps.get());
     return true;
   }
 
   UniqueFeatureList parser_factories{gst_element_factory_list_get_elements(
       GST_ELEMENT_FACTORY_TYPE_PARSER | type, GST_RANK_MARGINAL)};
 
-  SB_DLOG(INFO) << "No decoder for codec " << codec << ". Falling back to parsers.";
+  GST_DEBUG("No decoder for codec: %u. Falling back to parsers.", codec);
   // No decoder. Check if there's a parser and a decoder accepting its caps.
-  for (auto single_caps : caps) {
-    UniqueCaps gst_caps{gst_caps_from_string(single_caps.c_str())};
-    elements = std::move(GetFactoryForCaps(parser_factories.get(),
-                                           std::move(gst_caps), GST_PAD_SINK));
-    if (elements) {
-      for (GList* iter = elements.get(); iter; iter = iter->next) {
-        GstElementFactory* gst_element_factory =
-            static_cast<GstElementFactory*>(iter->data);
-        const GList* pad_templates =
-            gst_element_factory_get_static_pad_templates(gst_element_factory);
-        for (const GList* pad_templates_iter = pad_templates;
-             pad_templates_iter;
-             pad_templates_iter = pad_templates_iter->next) {
-          GstStaticPadTemplate* pad_template =
-              static_cast<GstStaticPadTemplate*>(pad_templates_iter->data);
-          if (pad_template->direction == GST_PAD_SRC) {
-            UniqueCaps pad_caps{gst_static_pad_template_get_caps(pad_template)};
-            if (GetFactoryForCaps(decoder_factories.get(), std::move(pad_caps),
-                                  GST_PAD_SINK)) {
-              SB_DLOG(INFO) << "Found parser for " << single_caps
-                            << " and decoder"
-                               " accepting parser's src caps.";
-              return true;
-            }
+  elements = std::move(GetFactoryForCaps(parser_factories.get(), caps, GST_PAD_SINK));
+  if (elements) {
+    for (GList* iter = elements.get(); iter; iter = iter->next) {
+      GstElementFactory* gst_element_factory =
+        static_cast<GstElementFactory*>(iter->data);
+      const GList* pad_templates =
+        gst_element_factory_get_static_pad_templates(gst_element_factory);
+      for (const GList* pad_templates_iter = pad_templates;
+         pad_templates_iter;
+         pad_templates_iter = pad_templates_iter->next) {
+        GstStaticPadTemplate* pad_template =
+          static_cast<GstStaticPadTemplate*>(pad_templates_iter->data);
+        if (pad_template->direction == GST_PAD_SRC) {
+          UniqueCaps pad_caps{gst_static_pad_template_get_caps(pad_template)};
+          if (GetFactoryForCaps(decoder_factories.get(), pad_caps, GST_PAD_SINK)) {
+            GST_DEBUG("Found parser and decoder for codec: %u with caps: %" GST_PTR_FORMAT " "
+                      "accepting parser's src caps: %" GST_PTR_FORMAT ".",
+                      codec, caps.get(), pad_caps.get());
+            return true;
           }
         }
       }
     }
   }
 
-  SB_LOG(WARNING) << "Can not play codec " << codec;
+  SB_LOG(WARNING) << "Can not play codec: " << codec
+                  << ", media type: " << gst_structure_get_name(gst_caps_get_structure(caps.get(), 0));
   return false;
 }
 
@@ -214,49 +212,66 @@ bool GstRegistryHasElementForMediaType(SbMediaAudioCodec codec) {
   return GstRegistryHasElementForCodec(codec);
 }
 
-std::vector<std::string> CodecToGstCaps(SbMediaVideoCodec codec) {
+GstCaps* CodecToGstCaps(SbMediaVideoCodec codec) {
   switch (codec) {
     default:
     case kSbMediaVideoCodecNone:
-      return {};
+      return nullptr;
 
     case kSbMediaVideoCodecH264:
-      return {{"video/x-h264, stream-format=byte-stream, alignment=nal"}};
+      return gst_caps_new_simple ("video/x-h264",
+       "stream-format", G_TYPE_STRING, "byte-stream",
+       "alignment", G_TYPE_STRING, "nal", nullptr);
 
     case kSbMediaVideoCodecH265:
-      return {{"video/x-h265"}};
+      return gst_caps_new_empty_simple ("video/x-h265");
 
     case kSbMediaVideoCodecMpeg2:
-      return {{"video/mpeg, mpegversion=(int) 2"}};
+      return gst_caps_new_simple ("video/mpeg",
+       "mpegversion", G_TYPE_INT, 2, nullptr);
 
     case kSbMediaVideoCodecTheora:
-      return {{"video/x-theora"}};
+      return gst_caps_new_empty_simple ("video/x-theora");
 
     case kSbMediaVideoCodecVc1:
-      return {{"video/x-vc1"}};
+      return gst_caps_new_empty_simple ("video/x-vc1");
 
     case kSbMediaVideoCodecAv1:
-      return {{"video/x-av1"}};
+      return gst_caps_new_empty_simple ("video/x-av1");
 
     case kSbMediaVideoCodecVp8:
-      return {{"video/x-vp8"}};
+      return gst_caps_new_empty_simple ("video/x-vp8");
 
     case kSbMediaVideoCodecVp9:
-      return {{"video/x-vp9"}};
+      return gst_caps_new_empty_simple ("video/x-vp9");
   }
 }
 
-std::vector<std::string> CodecToGstCaps(SbMediaAudioCodec codec, const SbMediaAudioStreamInfo* info) {
+GstCaps* CodecToGstCaps(SbMediaAudioCodec codec, const SbMediaAudioStreamInfo* info) {
+  GstCaps* gst_caps = nullptr;
+  if (info) {
+    GST_DEBUG ("audio stream info: codec %u, mime '%s', channels %u, rate %u, bps %u",
+               codec, info->mime,
+               static_cast<uint32_t> (info->number_of_channels),
+               static_cast<uint32_t> (info->samples_per_second),
+               static_cast<uint32_t> (info->bits_per_sample));
+    GST_MEMDUMP ("audio specific config",
+                 reinterpret_cast<const guint8*>(info->audio_specific_config),
+                 info->audio_specific_config_size);
+  }
+
   switch (codec) {
     default:
     case kSbMediaAudioCodecNone:
-      return {};
+      break;
 
     case kSbMediaAudioCodecAac: {
-      std::string primary_caps = "audio/mpeg, mpegversion=4";
+      gst_caps = gst_caps_new_simple (
+        "audio/mpeg",
+        "mpegversion", G_TYPE_INT, 4,
+        nullptr);
       if (info) {
-        GstCaps* gst_caps = gst_caps_new_simple("audio/mpeg",
-          "mpegversion", G_TYPE_INT, 4,
+        gst_caps_set_simple (gst_caps,
           "channels", G_TYPE_INT, info->number_of_channels,
           "rate", G_TYPE_INT, info->samples_per_second,
           nullptr);
@@ -265,53 +280,40 @@ std::vector<std::string> CodecToGstCaps(SbMediaAudioCodec codec, const SbMediaAu
           const guint8* codec_priv = reinterpret_cast<const guint8*>(info->audio_specific_config);
           gst_codec_utils_aac_caps_set_level_and_profile(gst_caps, codec_priv, codec_priv_size);
         }
-        gchar* caps_str = gst_caps_to_string (gst_caps);
-        primary_caps = caps_str;
-        g_free (caps_str);
-        gst_caps_unref (gst_caps);
-
-        SB_LOG(INFO) << "AAC audio caps from sample info: " << primary_caps;
       }
-      return {{primary_caps}, {"audio/aac"}};
+      break;
     }
 
     case kSbMediaAudioCodecAc3:
     case kSbMediaAudioCodecEac3: {
-      std::string primary_caps = "audio/x-eac3";
+      gst_caps = gst_caps_new_empty_simple ("audio/x-eac3");
       if (info) {
-        primary_caps +=
-          ", channels=" + std::to_string(info->number_of_channels) +
-          ", rate=" + std::to_string(info->samples_per_second);
-        SB_LOG(INFO) << "(E)Ac3 audio caps from sample info: " << primary_caps << ", codec specific info size: " << info->audio_specific_config_size;
+        gst_caps_set_simple(gst_caps,
+          "channels", G_TYPE_INT, info->number_of_channels,
+          "rate", G_TYPE_INT, info->samples_per_second,
+          nullptr);
       }
-      return {{primary_caps}};
+      break;
     }
 
     case kSbMediaAudioCodecOpus: {
-      std::string primary_caps = "audio/x-opus, channel-mapping-family=0";
+      gst_caps = gst_caps_new_simple ( "audio/x-opus",
+        "channel-mapping-family", G_TYPE_INT, 0, nullptr);
       if (info && info->audio_specific_config_size >= 19) {
         uint16_t codec_priv_size = info->audio_specific_config_size;
         const void* codec_priv = info->audio_specific_config;
 
         GstBuffer *tmp = gst_buffer_new_wrapped (g_memdup (codec_priv, codec_priv_size), codec_priv_size);
-        GstCaps* gst_caps = gst_codec_utils_opus_create_caps_from_header (tmp, NULL);
-        gchar* caps_str = gst_caps_to_string (gst_caps);
-
-        primary_caps = caps_str;
-
-        g_free (caps_str);
-        gst_caps_unref (gst_caps);
+        gst_caps_take (&gst_caps, gst_codec_utils_opus_create_caps_from_header (tmp, NULL));
         gst_buffer_unref (tmp);
-
-        SB_LOG(INFO) << "Opus audio caps from sample info: " << primary_caps << ", codec specific info size: " << info->audio_specific_config_size;
       }
-      return {{primary_caps}};
+      break;
     }
 
     case kSbMediaAudioCodecVorbis: {
-      std::string primary_caps = "audio/x-vorbis";
+      gst_caps = gst_caps_new_empty_simple ( "audio/x-vorbis" );
       if (info) {
-        GstCaps* gst_caps = gst_caps_new_simple("audio/x-vorbis",
+        gst_caps_set_simple(gst_caps,
           "channels", G_TYPE_INT, info->number_of_channels,
           "rate", G_TYPE_INT, info->samples_per_second,
           nullptr);
@@ -333,24 +335,28 @@ std::vector<std::string> CodecToGstCaps(SbMediaAudioCodec codec, const SbMediaAu
           g_value_reset (&value);
           g_value_reset (&array);
         }
-
-        gchar* caps_str = gst_caps_to_string (gst_caps);
-        primary_caps = caps_str;
-        g_free (caps_str);
-        gst_caps_unref (gst_caps);
-
-        SB_LOG(INFO) << "Vorbis audio caps from sample info: " << primary_caps << ", codec specific info size: " << info->audio_specific_config_size;
       }
-      return {{primary_caps}};
+      break;
     }
 
-    case kSbMediaAudioCodecMp3:
-      return {{"audio/mpeg, mpegversion=1, layer=3"}};
+    case kSbMediaAudioCodecMp3: {
+      gst_caps = gst_caps_new_simple ( "audio/mpeg",
+        "mpegversion", G_TYPE_INT, 1,
+        "layer", G_TYPE_INT, 3,
+        nullptr);
+      if (info) {
+        gst_caps_set_simple(gst_caps,
+          "channels", G_TYPE_INT, info->number_of_channels,
+          "rate", G_TYPE_INT, info->samples_per_second,
+          nullptr);
+      }
+      break;
+    }
 
     case kSbMediaAudioCodecFlac: {
-      std::string primary_caps = "audio/x-flac";
+      gst_caps = gst_caps_new_empty_simple ( "audio/x-flac" );
       if (info) {
-        GstCaps* gst_caps = gst_caps_new_simple("audio/x-flac",
+        gst_caps_set_simple(gst_caps,
           "channels", G_TYPE_INT, info->number_of_channels,
           "rate", G_TYPE_INT, info->samples_per_second,
           nullptr);
@@ -392,42 +398,39 @@ std::vector<std::string> CodecToGstCaps(SbMediaAudioCodec codec, const SbMediaAu
           g_value_reset (&value);
           g_value_reset (&array);
         }
-
-        gchar* caps_str = gst_caps_to_string (gst_caps);
-        primary_caps = caps_str;
-        g_free (caps_str);
-        gst_caps_unref (gst_caps);
-
-        SB_LOG(INFO) << "Flac audio caps from sample info: " << primary_caps << ", codec specific info size: " << info->audio_specific_config_size;
       }
-      return {{primary_caps}};
+      break;
     }
 
     case kSbMediaAudioCodecPcm: {
-      std::string primary_caps = "audio/x-raw";
+      gst_caps = gst_caps_new_empty_simple ( "audio/x-raw" );
       if (info) {
         // Starboard doesn't specify audio format in stream info.
         // There are 2 types defined in SbMediaAudioSampleType, so below is the best guess...
         const char* format = info->bits_per_sample == 32 ? "F32LE" : "S16LE";
         int channels = info->number_of_channels;
-
-        GstCaps* gst_caps = gst_caps_new_simple("audio/x-raw",
+        gst_caps_set_simple(gst_caps,
           "format", G_TYPE_STRING, format,
           "rate", G_TYPE_INT, info->samples_per_second,
           "channels", G_TYPE_INT, channels,
           "layout", G_TYPE_STRING, "interleaved",
           "channel-mask", GST_TYPE_BITMASK, gst_audio_channel_get_fallback_mask(channels),
           nullptr);
-
-        gchar* caps_str = gst_caps_to_string (gst_caps);
-        primary_caps = caps_str;
-        g_free (caps_str);
-        gst_caps_unref (gst_caps);
       }
-
-      return {{primary_caps}};
+      break;
     }
   }
+
+#ifndef GST_DISABLE_GST_DEBUG
+  if (gst_debug_category_get_threshold(GST_CAT_DEFAULT) >= GST_LEVEL_DEBUG) {
+    gchar *caps_str = gst_caps ? gst_caps_to_string(gst_caps) : nullptr;
+    GST_DEBUG ("codec: %u, caps: %s", codec, caps_str);
+    g_free(caps_str);
+  }
+#endif
+
+  return gst_caps;
+
 }
 
 }  // namespace media

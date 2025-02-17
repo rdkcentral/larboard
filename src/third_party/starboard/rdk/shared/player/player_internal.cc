@@ -2145,9 +2145,8 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
       frame_width_ = info.frame_width;
       frame_height_ = info.frame_height;
       color_metadata_ = info.color_metadata;
-      auto caps = CodecToGstCaps(video_codec_);
-      if (!caps.empty()) {
-        GstCaps* gst_caps = gst_caps_from_string(caps[0].c_str());
+      GstCaps* gst_caps = CodecToGstCaps(video_codec_);
+      if (gst_caps) {
         AddVideoInfoToGstCaps(info, gst_caps);
         PrintGstCaps(gst_caps);
         gst_app_src_set_caps(GST_APP_SRC(video_appsrc_), gst_caps);
@@ -2165,12 +2164,11 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
 
     if ( audio_caps_ == nullptr ) {
       const auto& audio_info = sample_infos[0].audio_sample_info.stream_info;
-      auto caps = CodecToGstCaps(audio_codec_, &audio_info);
-      if (!caps.empty() && caps[0].c_str()) {
-        GstCaps* gst_caps = gst_caps_from_string(caps[0].c_str());
+      GstCaps* gst_caps = CodecToGstCaps(audio_codec_, &audio_info);
+      if (gst_caps) {
         PrintGstCaps(gst_caps);
         gst_app_src_set_caps(GST_APP_SRC(audio_appsrc_), gst_caps);
-        if ( audio_codec_ == kSbMediaAudioCodecVorbis )
+        if (audio_codec_ == kSbMediaAudioCodecVorbis || audio_codec_ == kSbMediaAudioCodecFlac)
           PushStreamHeaders(GST_APP_SRC(audio_appsrc_), gst_caps);
         gst_caps_replace(&audio_caps_, gst_caps);
         gst_caps_unref(gst_caps);

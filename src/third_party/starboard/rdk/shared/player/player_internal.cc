@@ -2087,16 +2087,15 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
                 "count");
   SB_DCHECK(number_of_sample_infos == kMaxNumberOfSamplesPerWrite);
   g_return_if_fail(sample_infos[0].buffer_size > 0);
-  g_return_if_fail(sample_infos[0].timestamp >= 0);
   // For debuggin purposes it could be usefull to disable audio or video
   // in this case just drop the sample
   if (audio_codec_ == kSbMediaAudioCodecNone && sample_type == kSbMediaTypeAudio) {
-      sample_deallocate_func_(player_, context_, sample_infos[0].buffer);
-      return;
+    sample_deallocate_func_(player_, context_, sample_infos[0].buffer);
+    return;
   }
   if (video_codec_ == kSbMediaVideoCodecNone && sample_type == kSbMediaTypeVideo) {
-      sample_deallocate_func_(player_, context_, sample_infos[0].buffer);
-      return;
+    sample_deallocate_func_(player_, context_, sample_infos[0].buffer);
+    return;
   }
 
   gsize buffer_size = static_cast<gsize>(sample_infos[0].buffer_size);
@@ -2128,7 +2127,14 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
   sample_deallocate_func_(player_, context_, sample_infos[0].buffer);
 #endif
 
-  GstClockTime timestamp = static_cast<GstClockTime>(sample_infos[0].timestamp * GST_USECOND);
+  int64_t sample_timestamp = sample_infos[0].timestamp;
+  if (sample_timestamp < 0) {
+    // FIXME: figure out how to handle negative timestamps properly
+    GST_WARNING_OBJECT(pipeline_, "Negative timestamp %" G_GINT64_FORMAT ", reseting to 0", sample_timestamp);
+    sample_timestamp = 0;
+  }
+
+  GstClockTime timestamp = static_cast<GstClockTime>(sample_timestamp * GST_USECOND);
   GST_BUFFER_TIMESTAMP(buffer) = timestamp;
 
   if (sample_infos[0].type == kSbMediaTypeVideo) {

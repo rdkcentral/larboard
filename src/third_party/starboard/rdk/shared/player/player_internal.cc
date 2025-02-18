@@ -3057,17 +3057,18 @@ void PlayerImpl::AddBufferingProbe(GstClockTime target, int ticket) {
 
   buffering_state_ = 0;
 
-  target +=  160 * GST_MSECOND;
+  const GstClockTime kAudioBufferTarget = 100 * GST_MSECOND;
+  const GstClockTime kVideoBufferTarget = 160 * GST_MSECOND;
 
   if (audio_appsrc_ && audio_codec_ != kSbMediaAudioCodecNone) {
-    if (add_probe(audio_appsrc_, target, ticket, buffering_probe_callback) != 0u)
+    if (add_probe(audio_appsrc_, target + kAudioBufferTarget, ticket, buffering_probe_callback) != 0u)
       buffering_state_ |= static_cast<int>(MediaType::kAudio);
     else
       GST_WARNING_OBJECT(audio_appsrc_, "Could not add buffering probe!");
   }
 
   if (video_appsrc_ && video_codec_ != kSbMediaVideoCodecNone) {
-    if (add_probe(video_appsrc_, target, ticket, buffering_probe_callback) != 0u)
+    if (add_probe(video_appsrc_, target + kVideoBufferTarget, ticket, buffering_probe_callback) != 0u)
       buffering_state_ |= static_cast<int>(MediaType::kVideo);
     else
       GST_WARNING_OBJECT(video_appsrc_, "Could not add buffering probe!");

@@ -111,6 +111,11 @@ ParseXiphStreamHeaders (const void* codec_data, gsize codec_data_size) {
   return res;
 }
 
+bool IsAudioRawCaps(const UniqueCaps& caps) {
+  const gchar* media_type = gst_structure_get_name (gst_caps_get_structure(caps.get(), 0));
+  return g_strcmp0 ("audio/x-raw", media_type) == 0;
+}
+
 UniqueFeatureList GetFactoryForCaps(GList* elements,
                                     const UniqueCaps& caps,
                                     GstPadDirection direction) {
@@ -152,6 +157,16 @@ bool GstRegistryHasElementForCodecImpl(C codec) {
     // Decoder is there.
     GST_DEBUG("Found decoder for codec: %u, caps: %" GST_PTR_FORMAT, codec, caps.get());
     return true;
+  }
+
+  if (IsAudioRawCaps (caps)) {
+    UniqueFeatureList sink_factories{gst_element_factory_list_get_elements(
+            GST_ELEMENT_FACTORY_TYPE_SINK | type, GST_RANK_MARGINAL)};
+    elements = std::move(GetFactoryForCaps(sink_factories.get(), caps, GST_PAD_SINK));
+    if (elements) {
+      GST_DEBUG("Found sink for codec: %u, caps: %" GST_PTR_FORMAT, codec, caps.get());
+      return true;
+    }
   }
 
   UniqueFeatureList parser_factories{gst_element_factory_list_get_elements(

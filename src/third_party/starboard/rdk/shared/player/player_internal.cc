@@ -2400,10 +2400,8 @@ void PlayerImpl::HandleInititialSeek(::starboard::ScopedLock& lock) {
 
   // Ask for data.
   if (state_ == State::kInitialPreroll) {
-    MediaType need_data = static_cast<MediaType>(
-      static_cast<int>(MediaType::kBoth) & need_first_segment_ack_ );
-    if (need_data != MediaType::kNone)
-      DecoderNeedsData(lock, need_data);
+    MediaType need_data = GetBothMediaTypeTakingCodecsIntoAccount();
+    DecoderNeedsData(lock, need_data);
   }
 
 #if GST_CHECK_VERSION(1, 18, 0)

@@ -224,7 +224,9 @@ GstCaps* CodecToGstCaps(SbMediaVideoCodec codec) {
        "alignment", G_TYPE_STRING, "nal", nullptr);
 
     case kSbMediaVideoCodecH265:
-      return gst_caps_new_empty_simple ("video/x-h265");
+      return gst_caps_new_simple ("video/x-h265",
+       "stream-format", G_TYPE_STRING, "byte-stream",
+       "alignment", G_TYPE_STRING, "nal", nullptr);
 
     case kSbMediaVideoCodecMpeg2:
       return gst_caps_new_simple ("video/mpeg",

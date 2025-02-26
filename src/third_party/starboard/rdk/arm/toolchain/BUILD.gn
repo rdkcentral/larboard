@@ -28,7 +28,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import("//starboard/build/toolchain/cobalt_toolchains.gni")
 import("//third_party/starboard/rdk/shared/build/rdk_toolchain.gni")
+
+cobalt_clang_toolchain("cobalt") {
+  native_linker_path = getenv("CXX")
+}
+
+rdk_gcc_toolchain("starboard") {
+  envprefix = ""
+}
 
 rdk_gcc_toolchain("target") {
   envprefix = ""

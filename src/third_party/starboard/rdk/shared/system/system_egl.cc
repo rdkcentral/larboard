@@ -44,7 +44,7 @@
 // disable until essos updated
 #undef EGL_PLATFORM_WAYLAND_EXT
 #ifdef EGL_PLATFORM_WAYLAND_EXT
-EssAppPlatformDisplayType EssContextGetAppPlatformDisplayType( EssCtx *ctx ) __attribute__((weak));
+extern "C" EssAppPlatformDisplayType EssContextGetAppPlatformDisplayType( EssCtx *ctx ) __attribute__((weak));
 #endif
 
 #if !defined(EGL_VERSION_1_0) || !defined(EGL_VERSION_1_1) || \

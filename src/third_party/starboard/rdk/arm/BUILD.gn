@@ -43,3 +43,9 @@ static_library("starboard_platform") {
     "thread_types_public.h",
   ]
 }
+
+if (build_with_separate_cobalt_toolchain) {
+  group("starboard_platform_with_main") {
+    deps = [ "//third_party/starboard/rdk/shared:starboard_platform_with_main" ]
+  }
+}

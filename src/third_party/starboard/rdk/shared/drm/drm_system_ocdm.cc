@@ -558,12 +558,19 @@ DrmSystemOcdm::DrmSystemOcdm(
 }
 
 DrmSystemOcdm::~DrmSystemOcdm() {
+  SB_CHECK(ocdm_system_ == nullptr);
+}
+
+void DrmSystemOcdm::Invalidate() {
+  OpenCDMSystem* ocdm_system = nullptr;
   {
     ::starboard::ScopedLock lock(mutex_);
     if (event_id_ != kSbEventIdInvalid)
       SbEventCancel(event_id_);
+    ocdm_system = std::exchange(ocdm_system_, nullptr);
   }
-  opencdm_destruct_system(ocdm_system_);
+  if (ocdm_system)
+    opencdm_destruct_system(ocdm_system);
 }
 
 // static
@@ -577,6 +584,7 @@ void DrmSystemOcdm::GenerateSessionUpdateRequest(
     const char* type,
     const void* initialization_data,
     int initialization_data_size) {
+  SB_CHECK(ocdm_system_ != nullptr);
   SB_LOG(INFO) << "Generate challenge type: " << type;
   std::unique_ptr<Session> session(
       new Session(this, ocdm_system_, context_,
@@ -614,6 +622,7 @@ void DrmSystemOcdm::CloseSession(const void* session_id, int session_id_size) {
 void DrmSystemOcdm::UpdateServerCertificate(int ticket,
                                             const void* certificate,
                                             int certificate_size) {
+  SB_CHECK(ocdm_system_ != nullptr);
   auto status = opencdm_system_set_server_certificate(
       ocdm_system_, static_cast<const uint8_t*>(certificate), certificate_size);
 
@@ -731,6 +740,7 @@ void DrmSystemOcdm::AnnounceKeys() {
 
 std::string DrmSystemOcdm::SessionIdByKeyId(const uint8_t* key,
                                             uint8_t key_len) {
+  SB_CHECK(ocdm_system_ != nullptr);
   pthread_mutex_lock(&g_session_dtor_mutex_);
   ScopedOcdmSession session{
       opencdm_get_system_session(ocdm_system_, key, key_len, 0)};
@@ -754,6 +764,8 @@ int DrmSystemOcdm::Decrypt(const std::string& id,
 const void* DrmSystemOcdm::GetMetrics(int* size) {
   if ( !g_ocdmGetMetricSystemData )
     return nullptr;
+
+  SB_CHECK(ocdm_system_ != nullptr);
 
   const int kMaxRetry = 5;
   for (int i = 0; i < kMaxRetry; ++i) {

@@ -22,6 +22,8 @@
 
 #include "starboard/media.h"
 
+typedef struct _GstCaps GstCaps;
+
 namespace third_party {
 namespace starboard {
 namespace rdk {
@@ -30,11 +32,8 @@ namespace media {
 
 bool GstRegistryHasElementForMediaType(SbMediaVideoCodec codec);
 bool GstRegistryHasElementForMediaType(SbMediaAudioCodec codec);
-std::vector<std::string> CodecToGstCaps(
-    SbMediaAudioCodec codec,
-    const SbMediaAudioStreamInfo* info = nullptr
-);
-std::vector<std::string> CodecToGstCaps(SbMediaVideoCodec codec);
+GstCaps* CodecToGstCaps(SbMediaAudioCodec codec, const SbMediaAudioStreamInfo* info = nullptr);
+GstCaps* CodecToGstCaps(SbMediaVideoCodec codec);
 
 }  // namespace media
 }  // namespace shared

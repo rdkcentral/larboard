@@ -50,6 +50,9 @@
 #include "third_party/starboard/rdk/shared/media/gst_media_utils.h"
 #include "third_party/starboard/rdk/shared/hang_detector.h"
 #include "third_party/starboard/rdk/shared/drm/gst_decryptor_ocdm.h"
+#if defined(HAS_OCDM)
+#include "third_party/starboard/rdk/shared/drm/drm_system_ocdm.h"
+#endif
 
 namespace third_party {
 namespace starboard {
@@ -888,6 +891,17 @@ static GstElement* CreateGstElement(const gchar* factory_name, const gchar* name
   return result;
 }
 
+static void PushStreamHeaders(GstAppSrc* src, GstCaps* caps) {
+  const GstStructure* s = gst_caps_get_structure (caps, 0);
+  const GValue *streamheader = gst_structure_get_value (s, "streamheader");
+  g_return_if_fail (G_VALUE_HOLDS (streamheader, GST_TYPE_ARRAY));
+  for (guint i = 0; i < gst_value_array_get_size (streamheader); ++i) {
+    const GValue *header = gst_value_array_get_value (streamheader, i);
+    g_return_if_fail (G_VALUE_HOLDS (header, GST_TYPE_BUFFER));
+    gst_app_src_push_buffer(src, gst_buffer_ref(gst_value_get_buffer (header)));
+  }
+}
+
 }  // namespace
 
 // ********************************* Player ******************************** //
@@ -1439,8 +1453,8 @@ PlayerImpl::PlayerImpl(SbPlayer player,
   hang_monitor_source_id_ = g_source_attach(src, main_loop_context_);
   g_source_unref(src);
 
-  GST_INFO_OBJECT(pipeline_,"Creating player with max capabilities: '%s'",
-           max_video_capabilities);
+  GST_INFO_OBJECT(pipeline_,"Creating player with max capabilities: '%s', audio codec: 0x%x, video codec: 0x%x",
+                  max_video_capabilities, audio_codec_, video_codec_);
 
   GstElementFactory* src_factory = gst_element_factory_find("cobaltsrc");
   if (!src_factory) {
@@ -1500,6 +1514,10 @@ PlayerImpl::PlayerImpl(SbPlayer player,
   }
 
   if (drm_system_) {
+#if defined(HAS_OCDM)
+    using third_party::starboard::rdk::shared::drm::DrmSystemOcdm;
+    reinterpret_cast<DrmSystemOcdm*>( drm_system_ )->AddRef();
+#endif
     GstContext* context = gst_context_new("cobalt-drm-system", FALSE);
     GstStructure* context_structure = gst_context_writable_structure(context);
     gst_structure_set(context_structure, "drm-system-instance", G_TYPE_POINTER, drm_system_, nullptr);
@@ -1561,6 +1579,12 @@ PlayerImpl::~PlayerImpl() {
   g_main_context_unref(main_loop_context_);
   GST_INFO_OBJECT(pipeline_, "BYE BYE player");
   g_object_unref(pipeline_);
+  if (drm_system_) {
+#if defined(HAS_OCDM)
+    using third_party::starboard::rdk::shared::drm::DrmSystemOcdm;
+    reinterpret_cast<DrmSystemOcdm*>( drm_system_ )->Release();
+#endif
+  }
 }
 
 // static
@@ -2063,16 +2087,15 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
                 "count");
   SB_DCHECK(number_of_sample_infos == kMaxNumberOfSamplesPerWrite);
   g_return_if_fail(sample_infos[0].buffer_size > 0);
-  g_return_if_fail(sample_infos[0].timestamp >= 0);
   // For debuggin purposes it could be usefull to disable audio or video
   // in this case just drop the sample
   if (audio_codec_ == kSbMediaAudioCodecNone && sample_type == kSbMediaTypeAudio) {
-      sample_deallocate_func_(player_, context_, sample_infos[0].buffer);
-      return;
+    sample_deallocate_func_(player_, context_, sample_infos[0].buffer);
+    return;
   }
   if (video_codec_ == kSbMediaVideoCodecNone && sample_type == kSbMediaTypeVideo) {
-      sample_deallocate_func_(player_, context_, sample_infos[0].buffer);
-      return;
+    sample_deallocate_func_(player_, context_, sample_infos[0].buffer);
+    return;
   }
 
   gsize buffer_size = static_cast<gsize>(sample_infos[0].buffer_size);
@@ -2104,7 +2127,14 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
   sample_deallocate_func_(player_, context_, sample_infos[0].buffer);
 #endif
 
-  GstClockTime timestamp = static_cast<GstClockTime>(sample_infos[0].timestamp * GST_USECOND);
+  int64_t sample_timestamp = sample_infos[0].timestamp;
+  if (sample_timestamp < 0) {
+    // FIXME: figure out how to handle negative timestamps properly
+    GST_WARNING_OBJECT(pipeline_, "Negative timestamp %" G_GINT64_FORMAT ", reseting to 0", sample_timestamp);
+    sample_timestamp = 0;
+  }
+
+  GstClockTime timestamp = static_cast<GstClockTime>(sample_timestamp * GST_USECOND);
   GST_BUFFER_TIMESTAMP(buffer) = timestamp;
 
   if (sample_infos[0].type == kSbMediaTypeVideo) {
@@ -2115,9 +2145,8 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
       frame_width_ = info.frame_width;
       frame_height_ = info.frame_height;
       color_metadata_ = info.color_metadata;
-      auto caps = CodecToGstCaps(video_codec_);
-      if (!caps.empty()) {
-        GstCaps* gst_caps = gst_caps_from_string(caps[0].c_str());
+      GstCaps* gst_caps = CodecToGstCaps(video_codec_);
+      if (gst_caps) {
         AddVideoInfoToGstCaps(info, gst_caps);
         PrintGstCaps(gst_caps);
         gst_app_src_set_caps(GST_APP_SRC(video_appsrc_), gst_caps);
@@ -2135,11 +2164,12 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
 
     if ( audio_caps_ == nullptr ) {
       const auto& audio_info = sample_infos[0].audio_sample_info.stream_info;
-      auto caps = CodecToGstCaps(audio_codec_, &audio_info);
-      if (!caps.empty() && caps[0].c_str()) {
-        GstCaps* gst_caps = gst_caps_from_string(caps[0].c_str());
+      GstCaps* gst_caps = CodecToGstCaps(audio_codec_, &audio_info);
+      if (gst_caps) {
         PrintGstCaps(gst_caps);
         gst_app_src_set_caps(GST_APP_SRC(audio_appsrc_), gst_caps);
+        if (audio_codec_ == kSbMediaAudioCodecVorbis || audio_codec_ == kSbMediaAudioCodecFlac)
+          PushStreamHeaders(GST_APP_SRC(audio_appsrc_), gst_caps);
         gst_caps_replace(&audio_caps_, gst_caps);
         gst_caps_unref(gst_caps);
       }
@@ -2370,10 +2400,8 @@ void PlayerImpl::HandleInititialSeek(::starboard::ScopedLock& lock) {
 
   // Ask for data.
   if (state_ == State::kInitialPreroll) {
-    MediaType need_data = static_cast<MediaType>(
-      static_cast<int>(MediaType::kBoth) & ~has_enough_data_ );
-    if (need_data != MediaType::kNone)
-      DecoderNeedsData(lock, need_data);
+    MediaType need_data = GetBothMediaTypeTakingCodecsIntoAccount();
+    DecoderNeedsData(lock, need_data);
   }
 
 #if GST_CHECK_VERSION(1, 18, 0)
@@ -3027,17 +3055,18 @@ void PlayerImpl::AddBufferingProbe(GstClockTime target, int ticket) {
 
   buffering_state_ = 0;
 
-  target +=  160 * GST_MSECOND;
+  const GstClockTime kAudioBufferTarget = 100 * GST_MSECOND;
+  const GstClockTime kVideoBufferTarget = 160 * GST_MSECOND;
 
   if (audio_appsrc_ && audio_codec_ != kSbMediaAudioCodecNone) {
-    if (add_probe(audio_appsrc_, target, ticket, buffering_probe_callback) != 0u)
+    if (add_probe(audio_appsrc_, target + kAudioBufferTarget, ticket, buffering_probe_callback) != 0u)
       buffering_state_ |= static_cast<int>(MediaType::kAudio);
     else
       GST_WARNING_OBJECT(audio_appsrc_, "Could not add buffering probe!");
   }
 
   if (video_appsrc_ && video_codec_ != kSbMediaVideoCodecNone) {
-    if (add_probe(video_appsrc_, target, ticket, buffering_probe_callback) != 0u)
+    if (add_probe(video_appsrc_, target + kVideoBufferTarget, ticket, buffering_probe_callback) != 0u)
       buffering_state_ |= static_cast<int>(MediaType::kVideo);
     else
       GST_WARNING_OBJECT(video_appsrc_, "Could not add buffering probe!");

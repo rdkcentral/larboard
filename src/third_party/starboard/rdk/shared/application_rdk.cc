@@ -439,6 +439,18 @@ int64_t Application::CheckMemoryUsage() {
   return kSbTimeSecond;
 }
 
+void Application::InjectAccessibilitySettingsChanged() {
+  Inject(new Event(kSbEventTypeAccessibilitySettingsChanged, NULL, NULL));
+}
+
+void Application::InjectAccessibilityCaptionSettingsChanged() {
+  Inject(new Event(kSbEventTypeAccessibilityCaptionSettingsChanged, NULL, NULL));
+}
+
+void Application::InjectAccessibilityTextToSpeechSettingsChanged() {
+  Inject(new Event(kSbEventTypeAccessibilityTextToSpeechSettingsChanged, NULL, NULL));
+}
+
 }  // namespace shared
 }  // namespace rdk
 }  // namespace starboard

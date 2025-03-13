@@ -74,7 +74,7 @@ const char kDeviceIdentificationCallsign[] = "DeviceIdentification.1";
 const char kNetworkCallsign[] = "org.rdk.Network.1";
 const char kTTSCallsign[] = "org.rdk.TextToSpeech.1";
 const char kAuthServiceCallsign[] = "org.rdk.AuthService.1";
-
+const char kUserSetingsCallsign[] = "org.rdk.UserSettings.1";
 const char kDeviceInfoCallsign[] = "DeviceInfo.1";
 const char kBluetoothCallsign[] = "org.rdk.Bluetooth.1";
 
@@ -243,191 +243,12 @@ struct DeviceIdImpl {
 
 SB_ONCE_INITIALIZE_FUNCTION(DeviceIdImpl, GetDeviceIdImpl);
 
-struct TextToSpeechImpl {
-private:
-  ::starboard::atomic_bool is_enabled_ { false };
-  ::starboard::atomic_bool needs_refresh_ { true };
-  ::starboard::atomic_bool did_subscribe_ { false };
-  int64_t speech_id_ { -1 };
-  int32_t speech_request_num_ { 0 };
-  ServiceLink tts_link_ { kTTSCallsign };
-  ::starboard::Mutex mutex_;
-  ::starboard::ConditionVariable condition_ { mutex_ };
-
-  std::string client_id_;
-  struct IsTTSEnabledInfo : public Core::JSON::Container {
-    IsTTSEnabledInfo()
-      : Core::JSON::Container() {
-      Add(_T("isenabled"), &IsEnabled);
-    }
-    IsTTSEnabledInfo(const IsTTSEnabledInfo&) = delete;
-    IsTTSEnabledInfo& operator=(const IsTTSEnabledInfo&) = delete;
-
-    Core::JSON::Boolean IsEnabled;
-  };
-
-  struct SpeakResult : public Core::JSON::Container {
-    SpeakResult()
-      : Core::JSON::Container()
-      , SpeechId(-1) {
-      Add(_T("speechid"), &SpeechId);
-    }
-    SpeakResult(const SpeakResult&) = delete;
-    SpeakResult& operator=(const SpeakResult&) = delete;
-
-    Core::JSON::DecSInt64 SpeechId;
-  };
-
-  struct StateInfo : public Core::JSON::Container {
-    StateInfo()
-      : Core::JSON::Container()
-      , State(false) {
-      Add(_T("state"), &State);
-    }
-    StateInfo(const StateInfo& other)
-      : Core::JSON::Container()
-      , State(other.State) {
-      Add(_T("state"), &State);
-    }
-    StateInfo& operator=(const StateInfo&) = delete;
-
-    Core::JSON::Boolean State;
-  };
-
-  void OnCancelResult(const Core::JSON::String&, const Core::JSONRPC::Error*) {
-  }
-
-  void OnStateChanged(const StateInfo& info) {
-    is_enabled_.store( info.State.Value() );
-  }
-
-  void OnSpeakResult(const SpeakResult& result, const Core::JSONRPC::Error* err) {
-    ::starboard::ScopedLock lock(mutex_);
-    if (err) {
-      SB_LOG(ERROR)
-          << "TTS speak request failed. Error code: "
-          << err->Code.Value()
-          << " message: "
-          << err->Text.Value();
-      speech_id_ = -1;
-    }
-    else {
-      speech_id_ = result.SpeechId;
-    }
-    --speech_request_num_;
-    condition_.Broadcast();
-  }
-
-public:
-  TextToSpeechImpl() = default;
-
-  void Speak(const std::string &text) {
-    Refresh();
-    if (!is_enabled_.load())
-      return;
-
-    JsonObject params;
-    params.Set(_T("text"), text);
-    params.Set(_T("callsign"), client_id_ );
-
-    uint64_t rc = tts_link_.Dispatch(kDefaultTimeoutMs, "speak", params, &TextToSpeechImpl::OnSpeakResult, this);
-    if (Core::ERROR_NONE == rc) {
-      ::starboard::ScopedLock lock(mutex_);
-      ++speech_request_num_;
-    }
-  }
-
-  void Cancel() {
-    Refresh();
-    if (!is_enabled_.load())
-      return;
-
-    int64_t speechId = -1;
-
-    {
-      ::starboard::ScopedLock lock(mutex_);
-      if (speech_request_num_ != 0) {
-        if (!condition_.WaitTimed(kSbTimeMillisecond) || speech_request_num_ != 0)
-          return;
-      }
-      speechId = speech_id_;
-    }
-
-    if (speechId < 0)
-      return;
-
-    JsonObject params;
-    params.Set(_T("speechid"), speechId);
-
-    tts_link_.Dispatch(kDefaultTimeoutMs, "cancel", params, &TextToSpeechImpl::OnCancelResult, this);
-  }
-
-  bool IsEnabled() {
-    Refresh();
-    return is_enabled_.load();
-  }
-
-  void Refresh() {
-    if (!needs_refresh_.load())
-      return;
-
-    uint32_t rc;
-    if (!did_subscribe_.load()) {
-      bool old_val = did_subscribe_.exchange(true);
-      if (old_val == false) {
-        rc = tts_link_.Subscribe<StateInfo>(kDefaultTimeoutMs, "onttsstatechanged", &TextToSpeechImpl::OnStateChanged, this);
-        if (Core::ERROR_UNAVAILABLE == rc || kPriviligedRequestErrorCode == rc) {
-          needs_refresh_.store(false);
-          SB_LOG(ERROR) << "Failed to subscribe to '" << kTTSCallsign
-                        << ".onstatechanged' event, rc=" << rc
-                        << " ( " << Core::ErrorToString(rc) << " )";
-          return;
-        }
-        if (Core::ERROR_NONE != rc && Core::ERROR_DUPLICATE_KEY != rc) {
-          did_subscribe_.store(false);
-          SB_LOG(ERROR) << "Failed to subscribe to '" << kTTSCallsign
-                        << ".onstatechanged' event, rc=" << rc
-                        << " ( " << Core::ErrorToString(rc) << " )."
-                        << " Going to try again next time.";
-          return;
-        }
-      }
-    }
-
-    IsTTSEnabledInfo info;
-    rc = tts_link_.Get(kDefaultTimeoutMs, "isttsenabled", info);
-    if (Core::ERROR_NONE == rc) {
-      is_enabled_.store( info.IsEnabled.Value() );
-    }
-    if (Core::SystemInfo::GetEnvironment(_T("CLIENT_IDENTIFIER"), client_id_) == true) {
-      std::string::size_type pos = client_id_.find(',');
-      if (pos != std::string::npos)
-        client_id_.erase(pos, std::string::npos);
-    } else {
-        client_id_ = "Cobalt";
-    }
-
-    needs_refresh_.store(false);
-  }
-
-  void Teardown() {
-    if (did_subscribe_.load()) {
-      tts_link_.Unsubscribe(kDefaultTimeoutMs, "onttsstatechanged");
-      did_subscribe_.store(false);
-    }
-    tts_link_.Teardown();
-    needs_refresh_.store(true);
-    is_enabled_.store(false);
-  }
-};
-
-SB_ONCE_INITIALIZE_FUNCTION(TextToSpeechImpl, GetTextToSpeech);
-
 struct AccessibilityImpl {
 private:
   ::starboard::Mutex mutex_;
   SbAccessibilityDisplaySettings display_settings_ { };
   SbAccessibilityCaptionSettings caption_settings_ { };
+  bool is_voice_guidance_enabled_ { false };
 
 public:
   AccessibilityImpl() {
@@ -450,7 +271,6 @@ public:
   }
 
   void SetSettings(const std::string& json) {
-
     SB_LOG(INFO) << "Updating accessibility settings: " << json;
 
     JsonData::Accessibility::AccessibilityData settings;
@@ -462,6 +282,9 @@ public:
     }
 
     ::starboard::ScopedLock lock(mutex_);
+
+    bool was_cc_enabled = caption_settings_.is_enabled;
+    bool was_highcontrast_enabled = display_settings_.is_high_contrast_text_enabled;
 
     memset(&display_settings_, 0, sizeof(display_settings_));
     memset(&caption_settings_, 0, sizeof(caption_settings_));
@@ -513,6 +336,14 @@ public:
       display_settings_.has_high_contrast_text_setting = true;
       display_settings_.is_high_contrast_text_enabled =
         settings.TextDisplay.IsHighContrastTextEnabled.Value();
+    }
+
+    if (auto* app = Application::Get(); app != nullptr) {
+      if (was_cc_enabled != caption_settings_.is_enabled)
+        app->InjectAccessibilityCaptionSettingsChanged();
+
+      if (was_highcontrast_enabled != display_settings_.is_high_contrast_text_enabled)
+        app->InjectAccessibilitySettingsChanged();
     }
   }
 
@@ -569,9 +400,225 @@ public:
     return false;
   }
 
+  void SetCaptionEnabled(bool enabled, bool notify_on_change = true) {
+    {
+      ::starboard::ScopedLock lock(mutex_);
+       notify_on_change &= (caption_settings_.is_enabled != enabled);
+       caption_settings_.is_enabled = enabled;
+    }
+    if (notify_on_change && Application::Get()) {
+      SB_LOG(INFO) << "Accessibility closed caption setting changed, enabled = " << enabled;
+      Application::Get()->InjectAccessibilityCaptionSettingsChanged();
+    }
+  }
+
+  void SetHighContrastEnabled(bool enabled, bool notify_on_change = true) {
+    {
+      ::starboard::ScopedLock lock(mutex_);
+      notify_on_change &= (display_settings_.is_high_contrast_text_enabled != enabled);
+      display_settings_.is_high_contrast_text_enabled = enabled;
+    }
+    if (notify_on_change && Application::Get()) {
+      SB_LOG(INFO) << "Accessibility high contrast text setting changed, enabled = " << enabled;
+      Application::Get()->InjectAccessibilitySettingsChanged();
+    }
+  }
+
+  void SetVoiceGuidanceEnabled(bool enabled, bool notify_on_change = true) {
+    {
+      ::starboard::ScopedLock lock(mutex_);
+      notify_on_change &= (is_voice_guidance_enabled_ != enabled);
+      is_voice_guidance_enabled_ = enabled;
+    }
+    if (notify_on_change && Application::Get()) {
+      SB_LOG(INFO) << "Accessibility voice guidance setting changed, enabled = " << enabled;
+      Application::Get()->InjectAccessibilityTextToSpeechSettingsChanged();
+    }
+  }
+
+  bool GetVoiceGuidanceEnabled() const {
+    ::starboard::ScopedLock lock(mutex_);
+    return is_voice_guidance_enabled_;
+  }
 };
 
 SB_ONCE_INITIALIZE_FUNCTION(AccessibilityImpl, GetAccessibility);
+
+struct TextToSpeechImpl {
+private:
+  ::starboard::atomic_bool is_enabled_ { false };
+  ::starboard::atomic_bool needs_refresh_ { true };
+  ::starboard::atomic_bool did_subscribe_ { false };
+  int64_t speech_id_ { -1 };
+  int32_t speech_request_num_ { 0 };
+  ServiceLink tts_link_ { kTTSCallsign };
+  ::starboard::Mutex mutex_;
+  ::starboard::ConditionVariable condition_ { mutex_ };
+  std::string client_id_;
+
+  struct IsTTSEnabledInfo : public Core::JSON::Container {
+    IsTTSEnabledInfo()
+      : Core::JSON::Container() {
+      Add(_T("isenabled"), &IsEnabled);
+    }
+    IsTTSEnabledInfo(const IsTTSEnabledInfo&) = delete;
+    IsTTSEnabledInfo& operator=(const IsTTSEnabledInfo&) = delete;
+
+    Core::JSON::Boolean IsEnabled;
+  };
+
+  struct SpeakResult : public Core::JSON::Container {
+    SpeakResult()
+      : Core::JSON::Container()
+      , SpeechId(-1) {
+      Add(_T("speechid"), &SpeechId);
+    }
+    SpeakResult(const SpeakResult&) = delete;
+    SpeakResult& operator=(const SpeakResult&) = delete;
+
+    Core::JSON::DecSInt64 SpeechId;
+  };
+
+  struct StateInfo : public Core::JSON::Container {
+    StateInfo()
+      : Core::JSON::Container()
+      , State(false) {
+      Add(_T("state"), &State);
+    }
+    StateInfo(const StateInfo& other)
+      : Core::JSON::Container()
+      , State(other.State) {
+      Add(_T("state"), &State);
+    }
+    StateInfo& operator=(const StateInfo&) = delete;
+
+    Core::JSON::Boolean State;
+  };
+
+  void OnCancelResult(const Core::JSON::String&, const Core::JSONRPC::Error*) {
+  }
+
+  void OnStateChanged(const StateInfo& info) {
+    is_enabled_.store( info.State.Value() );
+    GetAccessibility()->SetVoiceGuidanceEnabled( info.State.Value() );
+  }
+
+  void OnSpeakResult(const SpeakResult& result, const Core::JSONRPC::Error* err) {
+    ::starboard::ScopedLock lock(mutex_);
+    if (err) {
+      SB_LOG(ERROR)
+          << "TTS speak request failed. Error code: "
+          << err->Code.Value()
+          << " message: "
+          << err->Text.Value();
+      speech_id_ = -1;
+    }
+    else {
+      speech_id_ = result.SpeechId;
+    }
+    --speech_request_num_;
+    condition_.Broadcast();
+  }
+
+public:
+  TextToSpeechImpl() = default;
+
+  void Speak(const std::string &text) {
+    if (!IsEnabled())
+      return;
+
+    JsonObject params;
+    params.Set(_T("text"), text);
+    params.Set(_T("callsign"), client_id_ );
+
+    uint64_t rc = tts_link_.Dispatch(kDefaultTimeoutMs, "speak", params, &TextToSpeechImpl::OnSpeakResult, this);
+    if (Core::ERROR_NONE == rc) {
+      ::starboard::ScopedLock lock(mutex_);
+      ++speech_request_num_;
+    }
+  }
+
+  void Cancel() {
+    int64_t speechId = -1;
+
+    {
+      ::starboard::ScopedLock lock(mutex_);
+      if (speech_request_num_ != 0) {
+        if (!condition_.WaitTimed(kSbTimeMillisecond) || speech_request_num_ != 0)
+          return;
+      }
+      speechId = std::exchange(speech_id_, -1);
+    }
+
+    if (speechId < 0)
+      return;
+
+    JsonObject params;
+    params.Set(_T("speechid"), speechId);
+
+    tts_link_.Dispatch(kDefaultTimeoutMs, "cancel", params, &TextToSpeechImpl::OnCancelResult, this);
+  }
+
+  bool IsEnabled() {
+    Refresh();
+    return is_enabled_.load() || GetAccessibility()->GetVoiceGuidanceEnabled();
+  }
+
+  void Refresh() {
+    if (!needs_refresh_.load())
+      return;
+
+    uint32_t rc;
+    if (!did_subscribe_.load()) {
+      bool old_val = did_subscribe_.exchange(true);
+      if (old_val == false) {
+        rc = tts_link_.Subscribe<StateInfo>(kDefaultTimeoutMs, "onttsstatechanged", &TextToSpeechImpl::OnStateChanged, this);
+        if (Core::ERROR_UNAVAILABLE == rc || kPriviligedRequestErrorCode == rc) {
+          needs_refresh_.store(false);
+          SB_LOG(ERROR) << "Failed to subscribe to '" << kTTSCallsign
+                        << ".onstatechanged' event, rc=" << rc
+                        << " ( " << Core::ErrorToString(rc) << " )";
+          return;
+        }
+        if (Core::ERROR_NONE != rc && Core::ERROR_DUPLICATE_KEY != rc) {
+          did_subscribe_.store(false);
+          SB_LOG(ERROR) << "Failed to subscribe to '" << kTTSCallsign
+                        << ".onstatechanged' event, rc=" << rc
+                        << " ( " << Core::ErrorToString(rc) << " )."
+                        << " Going to try again next time.";
+          return;
+        }
+      }
+    }
+
+    IsTTSEnabledInfo info;
+    rc = tts_link_.Get(kDefaultTimeoutMs, "isttsenabled", info);
+    if (Core::ERROR_NONE == rc) {
+      is_enabled_.store( info.IsEnabled.Value() );
+    }
+    if (Core::SystemInfo::GetEnvironment(_T("CLIENT_IDENTIFIER"), client_id_) == true) {
+      std::string::size_type pos = client_id_.find(',');
+      if (pos != std::string::npos)
+        client_id_.erase(pos, std::string::npos);
+    } else {
+      client_id_ = "Cobalt";
+    }
+
+    needs_refresh_.store(false);
+  }
+
+  void Teardown() {
+    if (did_subscribe_.load()) {
+      tts_link_.Unsubscribe(kDefaultTimeoutMs, "onttsstatechanged");
+      did_subscribe_.store(false);
+    }
+    tts_link_.Teardown();
+    needs_refresh_.store(true);
+    is_enabled_.store(false);
+  }
+};
+
+SB_ONCE_INITIALIZE_FUNCTION(TextToSpeechImpl, GetTextToSpeech);
 
 struct SystemPropertiesImpl {
   struct SystemPropertiesData : public Core::JSON::Container {
@@ -1462,6 +1509,148 @@ bool DeviceInfoImpl::GetBrandName(std::string& out) {
   return !out.empty();
 }
 
+struct UserSettingsImpl {
+private:
+  ::starboard::Mutex mutex_;
+  std::vector<std::string> subscriptions_ { };
+  bool needs_refresh_ { true };
+  ServiceLink link_ { kUserSetingsCallsign };
+
+  struct StateChangedInfo : public Core::JSON::Container {
+    StateChangedInfo()
+      : Core::JSON::Container()
+      , Enabled(false) {
+      Add(_T("enabled"), &Enabled);
+    }
+    StateChangedInfo(const StateChangedInfo& other)
+      : Core::JSON::Container()
+      , Enabled(other.Enabled) {
+      Add(_T("enabled"), &Enabled);
+    }
+    StateChangedInfo& operator=(const StateChangedInfo&) = delete;
+
+    Core::JSON::Boolean Enabled;
+  };
+
+  void OnVoiceGuidanceChanged(const StateChangedInfo& info) {
+    bool is_voice_guidance_enabled = info.Enabled.Value();
+    SB_LOG(INFO) << "User setting changed. voice guidance enabled = " << is_voice_guidance_enabled;
+    GetAccessibility()->SetVoiceGuidanceEnabled(is_voice_guidance_enabled);
+  };
+
+  void OnHighContrastChanged(const StateChangedInfo& info) {
+    bool is_highcontrast_enabled = info.Enabled.Value();
+    SB_LOG(INFO) << "User setting changed. highcontrast enabled = " << is_highcontrast_enabled;
+    GetAccessibility()->SetHighContrastEnabled(is_highcontrast_enabled);
+  };
+
+  void OnCaptionsChanged(const StateChangedInfo& info) {
+    bool is_cc_enabled = info.Enabled.Value();
+    SB_LOG(INFO) << "User setting changed. cc enabled = " << is_cc_enabled;
+    GetAccessibility()->SetCaptionEnabled(is_cc_enabled);
+  };
+
+  bool RefreshSubscriptions() {
+    using NotificationHandlerCb = void(UserSettingsImpl::*)(const StateChangedInfo&);
+
+    const std::map<std::string, NotificationHandlerCb> kNotificationHandlers = {
+      {"onVoiceGuidanceChanged", &UserSettingsImpl::OnVoiceGuidanceChanged },
+      {"onHighContrastChanged", &UserSettingsImpl::OnHighContrastChanged },
+      {"onCaptionsChanged", &UserSettingsImpl::OnCaptionsChanged },
+    };
+
+    uint32_t rc;
+
+    mutex_.DCheckAcquired();
+
+    for (const auto& kv : kNotificationHandlers) {
+      const auto& name = kv.first;
+      const auto& callback = kv.second;
+
+      if (std::find(subscriptions_.begin(), subscriptions_.end(), name)
+          != subscriptions_.end())
+        continue;
+
+      rc = link_.Subscribe<StateChangedInfo>(
+        kDefaultTimeoutMs, name, callback, this);
+
+      if (Core::ERROR_UNAVAILABLE == rc || kPriviligedRequestErrorCode == rc) {
+        needs_refresh_ = false;
+        SB_LOG(ERROR) << "Failed to subscribe to '" << kUserSetingsCallsign
+                      << "." << name << "' event, rc = " << rc
+                      << " ( " << Core::ErrorToString(rc) << " )";
+        return false;
+      }
+
+      if (Core::ERROR_NONE != rc && Core::ERROR_DUPLICATE_KEY != rc) {
+        SB_LOG(ERROR) << "Failed to subscribe to '" << kUserSetingsCallsign
+                      << "." << name << "' event, rc = " << rc
+                      << " ( " << Core::ErrorToString(rc) << " ).";
+        continue;
+      }
+
+      subscriptions_.push_back(name);
+    }
+
+    return true;
+  }
+
+public:
+  UserSettingsImpl() = default;
+
+  void Refresh() {
+    ::starboard::ScopedLock lock(mutex_);
+    if (!needs_refresh_)
+      return;
+
+    if (!RefreshSubscriptions())
+      return;
+
+    bool is_voice_guidance_enabled = false;
+    bool is_cc_enabled = false;
+    bool is_highcontrast_enabled = false;
+
+    const std::map<std::string, bool*> kSettings = {
+      {"getVoiceGuidance", &is_voice_guidance_enabled},
+      {"getHighContrast", &is_highcontrast_enabled},
+      {"getCaptions", &is_cc_enabled},
+    };
+
+    for (const auto& kv: kSettings) {
+      uint32_t rc;
+      Core::JSON::Boolean result;
+
+      rc = link_.Get(kDefaultTimeoutMs, kv.first, result);
+
+      if (Core::ERROR_NONE == rc) {
+        SB_LOG(INFO) << "User setting: " << kv.first << " = " << result.Value();
+        (*kv.second) = result.Value();
+      } else {
+        SB_LOG(ERROR) << "Failed to get user setting '" << kv.first<< ", rc=" << rc
+                      << " ( " << Core::ErrorToString(rc) << " ).";
+      }
+    }
+
+    needs_refresh_ = false;
+
+    auto *accessibility = GetAccessibility();
+    accessibility->SetVoiceGuidanceEnabled(is_voice_guidance_enabled, false);
+    accessibility->SetCaptionEnabled(is_cc_enabled, false);
+    accessibility->SetHighContrastEnabled(is_highcontrast_enabled, false);
+  }
+
+  void Teardown() {
+    ::starboard::ScopedLock lock(mutex_);
+    for (const auto& subscription : subscriptions_)
+      link_.Unsubscribe(kDefaultTimeoutMs, subscription.c_str());
+    link_.Teardown();
+    needs_refresh_ = true;
+    subscriptions_.clear();
+  }
+};
+
+SB_ONCE_INITIALIZE_FUNCTION(UserSettingsImpl, GetUserSettings);
+
 }  // namespace
 
 ResolutionInfo DisplayInfo::GetResolution() {
@@ -1497,6 +1686,7 @@ void TextToSpeech::Speak(const std::string& text) {
 }
 
 bool TextToSpeech::IsEnabled() {
+  GetUserSettings()->Refresh();
   return GetTextToSpeech()->IsEnabled();
 }
 
@@ -1505,10 +1695,12 @@ void TextToSpeech::Cancel() {
 }
 
 bool Accessibility::GetCaptionSettings(SbAccessibilityCaptionSettings* out) {
+  GetUserSettings()->Refresh();
   return GetAccessibility()->GetCaptionSettings(out);
 }
 
 bool Accessibility::GetDisplaySettings(SbAccessibilityDisplaySettings* out) {
+  GetUserSettings()->Refresh();
   return GetAccessibility()->GetDisplaySettings(out);
 }
 
@@ -1601,6 +1793,7 @@ void TeardownJSONRPCLink() {
   GetTextToSpeech()->Teardown();
   GetNetworkInfo()->Teardown();
   GetDeviceInfo()->Teardown();
+  GetUserSettings()->Teardown();
 }
 
 }  // namespace shared

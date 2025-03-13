@@ -53,6 +53,7 @@
 #if defined(HAS_OCDM)
 #include "third_party/starboard/rdk/shared/drm/drm_system_ocdm.h"
 #endif
+#include "third_party/starboard/rdk/shared/player/elements/gst_audio_clipping.h"
 
 namespace third_party {
 namespace starboard {
@@ -1511,6 +1512,11 @@ PlayerImpl::PlayerImpl(SbPlayer player,
     g_object_unref(playsink);
   } else {
     GST_WARNING_OBJECT(pipeline_, "No playsink ?!?!?");
+  }
+
+  if (audio_codec_ == kSbMediaAudioCodecPcm) {
+    GstElement* filter = elements::CreateAudioClippingElement(nullptr);
+    g_object_set(pipeline_, "audio-filter", filter, nullptr);
   }
 
   if (drm_system_) {

@@ -369,6 +369,8 @@ static_library("starboard_platform") {
     "player/player_set_volume.cc",
     "player/player_write_end_of_stream.cc",
     "player/player_write_sample.cc",
+    "player/elements/gst_audio_clipping.cc",
+    "player/elements/gst_audio_clipping.h",
     "rdkservices.cc",
     "run_starboard_main.cc",
     "speech/accessibility_get_text_to_speech_settings.cc",

@@ -41,7 +41,18 @@ declare_args() {
   rdk_enable_firebolt_legacy_rpc_v1 = false
 }
 
+rdk_pkgconfig_extra_args = []
+if (!rdk_build_with_yocto) {
+  rdk_pkgconfig_extra_args = [
+    "-s",
+    rdk_sysroot,
+    "-a",
+    current_cpu,
+  ]
+}
+
 pkg_config("glib") {
+  extra_args = rdk_pkgconfig_extra_args
   packages = [
     "glib-2.0",
     "gobject-2.0",
@@ -50,6 +61,7 @@ pkg_config("glib") {
 }
 
 pkg_config("gstreamer") {
+  extra_args = rdk_pkgconfig_extra_args
   packages = [
     "gstreamer-1.0",
     "gstreamer-app-1.0",
@@ -61,6 +73,7 @@ pkg_config("gstreamer") {
 }
 
 pkg_config("wpeframework") {
+  extra_args = rdk_pkgconfig_extra_args
   packages = [
     "WPEFrameworkCore",
   ]
@@ -75,6 +88,7 @@ pkg_config("wpeframework_websocket") {
 
 if (rdk_enable_wpecryptography) {
   pkg_config("wpecryptography") {
+    extra_args = rdk_pkgconfig_extra_args
     packages = [ "WPEFrameworkCryptography" ]
     defines = [ "HAS_WPECRYPTOGRAPHY=1" ]
   }
@@ -82,6 +96,7 @@ if (rdk_enable_wpecryptography) {
 
 if (rdk_enable_securityagent) {
   pkg_config("securityagent") {
+    extra_args = rdk_pkgconfig_extra_args
     packages = [ "securityagent" ]
     defines = [ "HAS_SECURITY_AGENT=1" ]
   }
@@ -89,6 +104,7 @@ if (rdk_enable_securityagent) {
 
 if (rdk_enable_ocdm) {
   pkg_config("ocdm") {
+    extra_args = rdk_pkgconfig_extra_args
     packages = [ "ocdm" ]
     defines = [ "HAS_OCDM=1" ]
   }

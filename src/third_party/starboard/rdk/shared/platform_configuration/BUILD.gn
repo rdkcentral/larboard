@@ -169,6 +169,9 @@ config("no_pedantic_warnings") {
       "-Wno-unused-variable",
       "-Wno-unused-but-set-variable",
       "-Wno-psabi",
+      "-Wno-stringop-truncation",
+      "-Wno-attributes",
+      "-Wno-return-type",
     ]
     cflags_cc = [
       "-Wno-deprecated-copy",

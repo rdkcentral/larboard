@@ -32,26 +32,45 @@ import("//build/toolchain/gcc_toolchain.gni")
 
 template("rdk_gcc_toolchain") {
   gcc_toolchain(target_name) {
-    assert(defined(invoker.envprefix), "please specify \"envprefix\"")
-    envprefix = invoker.envprefix
+    if (rdk_build_with_yocto) {
+      assert(defined(invoker.envprefix), "please specify \"envprefix\"")
+      envprefix = invoker.envprefix
 
-    _cc_env  = string_split(getenv(envprefix + "CC"))
-    _cxx_env = string_split(getenv(envprefix + "CXX"))
-    _ar_env  = string_split(getenv(envprefix + "AR"))
+      _cc_env  = string_split(getenv(envprefix + "CC"))
+      _cxx_env = string_split(getenv(envprefix + "CXX"))
+      _ar_env  = string_split(getenv(envprefix + "AR"))
 
-    cc  = _cc_env[0]
-    cxx = _cxx_env[0]
-    ld  = cxx
-    ar  = _ar_env[0]
+      cc  = _cc_env[0]
+      cxx = _cxx_env[0]
+      ld  = cxx
+      ar  = _ar_env[0]
 
-    extra_cflags   = string_join(" ", _cc_env  - [ _cc_env[0] ])
-    extra_cxxflags = string_join(" ", _cxx_env - [ _cxx_env[0] ])
-    extra_ldflags  = extra_cxxflags
-    extra_asmflags = extra_cflags
+      extra_cflags   = string_join(" ", _cc_env  - [ _cc_env[0] ])
+      extra_cxxflags = string_join(" ", _cxx_env - [ _cxx_env[0] ])
+      extra_ldflags  = extra_cxxflags
+      extra_asmflags = extra_cflags
 
-    extra_cflags   += " " + getenv(envprefix + "CFLAGS")
-    extra_cxxflags += " " + getenv(envprefix + "CXXFLAGS")
-    extra_ldflags  += " " + getenv(envprefix + "LDFLAGS")
+      extra_cflags   += " " + getenv(envprefix + "CFLAGS")
+      extra_cxxflags += " " + getenv(envprefix + "CXXFLAGS")
+      extra_ldflags  += " " + getenv(envprefix + "LDFLAGS")
+    } else {
+      assert(defined(invoker.toolprefix), "please specify \"toolprefix\"")
+      toolprefix = invoker.toolprefix
+
+      cc  = toolprefix + "gcc"
+      cxx = toolprefix + "g++"
+      strip = toolprefix + "strip"
+      ld  = cxx
+      ar  = "ar"
+
+      rdk_starboard_root_dir = rebase_path("$rdk_starboard_root")
+
+      assert(defined(invoker.platform_cflags), "please specify \"platform_cflags\"")
+      extra_cflags = "-I" + rdk_starboard_root_dir + " " + invoker.platform_cflags
+      extra_cxxflags = extra_cflags
+      extra_ldflags  = extra_cxxflags
+      extra_asmflags = extra_cflags
+    }
 
     forward_variables_from(invoker, "*", [ "toolchain_args" ])
     toolchain_args = {

@@ -1242,7 +1242,6 @@ class PlayerImpl : public Player {
   GstClockTime MinTimestamp(MediaType* origin) const;
 
   void DecoderNeedsData(::starboard::ScopedLock&, MediaType media) const {
-    SB_DCHECK(media != MediaType::kNone);
     mutex_.DCheckAcquired();
 
     int need_data = static_cast<int>(media) & ~decoder_state_data_;
@@ -1305,7 +1304,7 @@ class PlayerImpl : public Player {
   ::starboard::Mutex mutex_;
   ::starboard::Mutex source_setup_mutex_;
   ::starboard::Mutex seek_mutex_;
-  double rate_{0.0};
+  double rate_{1.0};
   int ticket_{SB_PLAYER_INITIAL_TICKET};
   mutable GstClockTime seek_position_{GST_CLOCK_TIME_NONE};
   GstClockTime max_sample_timestamps_[kMediaNumber]{0};
@@ -2452,7 +2451,7 @@ void PlayerImpl::HandleInititialSeek(::starboard::ScopedLock& lock) {
 
   if (state_ == State::kInitialPreroll) {
     // Ask for data.
-    MediaType need_data = GetBothMediaTypeTakingCodecsIntoAccount();
+    MediaType need_data = static_cast<MediaType>(static_cast<int>(GetBothMediaTypeTakingCodecsIntoAccount()) & (~has_enough_data_));
     DecoderNeedsData(lock, need_data);
   }
 

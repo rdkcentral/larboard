@@ -1305,7 +1305,7 @@ class PlayerImpl : public Player {
   ::starboard::Mutex mutex_;
   ::starboard::Mutex source_setup_mutex_;
   ::starboard::Mutex seek_mutex_;
-  double rate_{0.0};
+  double rate_{1.0};
   int ticket_{SB_PLAYER_INITIAL_TICKET};
   mutable GstClockTime seek_position_{GST_CLOCK_TIME_NONE};
   GstClockTime max_sample_timestamps_[kMediaNumber]{0};

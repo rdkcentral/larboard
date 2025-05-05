@@ -1357,6 +1357,8 @@ class PlayerImpl : public Player {
   int need_first_segment_ack_ { static_cast<int>(MediaType::kBoth) };
   int buffering_state_ { 0 };
   mutable guint playing_state_update_source_id_{0u};
+  GstElement* dump_pipeline_ { nullptr };
+  GstElement* dump_appsrc_ { nullptr };
 };
 
 struct PlayerRegistry
@@ -1552,6 +1554,27 @@ PlayerImpl::PlayerImpl(SbPlayer player,
   }
 
   ChangePipelineState(GST_STATE_READY);
+
+  const char* dump_video_path = getenv("COBALT_DUMP_VIDEO");
+  if (dump_video_path) {
+    GError *error = 0;
+    dump_pipeline_ = gst_parse_launch("appsrc name=in ! gdppay ! filesink name=out", &error);
+    if (!dump_pipeline_) {
+      g_warning("Failed to create video dump pipeline\n");
+      if (error) {
+        g_warning("Parse error: '%s'", error->message);
+        g_error_free(error);
+      }
+    } else {
+      dump_appsrc_  = gst_bin_get_by_name (GST_BIN(dump_pipeline_), "in");
+
+      GstElement *out = gst_bin_get_by_name (GST_BIN(dump_pipeline_), "out");
+      g_object_set(out, "location", dump_video_path, nullptr);
+      gst_object_unref(out);
+
+      gst_element_set_state(dump_pipeline_, GST_STATE_PLAYING);
+    }
+  }
   g_main_context_pop_thread_default(main_loop_context_);
 
   if (gst_element_get_state(pipeline_, nullptr, nullptr, 0) == GST_STATE_CHANGE_FAILURE)
@@ -1613,6 +1636,12 @@ PlayerImpl::~PlayerImpl() {
     using third_party::starboard::rdk::shared::drm::DrmSystemOcdm;
     reinterpret_cast<DrmSystemOcdm*>( drm_system_ )->Release();
 #endif
+  }
+
+  if (dump_pipeline_) {
+    gst_element_set_state(dump_pipeline_, GST_STATE_NULL);
+    gst_object_unref(dump_pipeline_);
+    gst_object_unref(dump_appsrc_);
   }
 }
 
@@ -2119,6 +2148,10 @@ bool PlayerImpl::WriteSample(SbMediaType sample_type, GstBuffer* buffer, uint64_
     "SampleType:%d %" GST_TIME_FORMAT " id:%" PRIu64 " b:%p",
     sample_type, GST_TIME_ARGS(GST_BUFFER_TIMESTAMP(buffer)), serial_id, buffer);
 
+  if (dump_appsrc_ && sample_type == kSbMediaTypeVideo) {
+    gst_app_src_push_buffer(GST_APP_SRC(dump_appsrc_), gst_buffer_copy(buffer));
+  }
+
   gst_app_src_push_buffer(GST_APP_SRC(src), buffer);
 
   ::starboard::ScopedLock lock(mutex_);
@@ -2229,6 +2262,9 @@ void PlayerImpl::WriteSample(SbMediaType sample_type,
         gst_app_src_set_caps(GST_APP_SRC(video_appsrc_), gst_caps);
         gst_caps_replace(&video_caps_, gst_caps);
         gst_caps_unref(gst_caps);
+
+        if (dump_appsrc_)
+          gst_app_src_set_caps(GST_APP_SRC(dump_appsrc_), video_caps_);
       }
     }
     if (!sample_infos[0].video_sample_info.is_key_frame) {

@@ -638,7 +638,8 @@ public:
   // IFocus
   uint32_t Focused(const bool focused) override {
     _adminLock.Lock();
-    if (_state == PluginHost::IStateControl::RESUMED || _statePending == PluginHost::IStateControl::RESUMED) {
+    if ((_state == PluginHost::IStateControl::RESUMED && _statePending != PluginHost::IStateControl::SUSPENDED) ||
+        _statePending == PluginHost::IStateControl::RESUMED) {
       if (focused)
         _sink.RequestForStateChange(StateChangeCommand::RESUME);
       else

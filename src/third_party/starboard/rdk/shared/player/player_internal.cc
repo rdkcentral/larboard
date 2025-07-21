@@ -1321,6 +1321,7 @@ class PlayerImpl : public Player {
   std::thread playback_thread_;
   ::starboard::Mutex mutex_;
   ::starboard::Mutex source_setup_mutex_;
+  ::starboard::ConditionVariable source_setup_condition_ { source_setup_mutex_ };
   ::starboard::Mutex seek_mutex_;
   double rate_{1.0};
   int ticket_{SB_PLAYER_INITIAL_TICKET};
@@ -1915,6 +1916,7 @@ gboolean PlayerImpl::FinishSourceSetup(gpointer user_data) {
   }
   gst_cobalt_src_all_app_srcs_added(self->source_);
   self->source_setup_id_ = 0;
+  self->source_setup_condition_.Signal();
   return G_SOURCE_REMOVE;
 }
 
@@ -2484,6 +2486,17 @@ void PlayerImpl::HandleInititialSeek(::starboard::ScopedLock& lock) {
   }
 
   if (state_ == State::kInitialPreroll) {
+    // Await for source setup to finish if needed
+    if (source_setup_id_) {
+      mutex_.Release();
+      source_setup_mutex_.Acquire();
+      while (source_setup_id_ != 0) {
+        source_setup_condition_.Wait();
+      }
+      source_setup_mutex_.Release();
+      mutex_.Acquire();
+    }
+
     // Ask for data.
     MediaType need_data = static_cast<MediaType>(static_cast<int>(GetBothMediaTypeTakingCodecsIntoAccount()) & (~has_enough_data_));
     DecoderNeedsData(lock, need_data);

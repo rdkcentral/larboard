@@ -1321,6 +1321,7 @@ class PlayerImpl : public Player {
   std::thread playback_thread_;
   ::starboard::Mutex mutex_;
   ::starboard::Mutex source_setup_mutex_;
+  ::starboard::ConditionVariable source_setup_condition_ { source_setup_mutex_ };
   ::starboard::Mutex seek_mutex_;
   double rate_{1.0};
   int ticket_{SB_PLAYER_INITIAL_TICKET};
@@ -1714,6 +1715,8 @@ gboolean PlayerImpl::HandleBusMessage(GstBus* bus, GstMessage* message) {
             if (state_ == State::kPrerollAfterSeek ||
                 state_ == State::kInitialPreroll) {
               has_oob_write_pending_ |= is_seek_pending;
+              if (GST_STATE(pipeline_) == GST_STATE_PLAYING)
+                  UpdatePresentingState();
             }
           }
 
@@ -1913,6 +1916,7 @@ gboolean PlayerImpl::FinishSourceSetup(gpointer user_data) {
   }
   gst_cobalt_src_all_app_srcs_added(self->source_);
   self->source_setup_id_ = 0;
+  self->source_setup_condition_.Signal();
   return G_SOURCE_REMOVE;
 }
 
@@ -2015,6 +2019,7 @@ void PlayerImpl::OnVideoBufferUnderflow(PlayerImpl* self)
 void PlayerImpl::SetupElement(GstElement* pipeline,
                               GstElement* element,
                               PlayerImpl* self) {
+  GST_DEBUG_OBJECT(pipeline, "Setup element %" GST_PTR_FORMAT, element);
   if (GST_IS_BASE_SINK(element)) {
     static bool disable_wait_video = !!getenv("COBALT_AML_DISABLE_WAIT_VIDEO");
     bool has_video = (self->video_codec_ != kSbMediaVideoCodecNone);
@@ -2052,11 +2057,13 @@ void PlayerImpl::SetupElement(GstElement* pipeline,
           g_object_class_find_property(oclass, "max-video-width") &&
           g_object_class_find_property(oclass, "max-video-height")) {
             MaxVideoCapabilities max_caps;
-            if (max_caps.Parse(self->max_video_capabilities_.c_str()) && max_caps.width && max_caps.height)
+            if (max_caps.Parse(self->max_video_capabilities_.c_str()) && max_caps.width && max_caps.height) {
+              GST_DEBUG_OBJECT(pipeline, "Set max video capabilities %u x %u on %" GST_PTR_FORMAT, *max_caps.width, *max_caps.height, element);
               g_object_set(G_OBJECT(element),
                            "max-video-width",  *max_caps.width,
                            "max-video-height", *max_caps.height,
                            nullptr);
+            }
         }
     }
 
@@ -2479,6 +2486,21 @@ void PlayerImpl::HandleInititialSeek(::starboard::ScopedLock& lock) {
   }
 
   if (state_ == State::kInitialPreroll) {
+    // Await for source setup to finish if needed
+    if (source_setup_id_) {
+      mutex_.Release();
+      source_setup_mutex_.Acquire();
+      while (source_setup_id_ != 0) {
+        constexpr auto kWaitTime = 500'000;
+        if (!source_setup_condition_.WaitTimed(kWaitTime)) {
+          GST_WARNING_OBJECT(pipeline_, "Source setup did not finish in time.");
+          break;
+        }
+      }
+      source_setup_mutex_.Release();
+      mutex_.Acquire();
+    }
+
     // Ask for data.
     MediaType need_data = static_cast<MediaType>(static_cast<int>(GetBothMediaTypeTakingCodecsIntoAccount()) & (~has_enough_data_));
     DecoderNeedsData(lock, need_data);
@@ -2723,7 +2745,7 @@ bool PlayerImpl::ChangePipelineState(GstState state) const {
   gst_element_get_state(pipeline_, &current, &pending, 0);
   if ((current == state && pending == GST_STATE_VOID_PENDING) || pending == state) {
     GST_DEBUG_OBJECT(
-      pipeline_, "Rejected state change to %s from %s with %s pending",
+      pipeline_, "Ignore state change to %s from %s with %s pending",
       gst_element_state_get_name(state),
       gst_element_state_get_name(current),
       gst_element_state_get_name(pending));
@@ -3034,15 +3056,19 @@ void PlayerImpl::UpdatePresentingState() {
     return;
 
   // Awaiting for buffering probes to report they got some data
-  if (buffering_state_ != 0)
+  if (buffering_state_ != 0) {
+    GST_INFO_OBJECT(pipeline_, "Delay State::kPresenting due to buffering");
     return;
+  }
 
   // Awaiting for video sink preroll
   GstState state, pending;
   GstStateChangeReturn ret;
   ret = gst_element_get_state(pipeline_, &state, &pending, 0);
-  if ((state < GST_STATE_PAUSED) || (pending == GST_STATE_PAUSED && ret == GST_STATE_CHANGE_ASYNC))
+  if ((state < GST_STATE_PAUSED) || (pending >= GST_STATE_PAUSED && ret == GST_STATE_CHANGE_ASYNC)) {
+    GST_INFO_OBJECT(pipeline_, "Delay State::kPresenting due to async transition pending %s -> %s", gst_element_state_get_name(state), gst_element_state_get_name(pending));
     return;
+  }
 
   GST_INFO_OBJECT(pipeline_, "Commit to State::kPresenting");
 

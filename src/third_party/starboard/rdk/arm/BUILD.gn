@@ -44,8 +44,10 @@ static_library("starboard_platform") {
   ]
 }
 
-if (build_with_separate_cobalt_toolchain) {
-  group("starboard_platform_with_main") {
-    deps = [ "$rdk_starboard_root/third_party/starboard/rdk/shared:starboard_platform_with_main" ]
+if (sb_is_modular) {
+  static_library("starboard_platform_with_main") {
+    check_includes = false
+    configs += [ "//starboard/build/config:starboard_implementation" ]
+    public_deps = [ ":starboard_platform" ]
   }
 }

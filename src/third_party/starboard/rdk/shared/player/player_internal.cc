@@ -41,15 +41,15 @@
 #include <cstring>
 #include <thread>
 #include <utility>
+#include <limits>
+#include <condition_variable>
+#include <mutex>
+#include <optional>
 
 #include "starboard/common/once.h"
 #include "starboard/common/media.h"
-#include "starboard/common/mutex.h"
-#include "starboard/common/condition_variable.h"
-#include "starboard/common/optional.h"
 #include "starboard/thread.h"
 #include "starboard/common/time.h"
-#include "starboard/memory.h"
 #include "starboard/drm.h"
 #include "starboard/common/log.h"
 #include "starboard/shared/starboard/media/media_util.h"
@@ -658,10 +658,10 @@ static void gst_cobalt_src_class_init(GstCobaltSrcClass* klass) {
 }
 
 struct MaxVideoCapabilities {
-  ::starboard::optional<uint32_t> width;
-  ::starboard::optional<uint32_t> height;
-  ::starboard::optional<uint32_t> framerate;
-  ::starboard::optional<uint32_t> streaming;
+  std::optional<uint32_t> width;
+  std::optional<uint32_t> height;
+  std::optional<uint32_t> framerate;
+  std::optional<uint32_t> streaming;
 
   MaxVideoCapabilities() = default;
 
@@ -709,8 +709,8 @@ struct MaxVideoCapabilities {
 
   bool HasLowResolution() const {
     return
-      width.has_engaged() && *width < 1920 &&
-      height.has_engaged() && *height < 1080;
+      width.has_value() && *width < 1920 &&
+      height.has_value() && *height < 1080;
   }
 };
 
@@ -1100,12 +1100,12 @@ static GstBuffer* CreateGstBuffer(const SbPlayerSampleInfo& sample_info,
     guint64 start_clip = 0, end_clip = 0;
 
     if (info.discarded_duration_from_front > 0) {
-      start_clip = (info.discarded_duration_from_front == kSbInt64Max)
+      start_clip = (info.discarded_duration_from_front == std::numeric_limits<int64_t>::max())
         ? kMaxGstClockTime : static_cast<guint64>(info.discarded_duration_from_front * GST_USECOND);
     }
 
     if (info.discarded_duration_from_back > 0) {
-      end_clip = (info.discarded_duration_from_back == kSbInt64Max)
+      end_clip = (info.discarded_duration_from_back == std::numeric_limits<int64_t>::max())
         ? kMaxGstClockTime : static_cast<guint64>(info.discarded_duration_from_back * GST_USECOND);
     }
 
@@ -1220,16 +1220,15 @@ enum class MediaType {
 
 class ScopedUnlock {
  public:
-  explicit ScopedUnlock(const ::starboard::Mutex& mutex)
+  explicit ScopedUnlock(std::mutex& mutex)
     : mutex_(mutex) {
-    mutex_.DCheckAcquired();
-    mutex_.Release();
+    mutex_.unlock();
   }
   ~ScopedUnlock() {
-    mutex_.Acquire();
+    mutex_.lock();
   }
 private:
-  const ::starboard::Mutex& mutex_;
+  std::mutex& mutex_;
   ScopedUnlock(const ScopedUnlock&) = delete;
   void operator=(const ScopedUnlock&) = delete;
 };
@@ -1546,7 +1545,7 @@ class PlayerImpl : public Player {
       PlayerImpl *self, GstPad*, GstCaps*,
        GValueArray * factories, GstElement*);
 
-  bool ChangePipelineState(GstState state) const;
+  bool ChangePipelineState(GstState state);
   guint DispatchOnWorkerThread(Task* task) const;
   void InvokeOnWorkerThreadAndWait(Task* task);
   GstClockTime GetPosition() const;
@@ -1562,7 +1561,6 @@ class PlayerImpl : public Player {
 
   // Delay audio decoder NeedData status notification
   bool DelayAudioDecoderNeedsData() {
-    mutex_.DCheckAcquired();
 
     // Don't throttle during pre-roll
     if (state_ != State::kPresenting)
@@ -1603,7 +1601,7 @@ class PlayerImpl : public Player {
     delay_audio_need_data_src_ = g_timeout_source_new(kCachedPositionRefreshIntervalMs);
     g_source_set_callback(delay_audio_need_data_src_, [](gpointer data) {
       PlayerImpl* self = static_cast<PlayerImpl*>(data);
-      ::starboard::ScopedLock lock(self->mutex_);
+      std::lock_guard lock(self->mutex_);
       g_clear_pointer(&self->delay_audio_need_data_src_, g_source_unref);
       self->DecoderNeedsData(lock, MediaType::kAudio, false);
       return G_SOURCE_REMOVE;
@@ -1613,8 +1611,7 @@ class PlayerImpl : public Player {
     return true;
   }
 
-  void DecoderNeedsData(::starboard::ScopedLock&, MediaType media, bool can_delay = true) {
-    mutex_.DCheckAcquired();
+  void DecoderNeedsData(std::lock_guard<std::mutex>&, MediaType media, bool can_delay = true) {
 
     int need_data = static_cast<int>(media) & ~decoder_state_data_;
     if (need_data == 0) {
@@ -1647,7 +1644,7 @@ class PlayerImpl : public Player {
   void ConfigureLimitedVideo();
   void SchedulePlayingStateUpdate();
   void AddBufferingProbe(GstClockTime target, int ticket);
-  void HandleInititialSeek(::starboard::ScopedLock&);
+  void HandleInititialSeek(std::lock_guard<std::mutex>&);
   void DidEnd();
 
   bool ShouldDecryptToHost() const {
@@ -1680,10 +1677,10 @@ class PlayerImpl : public Player {
   guint source_setup_id_{0};
   guint bus_watch_id_{0};
   std::thread playback_thread_;
-  ::starboard::Mutex mutex_;
-  ::starboard::Mutex source_setup_mutex_;
-  ::starboard::ConditionVariable source_setup_condition_ { source_setup_mutex_ };
-  ::starboard::Mutex seek_mutex_;
+  mutable std::mutex mutex_;
+  std::mutex source_setup_mutex_;
+  std::condition_variable source_setup_condition_;
+  std::mutex seek_mutex_;
   double rate_{1.0};
   int ticket_{SB_PLAYER_INITIAL_TICKET};
   mutable GstClockTime seek_position_{GST_CLOCK_TIME_NONE};
@@ -1709,7 +1706,7 @@ class PlayerImpl : public Player {
   uint64_t samples_serial_[kMediaNumber] { 0 };
 
   bool has_oob_write_pending_{false};
-  ::starboard::ConditionVariable pending_oob_write_condition_ { mutex_ };
+  std::condition_variable pending_oob_write_condition_;
 
   guint hang_monitor_source_id_ { 0 };
   HangMonitor hang_monitor_ { "Player" };
@@ -1729,11 +1726,11 @@ class PlayerImpl : public Player {
 
 struct PlayerRegistry
 {
-  ::starboard::Mutex mutex_;
+  std::mutex mutex_;
   std::vector<PlayerImpl*> players_;
 
   void Add(PlayerImpl *p) {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     auto it = std::find(players_.begin(), players_.end(), p);
     if (it == players_.end()) {
       players_.push_back(p);
@@ -1741,14 +1738,14 @@ struct PlayerRegistry
   }
 
   void Remove(PlayerImpl *p) {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     players_.erase(std::remove(players_.begin(), players_.end(), p), players_.end());
   }
 
   void ForceStop() {
     std::vector<GstElement*> pipelines;
     {
-      ::starboard::ScopedLock lock(mutex_);
+      std::lock_guard lock(mutex_);
       for(const auto& p: players_) {
         GstElement* pipeline = p->GetPipeline();
         if (pipeline) {
@@ -1767,7 +1764,7 @@ struct PlayerRegistry
   bool CanCreate(const char* max_video_capabilities) {
     #if !defined(COBALT_BUILD_TYPE_GOLD)
     bool has_max_video_caps_set = (max_video_capabilities && *max_video_capabilities);
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     for(const auto& p: players_) {
       if (p->HasMaxVideoCaps() == has_max_video_caps_set)
         return false;
@@ -1777,7 +1774,7 @@ struct PlayerRegistry
   }
 
   void AudioConfigurationChanged() {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     for(const auto& p: players_) {
       p->AudioConfigurationChanged();
     }
@@ -1944,7 +1941,7 @@ PlayerImpl::~PlayerImpl() {
 
   GST_INFO_OBJECT(pipeline_, "Destroying player");
   {
-    ::starboard::ScopedLock lock(source_setup_mutex_);
+    std::lock_guard lock(source_setup_mutex_);
     if (source_setup_id_ > 0) {
       GSource* src = g_main_context_find_source_by_id(main_loop_context_, source_setup_id_);
       g_source_destroy(src);
@@ -2080,7 +2077,7 @@ gboolean PlayerImpl::HandleBusMessage(GstBus* bus, GstMessage* message) {
           PendingBounds bounds;
 
           {
-            ::starboard::ScopedLock lock(mutex_);
+            std::lock_guard lock(mutex_);
             ticket = ticket_;
             is_seek_pending = is_seek_pending_;
             is_rate_pending = pending_rate_ != .0;
@@ -2122,7 +2119,7 @@ gboolean PlayerImpl::HandleBusMessage(GstBus* bus, GstMessage* message) {
                  gst_element_state_get_name(GST_STATE(pipeline_)),
                  PrivatePlayerStateToStr(state_));
 
-        ::starboard::ScopedLock lock(mutex_);
+        std::lock_guard lock(mutex_);
         if (state_ == State::kPrerollAfterSeek || state_ == State::kInitialPreroll) {
           SB_DCHECK(!is_seek_pending_);
           if (!is_seek_pending_ && !pending_samples_.empty()) {
@@ -2133,7 +2130,7 @@ gboolean PlayerImpl::HandleBusMessage(GstBus* bus, GstMessage* message) {
           }
           if (has_oob_write_pending_) {
             has_oob_write_pending_ = false;
-            pending_oob_write_condition_.Broadcast();
+            pending_oob_write_condition_.notify_all();
           }
           GST_INFO_OBJECT(pipeline_, "===> Asuming preroll done");
         }
@@ -2163,7 +2160,7 @@ gboolean PlayerImpl::HandleBusMessage(GstBus* bus, GstMessage* message) {
         GstDebugLevel log_level = GST_LEVEL_DEBUG;
         gst_message_parse_qos_stats(message, &format, &processed, &dropped);
         if (format == GST_FORMAT_BUFFERS) {
-          ::starboard::ScopedLock lock(mutex_);
+          std::lock_guard lock(mutex_);
           if (dropped_video_frames_ != static_cast<int>(dropped)) {
             log_level = GST_LEVEL_INFO;
             dropped_video_frames_ = static_cast<int>(dropped);
@@ -2229,8 +2226,8 @@ guint PlayerImpl::DispatchOnWorkerThread(Task* task) const {
 
 void PlayerImpl::InvokeOnWorkerThreadAndWait(Task* task) {
   struct InvokeContext {
-    ::starboard::Mutex mutex;
-    ::starboard::ConditionVariable cv { mutex };
+    std::mutex mutex;
+    std::condition_variable cv;
     Task* task;
     bool done;
   } ctx;
@@ -2246,20 +2243,19 @@ void PlayerImpl::InvokeOnWorkerThreadAndWait(Task* task) {
       GST_TRACE("%d", SbThreadGetId());
       ctx->task->PrintInfo();
       ctx->task->Do();
-      ctx->mutex.Acquire();
+      ctx->mutex.lock();
       ctx->done = true;
-      ctx->cv.Signal();
-      ctx->mutex.Release();
+      ctx->cv.notify_one();
+      ctx->mutex.unlock();
       return G_SOURCE_REMOVE;
     },
     &ctx,
     nullptr);
 
   // Wait for completion
-  ctx.mutex.Acquire();
+  std::unique_lock lock(ctx.mutex);
   while (!ctx.done)
-      ctx.cv.Wait();
-  ctx.mutex.Release();
+      ctx.cv.wait(lock);
 
   delete task;
 }
@@ -2267,7 +2263,7 @@ void PlayerImpl::InvokeOnWorkerThreadAndWait(Task* task) {
 // static
 gboolean PlayerImpl::FinishSourceSetup(gpointer user_data) {
   PlayerImpl* self = static_cast<PlayerImpl*>(user_data);
-  ::starboard::ScopedLock lock(self->source_setup_mutex_);
+  std::lock_guard lock(self->source_setup_mutex_);
   SB_DCHECK(self->source_);
   bool has_drm_system = !!self->drm_system_;
   GstElement* source = self->source_;
@@ -2287,7 +2283,7 @@ gboolean PlayerImpl::FinishSourceSetup(gpointer user_data) {
   }
   gst_cobalt_src_all_app_srcs_added(self->source_);
   self->source_setup_id_ = 0;
-  self->source_setup_condition_.Signal();
+  self->source_setup_condition_.notify_one();
   return G_SOURCE_REMOVE;
 }
 
@@ -2299,7 +2295,7 @@ void PlayerImpl::AppSrcNeedData(GstAppSrc* src,
 
   GST_LOG_OBJECT(src, "===> Give me more data");
 
-  ::starboard::ScopedLock lock(self->mutex_);
+  std::lock_guard lock(self->mutex_);
   int need_data = static_cast<int>(MediaType::kNone);
   SB_DCHECK(src == GST_APP_SRC(self->video_appsrc_) ||
          src == GST_APP_SRC(self->audio_appsrc_));
@@ -2329,7 +2325,7 @@ void PlayerImpl::AppSrcNeedData(GstAppSrc* src,
 void PlayerImpl::AppSrcEnoughData(GstAppSrc* src, gpointer user_data) {
   PlayerImpl* self = static_cast<PlayerImpl*>(user_data);
 
-  ::starboard::ScopedLock lock(self->mutex_);
+  std::lock_guard lock(self->mutex_);
 
   if (src == GST_APP_SRC(self->video_appsrc_))
     self->has_enough_data_ |= static_cast<int>(MediaType::kVideo);
@@ -2348,7 +2344,7 @@ gboolean PlayerImpl::AppSrcSeekData(GstAppSrc* src,
   GST_DEBUG_OBJECT(src, "===> Seek on appsrc %" PRId64, offset);
 
   {
-    ::starboard::ScopedLock lock(self->mutex_);
+    std::lock_guard lock(self->mutex_);
     if (self->state_ != State::kPrerollAfterSeek) {
       GST_DEBUG_OBJECT(src, "Not seeking");
       return TRUE;
@@ -2363,7 +2359,7 @@ gboolean PlayerImpl::AppSrcSeekData(GstAppSrc* src,
 void PlayerImpl::SetupSource(GstElement* pipeline,
                              GstElement* source,
                              PlayerImpl* self) {
-  ::starboard::ScopedLock lock(self->source_setup_mutex_);
+  std::lock_guard lock(self->source_setup_mutex_);
   if (self->source_)
     return;
   self->source_ = source;
@@ -2500,7 +2496,7 @@ void PlayerImpl::MarkEOS(SbMediaType stream_type) {
   }
 
   GST_INFO_OBJECT(src, "===> ticket: %d", ticket_);
-  ::starboard::ScopedLock lock(mutex_);
+  std::lock_guard lock(mutex_);
   if (state_ == State::kPrerollAfterSeek)
     GST_DEBUG_OBJECT(src, "===> Mark EOS with State::kPrerollAfterSeek");
 
@@ -2633,7 +2629,7 @@ void PlayerImpl::WriteSamples(SbMediaType sample_type,
     if (G_UNLIKELY((audio_codec_ == kSbMediaAudioCodecNone && sample_type == kSbMediaTypeAudio) ||
                    (video_codec_ == kSbMediaVideoCodecNone && sample_type == kSbMediaTypeVideo))) {
       sample_deallocate_func_(player_, context_, sample_info.buffer);
-      ::starboard::ScopedLock lock(mutex_);
+      std::lock_guard lock(mutex_);
       if (idx == 0) {
         // clear decoder state only once
         decoder_state_data_ &= ~static_cast<int>(media_type);
@@ -2649,7 +2645,7 @@ void PlayerImpl::WriteSamples(SbMediaType sample_type,
     gst_buffer_unref(buffer); // gst sample owns the buffer now, the buffer pointer remains valid as long as sample is valid
     SB_DCHECK(buffer == gst_sample_get_buffer(sample));
 
-    ::starboard::ScopedLock lock(mutex_);
+    std::unique_lock lock(mutex_);
     RecordTimestamp(sample_type, GST_BUFFER_TIMESTAMP(buffer));
     uint64_t serial = samples_serial_[ (sample_type == kSbMediaTypeVideo ? kVideoIndex : kAudioIndex) ]++;
     if (sample_type == kSbMediaTypeVideo) {
@@ -2671,7 +2667,7 @@ void PlayerImpl::WriteSamples(SbMediaType sample_type,
       // Let other thread finish writing pending samples
       do {
         constexpr auto kWaitTime = 10'000'000;  // 10 seconds
-        if (!pending_oob_write_condition_.WaitTimed(kWaitTime)) {
+        if (pending_oob_write_condition_.wait_for(lock, std::chrono::microseconds(kWaitTime)) == std::cv_status::timeout) {
           GST_ERROR_OBJECT(pipeline_, "Pending write took too long, give up");
           has_oob_write_pending_ = false;
           break;
@@ -2687,7 +2683,7 @@ void PlayerImpl::WriteSamples(SbMediaType sample_type,
       pending_samples_.emplace_back(PendingSample{sample_type, sample, serial});
 
       GstSample* sample_copy = pending_samples_.back().CopyGstSample();
-      ::starboard::ScopedLock seek_lock(seek_mutex_);
+      std::lock_guard seek_lock(seek_mutex_);
       ScopedUnlock unlock(mutex_);
       if (!WriteGstSample(sample_type, sample_copy, serial)) {
         gst_sample_unref(sample_copy);
@@ -2700,7 +2696,7 @@ void PlayerImpl::WriteSamples(SbMediaType sample_type,
     }
   }
 
-  ::starboard::ScopedLock lock(mutex_);
+  std::lock_guard lock(mutex_);
   // Let 'need-data' to trigger decoder status callbacks during initial preroll.
   if (state_ > State::kInitialPreroll) {
     GstElement* src = (sample_type == kSbMediaTypeVideo)
@@ -2725,8 +2721,7 @@ void PlayerImpl::SetVolume(double volume) {
                                GST_STREAM_VOLUME_FORMAT_LINEAR, volume);
 }
 
-void PlayerImpl::HandleInititialSeek(::starboard::ScopedLock& lock) {
-  mutex_.DCheckAcquired();
+void PlayerImpl::HandleInititialSeek(std::lock_guard<std::mutex>& lock) {
   SB_DCHECK(state_ == State::kInitial || GST_STATE(pipeline_) < GST_STATE_PAUSED);
 
   if (state_ == State::kInitial) {
@@ -2736,12 +2731,12 @@ void PlayerImpl::HandleInititialSeek(::starboard::ScopedLock& lock) {
     seek_position_ = GST_CLOCK_TIME_NONE;
     if (GST_STATE(pipeline_) < GST_STATE_PAUSED &&
         GST_STATE_PENDING(pipeline_) < GST_STATE_PAUSED) {
-      mutex_.Release();
+      mutex_.unlock();
       // Trigger initial state change to pause on worker thread to serialize source setup
       InvokeOnWorkerThreadAndWait(new FunctionTask([this]{
         ChangePipelineState(GST_STATE_PAUSED);
       }, __func__));
-      mutex_.Acquire();
+      mutex_.lock();
     }
     // Notify player state change
     DispatchOnWorkerThread(
@@ -2754,17 +2749,18 @@ void PlayerImpl::HandleInititialSeek(::starboard::ScopedLock& lock) {
   if (state_ == State::kInitialPreroll) {
     // Wait for source setup to finish
     if (source_setup_id_) {
-      mutex_.Release();
-      source_setup_mutex_.Acquire();
+      mutex_.unlock();
+      std::unique_lock lk(source_setup_mutex_);
       while (source_setup_id_ != 0) {
         constexpr auto kWaitTime = 500'000;
-        if (!source_setup_condition_.WaitTimed(kWaitTime)) {
+        if (source_setup_condition_.wait_for(lk, std::chrono::microseconds(kWaitTime)) == std::cv_status::timeout) {
           GST_WARNING_OBJECT(pipeline_, "Source setup did not finish in time.");
           break;
         }
       }
-      source_setup_mutex_.Release();
-      mutex_.Acquire();
+
+      lk.unlock();
+      mutex_.lock();
     }
 
     // Both srcs should be started by now
@@ -2814,7 +2810,7 @@ void PlayerImpl::HandleInititialSeek(::starboard::ScopedLock& lock) {
 void PlayerImpl::Seek(int64_t seek_to_timestamp, int ticket) {
   g_return_if_fail(seek_to_timestamp >= 0);
 
-  ::starboard::ScopedLock seek_lock(seek_mutex_);
+  std::lock_guard seek_lock(seek_mutex_);
   GstClockTime current_pos_ns = GetPosition();
   GstClockTime seek_to_time_ns = static_cast<GstClockTime>(seek_to_timestamp * GST_USECOND);
   double rate = 1.;
@@ -2825,7 +2821,7 @@ void PlayerImpl::Seek(int64_t seek_to_timestamp, int ticket) {
                   static_cast<int>(state_),
                   ticket);
 
-  ::starboard::ScopedLock lock(mutex_);
+  std::lock_guard lock(mutex_);
   if (G_UNLIKELY(ticket_ > ticket)) {
     GST_INFO_OBJECT(pipeline_, "Ignore seek with ticket: %d (stored ticket: %d)", ticket, ticket_);
     return;
@@ -2856,7 +2852,7 @@ void PlayerImpl::Seek(int64_t seek_to_timestamp, int ticket) {
     return;
   }
 
-  mutex_.Release();
+  mutex_.unlock();
   GST_DEBUG_OBJECT(pipeline_, "Calling seek");
   DispatchOnWorkerThread(new PlayerStatusTask(player_status_func_, player_,
                                               ticket_, context_,
@@ -2866,7 +2862,7 @@ void PlayerImpl::Seek(int64_t seek_to_timestamp, int ticket) {
                         GST_SEEK_TYPE_SET, seek_to_timestamp * GST_USECOND,
                         GST_SEEK_TYPE_NONE, 0)) {
     GST_ERROR_OBJECT(pipeline_, "Seek failed");
-    mutex_.Acquire();
+    mutex_.lock();
     buffering_state_ = 0;
     DispatchOnWorkerThread(new PlayerStatusTask(player_status_func_, player_,
                                                 ticket_, context_,
@@ -2876,7 +2872,7 @@ void PlayerImpl::Seek(int64_t seek_to_timestamp, int ticket) {
     }, "Presenting after seek failure"));
   } else {
     GST_DEBUG_OBJECT(pipeline_, "Seek called with success");
-    mutex_.Acquire();
+    mutex_.lock();
     DispatchOnWorkerThread(new FunctionTask([this]() {
       state_ = State::kPrerollAfterSeek;
     }, "Preroll after seek"));
@@ -2891,14 +2887,14 @@ bool PlayerImpl::SetRate(double rate) {
   double old_rate;
   bool success = true;
 
-  mutex_.Acquire();
+  mutex_.lock();
   old_rate = rate_;
   rate_ = rate;
   pending_rate_ = .0;
   cached_position_expiration_time_ = 0;
 
   if (state_ == State::kInitial) {
-    mutex_.Release();
+    mutex_.unlock();
     SB_DCHECK(rate == .0);
     SB_DCHECK(GST_STATE(pipeline_) < GST_STATE_PAUSED);
     GST_DEBUG_OBJECT(pipeline_, "Ignore SetRate(%f) before initial seek", rate);
@@ -2906,7 +2902,7 @@ bool PlayerImpl::SetRate(double rate) {
   }
 
   if (rate == .0) {
-    mutex_.Release();
+    mutex_.unlock();
     ChangePipelineState(GST_STATE_PAUSED);
     return true;
   }
@@ -2918,33 +2914,33 @@ bool PlayerImpl::SetRate(double rate) {
 
   if (rate != 1. || need_instant_rate_change_) {
     if (is_seek_pending_) {
-      mutex_.Release();
+      mutex_.unlock();
       GST_DEBUG_OBJECT(pipeline_, "Rate will be set when doing seek");
       return true;
     }
     if (state < GST_STATE_PLAYING || need_first_segment_ack_) {
       rate_ = old_rate;
       pending_rate_ = rate;
-      mutex_.Release();
+      mutex_.unlock();
       GST_DEBUG_OBJECT(pipeline_, "===> Set rate postponed");
       return true;
     }
     need_instant_rate_change_ = ( rate != 1. );
-    mutex_.Release();
+    mutex_.unlock();
 
     GstStructure* s = gst_structure_new(
         kCustomInstantRateChangeEventName, "rate", G_TYPE_DOUBLE, rate, NULL);
     success = gst_element_send_event(
         pipeline_, gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM_OOB, s));
 
-    mutex_.Acquire();
+    mutex_.lock();
   }
 
   if (!success) {
     rate_ = old_rate;
     GST_ERROR_OBJECT(pipeline_, "Set rate failed");
   }
-  mutex_.Release();
+  mutex_.unlock();
 
   return success;
 }
@@ -2953,7 +2949,7 @@ void PlayerImpl::GetInfo(SbPlayerInfo* out_player_info) {
 
   GstClockTime position;
   {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     if (cached_position_expiration_time_ < g_get_monotonic_time() || eos_data_ != 0) {
       if (UpdateCachedPositionLocked())
         cached_position_expiration_time_ = g_get_monotonic_time() + kCachedPositionRefreshIntervalMs * 1'000;
@@ -2995,7 +2991,7 @@ void PlayerImpl::SetBounds(int zindex, int x, int y, int w, int h) {
   GstElement* vid_sink = nullptr;
   g_object_get(pipeline_, "video-sink", &vid_sink, nullptr);
   if (!vid_sink) {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     pending_bounds_ = PendingBounds{x, y, w, h};
     return;
   }
@@ -3010,7 +3006,7 @@ void PlayerImpl::SetBounds(int zindex, int x, int y, int w, int h) {
   gst_object_unref(GST_OBJECT(vid_sink));
 }
 
-bool PlayerImpl::ChangePipelineState(GstState state) const {
+bool PlayerImpl::ChangePipelineState(GstState state) {
   if (force_stop_ && state > GST_STATE_READY) {
     GST_INFO_OBJECT(pipeline_, "Ignore state change due to forced stop");
     return false;
@@ -3032,7 +3028,7 @@ bool PlayerImpl::ChangePipelineState(GstState state) const {
     GstClockTime seek_pos_ns = GST_CLOCK_TIME_NONE;
     GstClockTime min_ts = GST_CLOCK_TIME_NONE;
     {
-      ::starboard::ScopedLock lock(mutex_);
+      std::lock_guard lock(mutex_);
       if (GST_CLOCK_TIME_IS_VALID(seek_position_) && !HasEOSMark()) {
         seek_pos_ns = seek_position_;
         min_ts = MinTimestamp(nullptr);
@@ -3055,7 +3051,7 @@ bool PlayerImpl::ChangePipelineState(GstState state) const {
     }
   }
   else {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     guint src_id = std::exchange(playing_state_update_source_id_, 0u);
     if (src_id != 0u) {
       GSource* src = g_main_context_find_source_by_id(main_loop_context_, src_id);
@@ -3097,7 +3093,7 @@ void PlayerImpl::CheckBuffering(GstClockTime position) {
       GST_STATE_PENDING(pipeline_) != GST_STATE_PAUSED &&
       eos_data_ == 0) {
     {
-      ::starboard::ScopedLock lock(mutex_);
+      std::lock_guard lock(mutex_);
       DecoderNeedsData(lock, origin);
       buf_target_min_ts_ = position + kTargetBufferDurationNs;
     }
@@ -3109,7 +3105,7 @@ void PlayerImpl::CheckBuffering(GstClockTime position) {
     double rate;
     GstClockTime buf_target_min_ts = buf_target_min_ts_;
     {
-      ::starboard::ScopedLock lock(mutex_);
+      std::lock_guard lock(mutex_);
       buf_target_min_ts_ = GST_CLOCK_TIME_NONE;
       rate = rate_;
     }
@@ -3188,12 +3184,11 @@ bool PlayerImpl::UpdateCachedPositionLocked() {
 }
 
 GstClockTime PlayerImpl::GetPosition() const {
-  ::starboard::ScopedLock lock(mutex_);
+  std::lock_guard lock(mutex_);
   return GetPositionLocked();
 }
 
 GstClockTime PlayerImpl::GetPositionLocked() const {
-  mutex_.DCheckAcquired();
   if (GST_CLOCK_TIME_IS_VALID(seek_position_))
     return seek_position_;
   if (GST_CLOCK_TIME_IS_VALID(cached_position_ns_))
@@ -3202,7 +3197,6 @@ GstClockTime PlayerImpl::GetPositionLocked() const {
 }
 
 void PlayerImpl::WritePendingSamplesLocked() {
-  mutex_.DCheckAcquired();
   SB_DCHECK(!is_seek_pending_);
   SB_DCHECK(has_oob_write_pending_);
   if (pending_samples_.empty())
@@ -3297,7 +3291,7 @@ void PlayerImpl::HandleApplicationMessage(GstBus* bus, GstMessage* message) {
     ChangePipelineState(GST_STATE_READY);
     g_signal_handlers_disconnect_by_func(pipeline_, reinterpret_cast<gpointer>(&PlayerImpl::SetupSource), this);
     g_signal_handlers_disconnect_by_func(pipeline_, reinterpret_cast<gpointer>(&PlayerImpl::SetupElement), this);
-    ::starboard::ScopedLock lock(source_setup_mutex_);
+    std::lock_guard lock(source_setup_mutex_);
     if (source_setup_id_ > 0) {
       GSource* src = g_main_context_find_source_by_id(main_loop_context_, source_setup_id_);
       g_source_destroy(src);
@@ -3311,11 +3305,11 @@ void PlayerImpl::HandleApplicationMessage(GstBus* bus, GstMessage* message) {
       double rate = 0.;
       auto type = GST_MESSAGE_SRC(message) == GST_OBJECT(audio_appsrc_) ? MediaType::kAudio : MediaType::kVideo;
 
-      mutex_.Acquire();
+      mutex_.lock();
       need_first_segment_ack_ &= ~ static_cast<int>(type);
       should_set_rate = (need_first_segment_ack_ == 0 && pending_rate_ != .0 && !is_seek_pending_);
       rate = pending_rate_;
-      mutex_.Release();
+      mutex_.unlock();
 
       if (should_set_rate) {
         GST_INFO_OBJECT(pipeline_, "Sending pending SetRate(rate=%lf)", rate);
@@ -3330,7 +3324,7 @@ void PlayerImpl::HandleApplicationMessage(GstBus* bus, GstMessage* message) {
         GST_INFO_OBJECT(pipeline_, "Received '%s' message from %" GST_PTR_FORMAT " with ticket %d", kDidReachBufferingTargetMsgName, GST_MESSAGE_SRC(message), ticket);
         auto type = GST_MESSAGE_SRC(message) == GST_OBJECT(audio_appsrc_) ? MediaType::kAudio : MediaType::kVideo;
         bool should_update_playing_state = false;
-        ::starboard::ScopedLock lock(mutex_);
+        std::lock_guard lock(mutex_);
         if (ticket == ticket_ && buffering_state_ != 0) {
           buffering_state_ &= ~(static_cast<int>(type));
           should_update_playing_state = (buffering_state_ == 0);
@@ -3354,8 +3348,6 @@ void PlayerImpl::HandleApplicationMessage(GstBus* bus, GstMessage* message) {
 }
 
 void PlayerImpl::UpdatePresentingState() {
-  mutex_.DCheckAcquired();
-
   // Already reached Presenting/Ended
   if (state_ >= State::kPresenting)
     return;
@@ -3503,8 +3495,6 @@ void PlayerImpl::AddBufferingProbe(GstClockTime target, int ticket) {
 }
 
 void PlayerImpl::SchedulePlayingStateUpdate() {
-  mutex_.DCheckAcquired();
-
   if (playing_state_update_source_id_ != 0u)  // already scheduled
     return;
 
@@ -3521,7 +3511,7 @@ void PlayerImpl::SchedulePlayingStateUpdate() {
       ret = gst_element_get_state(pipeline_, &state, &pending, 0);
       need_preroll = (state <= GST_STATE_PAUSED && pending == GST_STATE_PAUSED && ret == GST_STATE_CHANGE_ASYNC);
 
-      ::starboard::ScopedLock lock(mutex_);
+      std::lock_guard lock(mutex_);
       src_id = std::exchange(playing_state_update_source_id_, 0u);
       should_be_playing = (rate_ || pending_rate_);
       // if src_id == 0 then play request is canceled
@@ -3557,7 +3547,7 @@ void PlayerImpl::SchedulePlayingStateUpdate() {
 
 void PlayerImpl::DidEnd() {
   {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     cached_position_expiration_time_ = 0;
   }
 

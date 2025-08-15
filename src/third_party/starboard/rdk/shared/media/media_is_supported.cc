@@ -92,7 +92,12 @@ std::string CodecToMimeType(SbMediaAudioCodec codec) {
 
 }  // namspace
 
-SB_EXPORT bool SbMediaIsSupported(SbMediaVideoCodec video_codec,
+namespace starboard {
+namespace shared {
+namespace starboard {
+namespace media {
+
+SB_EXPORT bool MediaIsSupported(SbMediaVideoCodec video_codec,
                                   SbMediaAudioCodec audio_codec,
                                   const char* key_system) {
 #if defined(HAS_OCDM)
@@ -105,3 +110,8 @@ SB_EXPORT bool SbMediaIsSupported(SbMediaVideoCodec video_codec,
   return false;
 #endif
 }
+
+}  // namespace media
+}  // namespace starboard
+}  // namespace shared
+}  // namespace starboard

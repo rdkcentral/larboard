@@ -53,6 +53,10 @@ config("platform_configuration") {
       "//build/config/compiler:rtti",
     ]
 
+    if (current_toolchain == starboard_toolchain) {
+      configs += [ "//starboard/build/config:starboard" ]
+    }
+
     libs = [
       "pthread",
     ]
@@ -63,6 +67,12 @@ config("platform_configuration") {
       "-fno-strict-aliasing",
       "-fno-delete-null-pointer-checks",
       "-fno-omit-frame-pointer",
+      "-Wno-sign-compare",
+      "-Wno-stringop-overflow",
+      "-Wno-stringop-truncation",
+      "-Wno-unused-function",
+      "-Wno-unused-result",
+      "-Wno-unused-variable",
       "-funwind-tables",
     ]
 

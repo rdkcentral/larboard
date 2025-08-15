@@ -28,6 +28,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import("//cobalt/build/configs/hacks.gni")
 import("//starboard/build/toolchain/cobalt_toolchains.gni")
 import("$rdk_starboard_root/third_party/starboard/rdk/shared/build/rdk_toolchain.gni")
 
@@ -44,14 +45,6 @@ if (!rdk_build_with_yocto) {
   }
 }
 
-cobalt_clang_toolchain("cobalt") {
-  if (rdk_build_with_yocto) {
-    native_linker_path = getenv("CXX")
-  } else {
-    native_linker_path = _rdk_toolchain_toolprefix + "gcc"
-  }
-}
-
 rdk_gcc_toolchain("starboard") {
   if (rdk_build_with_yocto) {
     envprefix = ""
@@ -59,15 +52,11 @@ rdk_gcc_toolchain("starboard") {
     toolprefix = _rdk_toolchain_toolprefix
     platform_cflags = _rdk_toolchain_platform_cflags
   }
-}
-
-rdk_gcc_toolchain("target") {
-  if (rdk_build_with_yocto) {
-    envprefix = ""
-  } else {
-    toolprefix = _rdk_toolchain_toolprefix
-    platform_cflags = _rdk_toolchain_platform_cflags
+  toolchain_args = {
+    is_starboard = true
+    sysroot = "$rdk_sysroot"
   }
+  propagates_configs = !enable_cobalt_hermetic_hacks
 }
 
 rdk_gcc_toolchain("native_target") {

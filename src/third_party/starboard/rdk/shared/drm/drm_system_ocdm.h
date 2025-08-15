@@ -18,12 +18,12 @@
 #define THIRD_PARTY_STARBOARD_RDK_SHARED_DRM_DRM_SYSTEM_OCDM_H_
 
 #include <memory>
+#include <mutex>
 #include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-#include "starboard/common/mutex.h"
 #include "starboard/event.h"
 #include "starboard/shared/starboard/drm/drm_system_internal.h"
 #include "starboard/common/ref_counted.h"
@@ -104,13 +104,13 @@ class DrmSystemOcdm : public SbDrmSystemPrivate, public ::starboard::RefCountedT
                _GstBuffer* iv,
                _GstBuffer* key_id,
                _GstCaps* caps);
-  std::set<std::string> GetReadyKeys() const;
+  std::set<std::string> GetReadyKeys();
   KeysWithStatus GetSessionKeys(const std::string& session_id) const;
 
   void Invalidate();
 
  private:
-  session::Session* GetSessionById(const std::string& id) const;
+  session::Session* GetSessionById(const std::string& id);
   void AnnounceKeys();
 
   std::set<std::string> GetReadyKeysUnlocked() const;
@@ -130,7 +130,7 @@ class DrmSystemOcdm : public SbDrmSystemPrivate, public ::starboard::RefCountedT
   std::unordered_map<std::string, KeysWithStatus> session_keys_;
   mutable std::set<std::string> cached_ready_keys_;
   SbEventId event_id_;
-  ::starboard::Mutex mutex_;
+  std::mutex mutex_;
 
   std::vector<uint8_t> metrics_;
 };

@@ -38,7 +38,6 @@
 #include "starboard/common/log.h"
 #include "starboard/common/string.h"
 #include "starboard/shared/starboard/get_home_directory.h"
-#include "starboard/directory.h"
 
 namespace starboard {
 namespace shared {

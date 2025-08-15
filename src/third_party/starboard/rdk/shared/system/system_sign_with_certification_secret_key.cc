@@ -34,8 +34,6 @@
 
 #include "starboard/file.h"
 #include "starboard/system.h"
-#include "starboard/string.h"
-#include "starboard/memory.h"
 
 #include "third_party/starboard/rdk/shared/hang_detector.h"
 #include "third_party/starboard/rdk/shared/log_override.h"

@@ -53,10 +53,8 @@ config("platform_configuration") {
       "//build/config/compiler:rtti",
     ]
 
-    if (!build_with_separate_cobalt_toolchain && !is_component_build) {
-      configs += [
-        "//build/config/gcc:rpath_for_built_shared_libraries",
-      ]
+    if (current_toolchain == starboard_toolchain) {
+      configs += [ "//starboard/build/config:starboard" ]
     }
 
     libs = [
@@ -69,6 +67,12 @@ config("platform_configuration") {
       "-fno-strict-aliasing",
       "-fno-delete-null-pointer-checks",
       "-fno-omit-frame-pointer",
+      "-Wno-sign-compare",
+      "-Wno-stringop-overflow",
+      "-Wno-stringop-truncation",
+      "-Wno-unused-function",
+      "-Wno-unused-result",
+      "-Wno-unused-variable",
       "-funwind-tables",
     ]
 

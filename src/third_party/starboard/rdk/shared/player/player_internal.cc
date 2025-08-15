@@ -42,6 +42,7 @@
 #include <thread>
 #include <utility>
 #include <chrono>
+#include <limits>
 #include <condition_variable>
 #include <mutex>
 #include <optional>
@@ -1100,12 +1101,12 @@ static GstBuffer* CreateGstBuffer(const SbPlayerSampleInfo& sample_info,
     guint64 start_clip = 0, end_clip = 0;
 
     if (info.discarded_duration_from_front > 0) {
-      start_clip = (info.discarded_duration_from_front == kSbInt64Max)
+      start_clip = (info.discarded_duration_from_front == std::numeric_limits<int64_t>::max())
         ? kMaxGstClockTime : static_cast<guint64>(info.discarded_duration_from_front * GST_USECOND);
     }
 
     if (info.discarded_duration_from_back > 0) {
-      end_clip = (info.discarded_duration_from_back == kSbInt64Max)
+      end_clip = (info.discarded_duration_from_back == std::numeric_limits<int64_t>::max())
         ? kMaxGstClockTime : static_cast<guint64>(info.discarded_duration_from_back * GST_USECOND);
     }
 
@@ -1546,7 +1547,7 @@ class PlayerImpl : public Player {
       PlayerImpl *self, GstPad*, GstCaps*,
        GValueArray * factories, GstElement*);
 
-  bool ChangePipelineState(GstState state) const;
+  bool ChangePipelineState(GstState state);
   guint DispatchOnWorkerThread(Task* task) const;
   void InvokeOnWorkerThreadAndWait(Task* task);
   GstClockTime GetPosition() const;
@@ -3010,7 +3011,7 @@ void PlayerImpl::SetBounds(int zindex, int x, int y, int w, int h) {
   gst_object_unref(GST_OBJECT(vid_sink));
 }
 
-bool PlayerImpl::ChangePipelineState(GstState state) const {
+bool PlayerImpl::ChangePipelineState(GstState state) {
   if (force_stop_ && state > GST_STATE_READY) {
     GST_INFO_OBJECT(pipeline_, "Ignore state change due to forced stop");
     return false;

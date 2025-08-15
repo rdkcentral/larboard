@@ -36,7 +36,6 @@ cobalt_font_package_override_named_serif = 3
 final_executable_type = "shared_library"
 starboard_level_final_executable_type = "shared_library"
 
-sb_api_version = 16
 sb_filter_based_player = false
 gl_type = "system_gles2"
 

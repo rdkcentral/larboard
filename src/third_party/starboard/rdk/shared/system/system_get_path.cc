@@ -28,7 +28,6 @@
 #include "starboard/configuration_constants.h"
 #include "starboard/common/log.h"
 #include "starboard/common/string.h"
-#include "starboard/directory.h"
 #if SB_IS(EVERGREEN_COMPATIBLE)
 #include "starboard/elf_loader/evergreen_config.h"
 #endif

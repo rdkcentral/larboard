@@ -41,10 +41,10 @@
 #include "third_party/starboard/rdk/shared/application_rdk.h"
 
 #if SB_IS(EVERGREEN_COMPATIBLE)
-#include "third_party/crashpad/crashpad/wrapper/wrapper.h"
+#include "starboard/common/command_line.h"
 #include "starboard/common/paths.h"
+#include "starboard/crashpad_wrapper/wrapper.h"
 #include "starboard/elf_loader/elf_loader_constants.h"
-#include "starboard/shared/starboard/command_line.h"
 #endif
 
 namespace third_party {
@@ -90,7 +90,7 @@ extern "C" SB_EXPORT_PLATFORM int main(int argc, char** argv) {
   third_party::starboard::rdk::shared::InstallStopSignalHandlers();
 
 #if SB_IS(EVERGREEN_COMPATIBLE)
-  auto command_line = starboard::shared::starboard::CommandLine(argc, argv);
+  auto command_line = starboard::CommandLine(argc, argv);
   auto evergreen_content_path =
     command_line.GetSwitchValue(starboard::elf_loader::kEvergreenContent);
   std::string ca_certificates_path = evergreen_content_path.empty()

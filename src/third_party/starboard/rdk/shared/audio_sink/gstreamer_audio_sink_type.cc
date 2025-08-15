@@ -513,18 +513,19 @@ SbAudioSink GStreamerAudioSinkType::Create(
 }  // namespace third_party
 
 using third_party::starboard::rdk::shared::audio_sink::GStreamerAudioSinkType;
+using ::starboard::shared::starboard::audio_sink::SbAudioSinkImpl;
 
 // static
-void SbAudioSinkPrivate::PlatformInitialize() {
+void SbAudioSinkImpl::PlatformInitialize() {
   auto* sink_type = GStreamerAudioSinkType::CreateInstance();
-  SetPrimaryType(sink_type);
+  SbAudioSinkImpl::SetPrimaryType(sink_type);
   EnableFallbackToStub();
 }
 
 // static
-void SbAudioSinkPrivate::PlatformTearDown() {
-  auto* sink_type = GetPrimaryType();
-  SetPrimaryType(NULL);
+void SbAudioSinkImpl::PlatformTearDown() {
+  auto* sink_type = SbAudioSinkImpl::GetPrimaryType();
+  SbAudioSinkImpl::SetPrimaryType(NULL);
   GStreamerAudioSinkType::DestroyInstance(
       static_cast<GStreamerAudioSinkType*>(sink_type));
 }

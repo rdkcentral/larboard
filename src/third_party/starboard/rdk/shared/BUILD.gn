@@ -54,6 +54,7 @@ pkg_config("glib") {
     "gobject-2.0",
     "gthread-2.0",
   ]
+  supports_isystem = false
 }
 
 pkg_config("gstreamer") {
@@ -66,6 +67,7 @@ pkg_config("gstreamer") {
     "gstreamer-audio-1.0",
     "gstreamer-pbutils-1.0",
   ]
+  supports_isystem = false
 }
 
 pkg_config("wpeframework") {
@@ -75,12 +77,14 @@ pkg_config("wpeframework") {
     "WPEFrameworkDefinitions",
     "WPEFrameworkWebSocket",
   ]
+  supports_isystem = false
 }
 
 pkg_config("cryptography") {
   extra_args = rdk_pkgconfig_extra_args
   packages = [ "WPEFrameworkCryptography" ]
   defines = [ "HAS_CRYPTOGRAPHY=1" ]
+  supports_isystem = false
 }
 
 if (rdk_enable_securityagent) {
@@ -88,6 +92,7 @@ if (rdk_enable_securityagent) {
     extra_args = rdk_pkgconfig_extra_args
     packages = [ "securityagent" ]
     defines = [ "HAS_SECURITY_AGENT=1" ]
+    supports_isystem = false
   }
 }
 
@@ -96,6 +101,7 @@ if (rdk_enable_ocdm) {
     extra_args = rdk_pkgconfig_extra_args
     packages = [ "ocdm" ]
     defines = [ "HAS_OCDM=1" ]
+    supports_isystem = false
   }
 }
 

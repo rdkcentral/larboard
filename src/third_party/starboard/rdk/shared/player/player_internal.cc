@@ -48,6 +48,7 @@
 #include "starboard/memory.h"
 #include "starboard/drm.h"
 #include "starboard/common/log.h"
+#include "starboard/shared/starboard/media/media_util.h"
 #include "third_party/starboard/rdk/shared/media/gst_media_utils.h"
 #include "third_party/starboard/rdk/shared/hang_detector.h"
 #include "third_party/starboard/rdk/shared/drm/gst_decryptor_ocdm.h"
@@ -74,6 +75,7 @@ int Player::MaxNumberOfSamplesPerWrite() {
 
 using third_party::starboard::rdk::shared::drm::CreateDecryptorElement;
 using third_party::starboard::rdk::shared::media::CodecToGstCaps;
+using ::starboard::shared::starboard::media::IsSDRVideo;
 
 // **************************** GST/GLIB Helpers **************************** //
 
@@ -757,6 +759,12 @@ static GstVideoColorPrimaries PrimaryIdToGstVideoColorPrimaries(SbMediaPrimaryId
 }
 
 static void AddColorMetadataToGstCaps(GstCaps* caps, const SbMediaColorMetadata& color_metadata) {
+  if (IsSDRVideo(color_metadata.bits_per_channel,
+                 color_metadata.primaries,
+                 color_metadata.transfer,
+                 color_metadata.matrix))
+    return;
+
   GstVideoColorimetry colorimetry;
   colorimetry.range = RangeIdToGstVideoColorRange(color_metadata.range);
   colorimetry.matrix = MatrixIdToGstVideoColorMatrix(color_metadata.matrix);

@@ -631,6 +631,13 @@ struct MaxVideoCapabilities {
   ::starboard::optional<uint32_t> framerate;
   ::starboard::optional<uint32_t> streaming;
 
+  MaxVideoCapabilities() = default;
+
+  explicit MaxVideoCapabilities(const char* caps_str) {
+    if (caps_str && *caps_str)
+      Parse(caps_str);
+  }
+
   bool Parse(const char* caps_str) {
     auto parse_entry = [this](std::string& entry) {
       auto end = std::remove_if(entry.begin(), entry.end(),
@@ -665,7 +672,13 @@ struct MaxVideoCapabilities {
   }
 
   bool IsValid() const {
-    return width || height || framerate;
+    return width || height || framerate || streaming;
+  }
+
+  bool HasLowResolution() const {
+    return
+      width.has_engaged() && *width < 1920 &&
+      height.has_engaged() && *height < 1080;
   }
 };
 
@@ -1152,7 +1165,7 @@ class PlayerImpl : public Player {
 
   GstElement* GetPipeline() const { return pipeline_;  }
   bool IsValid() const { return playback_thread_.joinable(); }
-  bool HasMaxVideoCaps() const { return !max_video_capabilities_.empty(); }
+  bool HasMaxVideoCaps() const { return max_video_capabilities_.IsValid(); }
   void AudioConfigurationChanged();
 
  private:
@@ -1319,7 +1332,7 @@ class PlayerImpl : public Player {
   SbMediaVideoCodec video_codec_;
   SbMediaAudioCodec audio_codec_;
   SbDrmSystem drm_system_;
-  std::string max_video_capabilities_;
+  const MaxVideoCapabilities max_video_capabilities_;
   SbPlayerDeallocateSampleFunc sample_deallocate_func_;
   SbPlayerDecoderStatusFunc decoder_status_func_;
   SbPlayerStatusFunc player_status_func_;
@@ -1458,7 +1471,8 @@ PlayerImpl::PlayerImpl(SbPlayer player,
       decoder_status_func_(decoder_status_func),
       player_status_func_(player_status_func),
       player_error_func_(player_error_func),
-      context_(context) {
+      context_(context),
+      max_video_capabilities_(max_video_capabilities) {
 
   GST_DEBUG_CATEGORY_INIT(cobalt_gst_player_debug, "gstplayer", 0,
                           "Cobalt player");
@@ -1520,11 +1534,8 @@ PlayerImpl::PlayerImpl(SbPlayer player,
                    G_CALLBACK(&PlayerImpl::SetupElement), this);
   g_object_set(pipeline_, "uri", "cobalt://", nullptr);
 
-  if (max_video_capabilities && *max_video_capabilities) {
-    max_video_capabilities_ = max_video_capabilities;
-    MaxVideoCapabilities max_caps;
-    if (max_caps.Parse(max_video_capabilities) && max_caps.width && max_caps.height)
-      ConfigureLimitedVideo();
+  if (max_video_capabilities_.HasLowResolution()) {
+    ConfigureLimitedVideo();
   }
 
   if (audio_codec_ == kSbMediaAudioCodecNone) {
@@ -2070,18 +2081,17 @@ void PlayerImpl::SetupElement(GstElement* pipeline,
     GObjectClass *oclass = G_OBJECT_GET_CLASS(element);
 
     if (strstr(klass_str, "Video")) {
-      if (!self->max_video_capabilities_.empty() &&
+      const MaxVideoCapabilities& max_caps = self->max_video_capabilities_;
+      if (max_caps.HasLowResolution() &&
           g_object_class_find_property(oclass, "max-video-width") &&
           g_object_class_find_property(oclass, "max-video-height")) {
-            MaxVideoCapabilities max_caps;
-            if (max_caps.Parse(self->max_video_capabilities_.c_str()) && max_caps.width && max_caps.height) {
-              GST_DEBUG_OBJECT(pipeline, "Set max video capabilities %u x %u on %" GST_PTR_FORMAT, *max_caps.width, *max_caps.height, element);
-              g_object_set(G_OBJECT(element),
-                           "max-video-width",  *max_caps.width,
-                           "max-video-height", *max_caps.height,
-                           nullptr);
-            }
-        }
+        GST_DEBUG_OBJECT(pipeline, "Set max video capabilities %u x %u on %" GST_PTR_FORMAT,
+                         *max_caps.width, *max_caps.height, element);
+        g_object_set(G_OBJECT(element),
+                     "max-video-width",  *max_caps.width,
+                     "max-video-height", *max_caps.height,
+                     nullptr);
+      }
     }
 
     if (g_object_class_find_property(oclass, "has-drm")) {
@@ -2818,6 +2828,10 @@ bool PlayerImpl::ChangePipelineState(GstState state) const {
 
 void PlayerImpl::CheckBuffering(GstClockTime position) {
   if (!GST_CLOCK_TIME_IS_VALID(position))
+    return;
+
+  // don't auto-pause when screen mirroring
+  if (max_video_capabilities_.streaming.value_or(false))
     return;
 
   constexpr GstClockTimeDiff kMarginNs =

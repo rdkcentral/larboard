@@ -1500,10 +1500,12 @@ PlayerImpl::PlayerImpl(SbPlayer player,
   } else {
     gst_object_unref(src_factory);
   }
-
+  
+  if (!pipeline_) {
   static int player_id = 0;
   player_id++;
 
+  GST_INFO_OBJECT("Naveen Pipeline Created");
   pipeline_ = CreateGstElement("playbin", "media-pipeline-%d", player_id);
 
   unsigned flagAudio = getGstPlayFlag("audio");
@@ -1585,6 +1587,10 @@ PlayerImpl::PlayerImpl(SbPlayer player,
     SB_NOTREACHED();
   }
   GetPlayerRegistry()->Add(this);
+  }
+  else{
+    GST_INFO_OBJECT("Platform does not support dual video playback. Skipping secondary pipeline creation.");
+  }
 }
 
 PlayerImpl::~PlayerImpl() {

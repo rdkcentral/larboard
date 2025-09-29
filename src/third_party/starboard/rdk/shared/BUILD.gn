@@ -113,7 +113,6 @@ static_library("starboard_platform_sources") {
   sources = [
     # Shared sources
     "//starboard/shared/gles/system_gles2.cc",
-    "//starboard/shared/linux/cpu_features_get.cc",
     "//starboard/shared/linux/system_get_random_data.cc",
     "//starboard/shared/linux/system_get_stack.cc",
     "//starboard/shared/linux/system_get_used_cpu_memory.cc",

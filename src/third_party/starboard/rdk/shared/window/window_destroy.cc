@@ -34,6 +34,7 @@
 #include "third_party/starboard/rdk/shared/application_rdk.h"
 
 bool SbWindowDestroy(SbWindow window) {
+  SB_LOG(INFO) << "[Sourabh] inside SbWindowDistroy";
   return third_party::starboard::rdk::shared::Application::Get()->DestroySbWindow(
       window);
 }

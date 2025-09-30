@@ -44,20 +44,16 @@ void* SbWindowPrivate::Native() const {
 }
 
 int SbWindowPrivate::Width() const {
-  return Application::Get()->GetWindowWidth();
+  return 1280;
 }
 
 int SbWindowPrivate::Height() const {
-  return Application::Get()->GetWindowHeight();
+  return 720;
 }
 
 float SbWindowPrivate::VideoPixelRatio() const {
-  auto resolution_info = DisplayInfo::GetResolution();
-  int window_height = Application::Get()->GetWindowHeight();
-  float ratio = resolution_info.Height / static_cast<float>(window_height);
-  float max_ratio = ( window_height < 1080 )
-    ? 1.5f : ( resolution_info.Height <= 2160 ? 2.f : 4.f );
-  return std::min(ratio, max_ratio);
+  SB_LOG(INFO) << "Forced viewport: 1280x720 with pixel ratio 1.5";
+  return 1.5f;
 }
 
 float SbWindowPrivate::DiagonalSizeInInches() const {

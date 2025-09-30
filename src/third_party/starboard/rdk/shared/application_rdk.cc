@@ -296,10 +296,14 @@ void Application::OnKeyReleased(unsigned int key) {
 }
 
 void Application::OnDisplaySize(int width, int height) {
+  const int forced_width = 1920;
+  const int forced_height = 1080;
   if (window_width_ == width && window_height_ == height) {
     resize_pending_ = false;
     return;
   }
+  window_width_ = forced_width;
+  window_height_ = forced_height;
 
   SB_DCHECK(native_window_ == 0);
   resize_pending_ = true;

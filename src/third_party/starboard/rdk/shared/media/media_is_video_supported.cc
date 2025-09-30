@@ -86,6 +86,12 @@ SB_EXPORT bool SbMediaIsVideoSupported(SbMediaVideoCodec video_codec,
     }
   }
 
+  SB_LOG(INFO) << "[Sourabh] Inside SbMediaIsVideoSupported";
+  
+  int64_t bitrate_test = kSbMediaMaxVideoBitrateInBitsPerSecond;
+  SB_LOG(INFO) << "[Sourabh] Inside SbMediaIsVideoSupported bitrate = " << bitrate;
+  SB_LOG(INFO) << "[Sourabh] Inside SbMediaIsVideoSupported bitrate_test = " << bitrate_test;
+  
   return bitrate <= kSbMediaMaxVideoBitrateInBitsPerSecond && fps <= 60 &&
          third_party::starboard::rdk::shared::media::
              GstRegistryHasElementForMediaType(video_codec);

@@ -315,6 +315,9 @@ void Application::MaterializeNativeWindow() {
     error = true;
   }
 
+  SB_LOG(ERROR) << "[Sourabh] window_width = " << window_width_ ;
+  SB_LOG(ERROR) << "[Sourabh] window_height = " << window_height_ ;
+  
   if ( resize_pending_ ) {
     EssContextResizeWindow(ctx_, window_width_, window_height_);
     resize_pending_ = false;
@@ -327,6 +330,8 @@ void Application::MaterializeNativeWindow() {
     error = true;
   }
 
+  SB_LOG(ERROR) << "[Sourabh] native_window = " << native_window_ ;
+  
   if ( error ) {
     const char *detail = EssContextGetLastErrorDetail(ctx_);
     SB_LOG(ERROR) << "Essos error: '" <<  detail << '\'';

@@ -34,6 +34,7 @@
 #include "third_party/starboard/rdk/shared/application_rdk.h"
 
 SbWindow SbWindowCreate(const SbWindowOptions* options) {
+  SB_LOG(INFO) << "[Sourabh] inside SbWindowCreate";
   return third_party::starboard::rdk::shared::Application::Get()->CreateSbWindow(
       options);
 }

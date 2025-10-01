@@ -69,5 +69,6 @@ rdk_gcc_toolchain("native_target") {
   toolchain_args = {
     is_starboard = false
     is_native_target_build = true
+    sysroot = "$rdk_sysroot"
   }
 }

@@ -34,6 +34,9 @@ declare_args() {
   rdk_enable_securityagent = true
   rdk_enable_ocdm = true
   rdk_enable_rfc_api = false
+  rdk_enable_firebolt_api = false
+  rdk_enable_rdkservices_api = true
+  rdk_enable_wpecryptography = true
 }
 
 pkg_config("glib") {
@@ -58,14 +61,21 @@ pkg_config("gstreamer") {
 pkg_config("wpeframework") {
   packages = [
     "WPEFrameworkCore",
+  ]
+}
+
+pkg_config("wpeframework_websocket") {
+  packages = [
     "WPEFrameworkDefinitions",
     "WPEFrameworkWebSocket",
   ]
 }
 
-pkg_config("cryptography") {
-  packages = [ "WPEFrameworkCryptography" ]
-  defines = [ "HAS_CRYPTOGRAPHY=1" ]
+if (rdk_enable_wpecryptography) {
+  pkg_config("wpecryptography") {
+    packages = [ "WPEFrameworkCryptography" ]
+    defines = [ "HAS_WPECRYPTOGRAPHY=1" ]
+  }
 }
 
 if (rdk_enable_securityagent) {
@@ -310,9 +320,6 @@ static_library("starboard_platform") {
     "accessibility_data.cc",
     "accessibility_extension.cc",
     "accessibility_extension.h",
-    "accessibility_get_caption_settings.cc",
-    "accessibility_get_display_settings.cc",
-    "accessibility_set_captions_enabled.cc",
     "application_rdk.cc",
     "audio_sink/audio_sink_is_audio_sample_type_supported.cc",
     "audio_sink/gstreamer_audio_sink_type.cc",
@@ -352,6 +359,8 @@ static_library("starboard_platform") {
     "media/media_is_supported.cc",
     "media/media_is_transfer_characteristics_supported.cc",
     "media/media_is_video_supported.cc",
+    "platform/platform_interface.cc",
+    "platform/platform_interface.h",
     "platform_service.cc",
     "platform_service.h",
     "player/player_create.cc",
@@ -371,9 +380,7 @@ static_library("starboard_platform") {
     "player/player_write_sample.cc",
     "player/elements/gst_audio_clipping.cc",
     "player/elements/gst_audio_clipping.h",
-    "rdkservices.cc",
     "run_starboard_main.cc",
-    "speech/accessibility_get_text_to_speech_settings.cc",
     "speech/speech_synthesis_cancel.cc",
     "speech/speech_synthesis_is_supported.cc",
     "speech/speech_synthesis_speak.cc",
@@ -388,6 +395,8 @@ static_library("starboard_platform") {
     "system/system_get_total_cpu_memory.cc",
     "system/system_get_total_gpu_memory.cc",
     "system/system_get_used_gpu_memory.cc",
+    "system/system_properties_override.cc",
+    "system/system_properties_override.h",
     "time_zone_get_name.cc",
     "window/window_create.cc",
     "window/window_destroy.cc",
@@ -438,7 +447,6 @@ static_library("starboard_platform") {
     ":glib",
     ":gstreamer",
     ":wpeframework",
-    ":cryptography",
   ]
 
   if (rdk_enable_rfc_api) {
@@ -459,10 +467,40 @@ static_library("starboard_platform") {
     configs += [ ":ocdm" ]
   }
 
+  if (rdk_enable_rdkservices_api) {
+    sources += [
+      "rdkservices.cc",
+      "rdkservices.h",
+    ]
+    configs += [
+      ":wpeframework_websocket",
+    ]
+    defines += [ "ENABLE_RDKSERVICES_API=1" ]
+  }
+
+  if (rdk_enable_firebolt_api) {
+    sources += [
+      "platform/firebolt_interface.cc",
+      "platform/firebolt_interface.h",
+    ]
+    libs += [
+      "FireboltClient",
+      "FireboltTransport",
+    ]
+    defines += [ "ENABLE_FIREBOLT_API=1" ]
+  }
+
+  if (rdk_enable_wpecryptography) {
+    configs += [
+      ":wpecryptography",
+    ]
+  }
+
   public_deps = [
     "//starboard:starboard_headers_only",
     "//starboard/common",
     "//starboard/shared/starboard/media:media_util",
+    "//third_party/modp_b64",
   ]
 
   deps = [

@@ -29,8 +29,10 @@
 // limitations under the License.
 
 #include "starboard/speech_synthesis.h"
-#include "third_party/starboard/rdk/shared/rdkservices.h"
+#include "third_party/starboard/rdk/shared/platform/platform_interface.h"
+
+using namespace third_party::starboard::rdk::shared;
 
 void SbSpeechSynthesisCancel() {
-  third_party::starboard::rdk::shared::TextToSpeech::Cancel();
+  platform::text_to_speech().cancel();
 }

@@ -315,7 +315,7 @@ static_library("starboard_platform_sources") {
     ]
   }
 
-  if (!sb_is_modular) {
+  if (!sb_is_modular || sb_is_evergreen_compatible) {
     sources += [
       "main_rdk.cc",
     ]
@@ -363,4 +363,8 @@ static_library("starboard_platform_sources") {
     "//starboard/linux/shared:starboard_base_symbolize",
     "//starboard/shared/starboard/media:media_util",
   ]
+
+  if (sb_evergreen_compatible_use_libunwind) {
+    deps += [ "//third_party/llvm-project/libunwind:unwind_starboard" ]
+  }
 }

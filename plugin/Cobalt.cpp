@@ -94,6 +94,9 @@ const string Cobalt::Initialize(PluginHost::IShell *service) {
   // change to "register" the sink for these events !!! So do it ahead of
   // instantiation.
   _service->Register(&_notification);
+  // The _connectionId is filled by the Root method with the identifier of the
+  // established connection to the Cobalt process. This ID is used to track
+  // the lifecycle of the Cobalt process.
   _cobalt = _service->Root < Exchange::IBrowser > (_connectionId, 80000, _T("CobaltImplementation"));
 
   if (_cobalt != nullptr) {

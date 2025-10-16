@@ -94,7 +94,7 @@ const string Cobalt::Initialize(PluginHost::IShell *service) {
   // change to "register" the sink for these events !!! So do it ahead of
   // instantiation.
   _service->Register(&_notification);
-  _cobalt = _service->Root < Exchange::IBrowser > (_connectionId, 20000, _T("CobaltImplementation"));
+  _cobalt = _service->Root < Exchange::IBrowser > (_connectionId, 80000, _T("CobaltImplementation"));
 
   if (_cobalt != nullptr) {
     PluginHost::IStateControl *stateControl(

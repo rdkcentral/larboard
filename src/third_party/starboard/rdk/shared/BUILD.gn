@@ -363,8 +363,4 @@ static_library("starboard_platform_sources") {
     "//starboard/linux/shared:starboard_base_symbolize",
     "//starboard/shared/starboard/media:media_util",
   ]
-
-  deps = [
-    "//third_party/libevent",
-  ]
 }

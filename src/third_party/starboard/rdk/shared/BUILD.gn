@@ -414,8 +414,4 @@ static_library("starboard_platform_sources") {
     "//starboard/shared/starboard/media:media_util",
     "//third_party/modp_b64",
   ]
-
-  deps = [
-    "//third_party/libevent",
-  ]
 }

@@ -36,6 +36,8 @@ rdk_gcc_toolchain("starboard") {
   envprefix = ""
   toolchain_args = {
     is_starboard = true
+    build_base_with_cpp17 = true
+    enable_base_tracing = false
   }
   propagates_configs = !enable_cobalt_hermetic_hacks
 }
@@ -45,5 +47,7 @@ rdk_gcc_toolchain("native_target") {
   toolchain_args = {
     is_starboard = false
     is_native_target_build = true
+    build_base_with_cpp17 = true
+    enable_base_tracing = false
   }
 }

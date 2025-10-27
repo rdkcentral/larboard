@@ -57,6 +57,9 @@ rdk_gcc_toolchain("starboard") {
     sysroot = "$rdk_sysroot"
     build_base_with_cpp17 = true
     enable_base_tracing = false
+
+    # TODO: b/451695911 - enable remote compilation, when we can.
+    use_remoteexec = false
   }
   propagates_configs = !enable_cobalt_hermetic_hacks
 }
@@ -74,5 +77,8 @@ rdk_gcc_toolchain("native_target") {
     sysroot = "$rdk_sysroot"
     build_base_with_cpp17 = true
     enable_base_tracing = false
+
+    # TODO: b/451695911 - enable remote compilation, when we can.
+    use_remoteexec = false
   }
 }

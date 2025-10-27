@@ -125,6 +125,17 @@ config("platform_configuration") {
       "_GNU_SOURCE=1",
     ]
   }
+
+  if (cobalt_pending_clean_up) {
+    cflags += [
+      "-Wno-multichar",
+      "-Wno-dangling-else",
+      "-Wno-return-type",
+      "-Wno-attributes",
+      "-Wno-restrict",
+      "-Wno-ignored-attributes",
+    ]
+  }
 }
 
 config("speed") {

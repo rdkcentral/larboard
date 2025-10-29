@@ -365,6 +365,6 @@ static_library("starboard_platform_sources") {
   ]
 
   if (sb_evergreen_compatible_use_libunwind) {
-    deps += [ "//third_party/llvm-project/libunwind:unwind_starboard" ]
+    deps = [ "//third_party/llvm-project/libunwind:unwind_starboard" ]
   }
 }

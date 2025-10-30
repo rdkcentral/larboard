@@ -35,6 +35,7 @@
 // All rights reserved.
 // Licensed under UNICODE LICENSE V3 and the ICU License from https://github.com/unicode-org/icu/blob/main/LICENSE
 
+#include <limits.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>

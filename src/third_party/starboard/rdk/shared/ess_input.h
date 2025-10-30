@@ -35,7 +35,6 @@
 #include "starboard/configuration.h"
 #include "starboard/event.h"
 #include "starboard/input.h"
-#include "starboard/types.h"
 
 namespace third_party {
 namespace starboard {

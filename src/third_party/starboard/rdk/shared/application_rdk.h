@@ -37,7 +37,6 @@
 #include "starboard/shared/internal_only.h"
 #include "starboard/shared/starboard/application.h"
 #include "starboard/shared/starboard/queue_application.h"
-#include "starboard/types.h"
 
 #include "third_party/starboard/rdk/shared/ess_input.h"
 #include "third_party/starboard/rdk/shared/rdkservices.h"

@@ -56,6 +56,16 @@
 #include "third_party/starboard/rdk/shared/drm/drm_system_ocdm.h"
 #endif
 #include "third_party/starboard/rdk/shared/player/elements/gst_audio_clipping.h"
+#include <chrono>
+#include <ctime>
+
+static std::string GetDebugTimestamp() {
+    auto now = std::chrono::system_clock::now();
+    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+    char time_buf[32];
+    std::strftime(time_buf, sizeof(time_buf), "%F %T", std::localtime(&now_c));
+    return std::string(time_buf);
+}
 
 namespace third_party {
 namespace starboard {
@@ -352,6 +362,15 @@ static gboolean gst_cobalt_src_query_with_parent(GstPad* pad,
 }
 
 static GstFlowReturn gst_cobalt_src_chain_with_parent(GstPad* pad, GstObject* parent, GstBuffer* buffer) {
+
+  std::string log_time = GetDebugTimestamp();
+GST_INFO_OBJECT(pad,
+    "sourabh appsrc->pipeline [%s]: ts=%" GST_TIME_FORMAT ", buffer=%p",
+    log_time.c_str(), GST_TIME_ARGS(GST_BUFFER_TIMESTAMP(buffer)), buffer);
+GST_INFO_OBJECT(pad,
+    "sourabh appsrc->pipeline [%s]: buffer size: %zu bytes",
+    log_time.c_str(), gst_buffer_get_size(buffer));
+  
   GstCobaltSrc* src = GST_COBALT_SRC(gst_object_get_parent(parent));
   GstFlowReturn ret = gst_proxy_pad_chain_default(pad, GST_OBJECT(src), buffer);
   if (ret != GST_FLOW_FLUSHING)
@@ -2143,6 +2162,14 @@ bool PlayerImpl::WriteSample(SbMediaType sample_type, GstBuffer* buffer, uint64_
     "SampleType:%d %" GST_TIME_FORMAT " id:%" PRIu64 " b:%p",
     sample_type, GST_TIME_ARGS(GST_BUFFER_TIMESTAMP(buffer)), serial_id, buffer);
 
+std::string log_time = GetDebugTimestamp();
+GST_INFO_OBJECT(src,
+    "sourabh SDK->appsrc [%s]: type=%d, ts=%" GST_TIME_FORMAT ", size=%zu, buffer=%p",
+    log_time.c_str(), sample_type, GST_TIME_ARGS(GST_BUFFER_TIMESTAMP(buffer)), buffer_size, buffer);
+GST_INFO_OBJECT(src, "sourabh SDK->appsrc [%s]: buffer level: %" G_GUINT64_FORMAT " bytes",
+    log_time.c_str(), gst_app_src_get_current_level_bytes(GST_APP_SRC(src)));
+  
+  
   gst_app_src_push_buffer(GST_APP_SRC(src), buffer);
 
   ::starboard::ScopedLock lock(mutex_);

@@ -33,6 +33,7 @@
 
 #include "starboard/event.h"
 #include "third_party/starboard/rdk/shared/application_rdk.h"
+#include "third_party/starboard/rdk/shared/media/gst_media_utils.h"
 #include <cstdio>
 
 namespace {
@@ -53,9 +54,7 @@ void debug_log_override(GstDebugCategory *category, GstDebugLevel level,
 } // namespace
 
 int SbRunStarboardMain(int argc, char **argv, SbEventHandleCallback callback) {
-  GError *error = NULL;
-  gst_init_check(NULL, NULL, &error);
-  g_free(error);
+  third_party::starboard::rdk::shared::media::EnsureGstInit();
 
   if (const char *env = std::getenv("COBALT_OVERRIDE_GST_DEBUG_LOG");
       env && g_str_equal(env, "1")) {

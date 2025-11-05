@@ -30,6 +30,7 @@ namespace rdk {
 namespace shared {
 namespace media {
 
+void EnsureGstInit();
 bool GstRegistryHasElementForMediaType(SbMediaVideoCodec codec);
 bool GstRegistryHasElementForMediaType(SbMediaAudioCodec codec);
 GstCaps* CodecToGstCaps(SbMediaAudioCodec codec, const SbMediaAudioStreamInfo* info = nullptr);

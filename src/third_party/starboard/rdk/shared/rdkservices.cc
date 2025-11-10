@@ -30,7 +30,6 @@
 
 #include <interfaces/json/JsonData_HDRProperties.h>
 #include <interfaces/json/JsonData_PlayerProperties.h>
-#include <interfaces/json/JsonData_DeviceInfo.h>
 
 #ifdef HAS_SECURITY_AGENT
 #include <securityagent/securityagent.h>
@@ -1369,17 +1368,16 @@ void DeviceInfoImpl::Refresh() {
     }
   }
 
-  using namespace WPEFramework::JsonData::DeviceInfo;
-  SupportedaudioportsData audio_ports;
+  Core::JSON::ArrayType<Core::JSON::String> audio_ports;
   rc = device_info_.Get(timeout.value(), "supportedaudioports", audio_ports);
   if (Core::ERROR_NONE != rc) {
     SB_LOG(ERROR) << "'" << kDeviceInfoCallsign << ".supportedaudioports' failed, rc = " << rc
                   << " ( " << Core::ErrorToString(rc) << " )";
     needs_refresh |= (Core::ERROR_ASYNC_FAILED == rc || Core::ERROR_TIMEDOUT  == rc);
-  } else if (audio_ports.SupportedAudioPorts.Length() == 0) {
+  } else if (audio_ports.Length() == 0) {
     SB_LOG(INFO) << "No supported audio ports.";
   } else {
-    auto index(audio_ports.SupportedAudioPorts.Elements());
+    auto index(audio_ports.Elements());
     while (index.Next()) {
       const auto& port_name = index.Current().Value();
       SB_LOG(INFO) << "Supported audio port name: " << port_name;

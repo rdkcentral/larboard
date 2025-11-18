@@ -69,6 +69,25 @@ constexpr int kFramesPerRequest = 1024;
 
 using ::starboard::shared::starboard::media::GetBytesPerSample;
 
+namespace {
+  bool isRialtoEnabled() {
+    static bool is_rialto_enabled = false;
+    static gsize init = 0;
+
+    if (g_once_init_enter (&init)) {
+      GstElementFactory *factory = gst_element_factory_find("rialtowebaudiosink");
+      if (factory) {
+        guint rank = gst_plugin_feature_get_rank((GstPluginFeature *)factory);
+        gst_object_unref(GST_OBJECT(factory));
+        is_rialto_enabled = rank >= GST_RANK_PRIMARY;
+      }
+      g_once_init_leave (&init, 1);
+    }
+
+    return is_rialto_enabled;
+  }
+} // namespace
+
 class GStreamerAudioSink : public SbAudioSinkPrivate {
  public:
   GStreamerAudioSink(
@@ -204,9 +223,14 @@ GStreamerAudioSink::GStreamerAudioSink(
   gst_app_src_set_caps(GST_APP_SRC(appsrc_), audio_caps);
 
   audiosink_ = gst_element_factory_make("autoaudiosink", "sink");
-  g_signal_connect(
-      audiosink_, "child-added",
-      G_CALLBACK(&GStreamerAudioSink::AutoAudioSinkChildAddedCallback), this);
+  if (!isRialtoEnabled()) {
+    audiosink_ = gst_element_factory_make("autoaudiosink", "sink");
+    g_signal_connect(
+        audiosink_, "child-added",
+        G_CALLBACK(&GStreamerAudioSink::AutoAudioSinkChildAddedCallback), this);
+  } else {
+    audiosink_ = gst_element_factory_make("rialtowebaudiosink", "sink");
+  }
 
   pipeline_ = gst_pipeline_new("audio");
   GstBus* bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline_));

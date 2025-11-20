@@ -3098,7 +3098,7 @@ void PlayerImpl::UpdatePresentingState() {
   GstState state, pending;
   GstStateChangeReturn ret;
   ret = gst_element_get_state(pipeline_, &state, &pending, 0);
-  if ((state < GST_STATE_PAUSED) || (pending >= GST_STATE_PAUSED && ret == GST_STATE_CHANGE_ASYNC)) {
+  if ((state < GST_STATE_PAUSED) || (ret == GST_STATE_CHANGE_ASYNC && (pending >= GST_STATE_PAUSED || pending == GST_STATE_PLAYING))) {
     GST_INFO_OBJECT(pipeline_, "Delay State::kPresenting due to async transition pending %s -> %s", gst_element_state_get_name(state), gst_element_state_get_name(pending));
     return;
   }

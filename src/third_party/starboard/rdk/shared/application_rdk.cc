@@ -416,7 +416,9 @@ void Application::ScheduleMemoryUsageCheck(int64_t delay) {
 int64_t Application::CheckMemoryUsage() {
   static const int64_t kCPUMemoryPressureLimit = ([]() -> int64_t {
     const char* env = std::getenv("COBALT_CPU_MEM_PRESSURE_IN_MB");
-    int64_t limit_in_mb = SB_INT64_C(400);
+    // For C25, default memory pressure threshold was 400 MB, but has been
+    // increased for C26 to provide more headroom.
+    int64_t limit_in_mb = SB_INT64_C(500);
     if( env ) {
       int64_t t = strtol(env, nullptr, 0);
       if ( t >= 0 )

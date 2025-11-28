@@ -276,7 +276,9 @@ GStreamerAudioSink::~GStreamerAudioSink() {
 // static
 void* GStreamerAudioSink::AudioThreadEntryPoint(void* context) {
   SB_DCHECK(context);
+#if SB_API_VERSION >= 16
   SbThreadSetPriority(kSbThreadPriorityRealTime);
+#endif
 
   GStreamerAudioSink* sink = reinterpret_cast<GStreamerAudioSink*>(context);
   GST_TRACE_OBJECT(sink->pipeline_, "TID: %d", SbThreadGetId());

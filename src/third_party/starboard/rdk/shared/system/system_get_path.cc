@@ -57,6 +57,51 @@ bool GetEvergreenContentPathOverride(char* out_path, int path_size) {
   return true;
 }
 #endif
+
+// Places up to |path_size| - 1 characters of the path to the current
+// executable in |out_path|, ensuring it is NULL-terminated. Returns success
+// status. The result being greater than |path_size| - 1 characters is a
+// failure. |out_path| may be written to in unsuccessful cases.
+bool GetExecutablePath(char* out_path, int path_size) {
+  if (path_size < 1) {
+    return false;
+  }
+
+  char path[kSbFileMaxPath + 1];
+  ssize_t bytes_read = readlink("/proc/self/exe", path, kSbFileMaxPath);
+  if (bytes_read < 1) {
+    return false;
+  }
+
+  path[bytes_read] = '\0';
+  if (bytes_read > path_size) {
+    return false;
+  }
+
+  starboard::strlcpy<char>(out_path, path, path_size);
+  return true;
+}
+
+// Places up to |path_size| - 1 characters of the path to the directory
+// containing the current executable in |out_path|, ensuring it is
+// NULL-terminated. Returns success status. The result being greater than
+// |path_size| - 1 characters is a failure. |out_path| may be written to in
+// unsuccessful cases.
+bool GetExecutableDirectory(char* out_path, int path_size) {
+  if (!GetExecutablePath(out_path, path_size)) {
+    return false;
+  }
+
+  char* last_slash =
+      const_cast<char*>(strrchr(out_path, '/'));
+  if (!last_slash) {
+    return false;
+  }
+
+  *last_slash = '\0';
+  return true;
+}
+
 } // namespace
 
 namespace third_party {
@@ -65,30 +110,12 @@ namespace rdk {
 namespace shared {
 namespace system {
 
-bool GetContentDirectory(char* out_path, int path_size)
-{
-  const char* paths = std::getenv("COBALT_CONTENT_DIR");
-  if (paths) {
-    // Treat the environment variable as PATH-like search variable
-    std::stringstream pathsStream(paths);
-    const std::string testFilePath = "/fonts/fonts.xml";
-    std::string contentPath;
-    while(getline(pathsStream, contentPath,':')){
-      //check if fonts/fonts.xml file exists, if not, evaluate another path.
-      std::string tmp = contentPath + testFilePath;
-      struct stat info;
-      if(stat(tmp.c_str(), &info) == 0){
-        return (::starboard::strlcpy<char>(out_path, contentPath.c_str(), path_size) < path_size);
-      }
-    }
-#if !SB_IS(EVERGREEN_COMPATIBLE)
-    // Don't return false and let EvergreenConfig override the path
+// Gets the path to the content directory.
+bool GetContentDirectory(char* out_path, int path_size) {
+  if (!GetExecutableDirectory(out_path, path_size)) {
     return false;
-#endif
   }
-
-  // Default to /usr/share/content/data if COBALT_CONTENT_PATH is not set
-  return (::starboard::strlcpy<char>(out_path, "/usr/share/content/data", path_size) < path_size);
+  return true;
 }
 
 }  // namespace system
@@ -147,49 +174,6 @@ bool GetStorageDirectory(char* out_path, int path_size) {
          (stat(out_path, &info) == 0 && S_ISDIR(info.st_mode));
 }
 
-// Places up to |path_size| - 1 characters of the path to the current
-// executable in |out_path|, ensuring it is NULL-terminated. Returns success
-// status. The result being greater than |path_size| - 1 characters is a
-// failure. |out_path| may be written to in unsuccessful cases.
-bool GetExecutablePath(char* out_path, int path_size) {
-  if (path_size < 1) {
-    return false;
-  }
-
-  char path[kSbFileMaxPath + 1];
-  ssize_t bytes_read = readlink("/proc/self/exe", path, kSbFileMaxPath);
-  if (bytes_read < 1) {
-    return false;
-  }
-
-  path[bytes_read] = '\0';
-  if (bytes_read > path_size) {
-    return false;
-  }
-
-  starboard::strlcpy<char>(out_path, path, path_size);
-  return true;
-}
-
-// Places up to |path_size| - 1 characters of the path to the directory
-// containing the current executable in |out_path|, ensuring it is
-// NULL-terminated. Returns success status. The result being greater than
-// |path_size| - 1 characters is a failure. |out_path| may be written to in
-// unsuccessful cases.
-bool GetExecutableDirectory(char* out_path, int path_size) {
-  if (!GetExecutablePath(out_path, path_size)) {
-    return false;
-  }
-
-  char* last_slash =
-      const_cast<char*>(strrchr(out_path, '/'));
-  if (!last_slash) {
-    return false;
-  }
-
-  *last_slash = '\0';
-  return true;
-}
 
 // Gets only the name portion of the current executable.
 bool GetExecutableName(char* out_path, int path_size) {

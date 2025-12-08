@@ -3041,7 +3041,7 @@ void PlayerImpl::UpdatePresentingState() {
   GstState state, pending;
   GstStateChangeReturn ret;
   ret = gst_element_get_state(pipeline_, &state, &pending, 0);
-  if ((state < GST_STATE_PAUSED) || (pending == GST_STATE_PAUSED && ret == GST_STATE_CHANGE_ASYNC))
+  if ((state < GST_STATE_PAUSED) || (ret == GST_STATE_CHANGE_ASYNC && (pending == GST_STATE_PAUSED || pending == GST_STATE_PLAYING)))
     return;
 
   GST_INFO_OBJECT(pipeline_, "Commit to State::kPresenting");

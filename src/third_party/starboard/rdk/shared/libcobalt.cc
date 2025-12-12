@@ -53,8 +53,8 @@ struct APIContext
 
   void SendLink(const char* link)
   {
-    std::lock_guard lock(mutex_);
-    if (WaitForApp() == kRunning) {
+    std::unique_lock lock(mutex_);
+    if (WaitForApp(lock) == kRunning) {
       Application::Get()->Link(link);
     }
   }
@@ -170,9 +170,8 @@ private:
     kStopped
   };
 
-  State WaitForApp()
+  State WaitForApp(std::unique_lock<std::mutex>& lock)
   {
-    std::unique_lock lock(mutex_);
     while ( state_ == kUninitialized )
       condition_.wait(lock);
 
@@ -181,7 +180,7 @@ private:
 
   void RequestAndWait(void (Application::*action)(void*, Application::EventHandledCallback)) {
     std::unique_lock lock(mutex_);
-    if (WaitForApp() == kRunning) {
+    if (WaitForApp(lock) == kRunning) {
       starboard::Semaphore sem;
       (Application::Get()->*action)(
         &sem,

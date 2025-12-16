@@ -13,8 +13,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// SPDX-License-Identifier: Apache-2.0
-//
 // Copyright 2017 The Cobalt Authors. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,26 +27,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "starboard/configuration.h"
-#include "starboard/configuration_constants.h"
-#include "starboard/media.h"
-#include "starboard/shared/starboard/media/media_support_internal.h"
-#include "third_party/starboard/rdk/shared/media/gst_media_utils.h"
+#include "base/compiler_specific.h"
 
-namespace starboard {
-namespace shared {
-namespace starboard {
-namespace media {
+#if SB_API_VERSION < 16
+#include "starboard/accessibility.h"
+#include "starboard/common/memory.h"
 
-bool MediaIsAudioSupported(SbMediaAudioCodec audio_codec,
-                             const MimeType* content_type,
-                             int64_t bitrate) {
-    return bitrate < kSbMediaMaxAudioBitrateInBitsPerSecond &&
-         third_party::starboard::rdk::shared::media::
-             GstRegistryHasElementForMediaType(audio_codec);
+#include "third_party/starboard/rdk/shared/rdkservices.h"
+
+bool SbAccessibilityGetCaptionSettings(
+    SbAccessibilityCaptionSettings* caption_settings) {
+  if (!caption_settings ||
+      !starboard::MemoryIsZero(
+          caption_settings, sizeof(SbAccessibilityCaptionSettings))) {
+    return false;
+  }
+
+  return third_party::starboard::rdk::shared::Accessibility::GetCaptionSettings(caption_settings);
 }
-
-}  // namespace media
-}  // namespace starboard
-}  // namespace shared
-}  // namespace starboard
+#endif

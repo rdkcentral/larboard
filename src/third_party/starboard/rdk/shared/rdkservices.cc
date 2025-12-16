@@ -815,7 +815,7 @@ void DisplayInfoImpl::Refresh() {
 
   if (needs_refresh) {
     SbEventSchedule([](void* data) {
-      using ::starboard::shared::starboard::media::MimeSupportabilityCache;
+      using ::starboard::MimeSupportabilityCache;
       MimeSupportabilityCache::GetInstance()->ClearCachedMimeSupportabilities();
       GetDisplayInfo()->ForceNeedsRefresh();
     }, nullptr, kSbTimeSecond);
@@ -833,7 +833,7 @@ void DisplayInfoImpl::OnUpdated(const Core::JSON::String&) {
   if (needs_refresh_.load() == false) {
     needs_refresh_.store(true);
     SbEventSchedule([](void* data) {
-      using ::starboard::shared::starboard::media::MimeSupportabilityCache;
+      using ::starboard::MimeSupportabilityCache;
       // Clear mime cache until display info is updated
       MimeSupportabilityCache::GetInstance()->ClearCachedMimeSupportabilities();
       Application::Get()->DisplayInfoChanged();

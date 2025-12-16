@@ -67,7 +67,7 @@ GST_DEBUG_CATEGORY(cobalt_gst_audio_sink_debug);
 
 constexpr int kFramesPerRequest = 1024;
 
-using ::starboard::shared::starboard::media::GetBytesPerSample;
+using ::starboard::GetBytesPerSample;
 
 class GStreamerAudioSink : public SbAudioSinkPrivate {
  public:
@@ -513,7 +513,7 @@ SbAudioSink GStreamerAudioSinkType::Create(
 }  // namespace third_party
 
 using third_party::starboard::rdk::shared::audio_sink::GStreamerAudioSinkType;
-using ::starboard::shared::starboard::audio_sink::SbAudioSinkImpl;
+using ::starboard::SbAudioSinkImpl;
 
 // static
 void SbAudioSinkImpl::PlatformInitialize() {

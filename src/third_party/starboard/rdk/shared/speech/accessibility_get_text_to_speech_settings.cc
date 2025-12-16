@@ -1,4 +1,3 @@
-//
 // Copyright 2020 Comcast Cable Communications Management, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,26 +28,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "starboard/configuration.h"
-#include "starboard/configuration_constants.h"
-#include "starboard/media.h"
-#include "starboard/shared/starboard/media/media_support_internal.h"
-#include "third_party/starboard/rdk/shared/media/gst_media_utils.h"
+#if SB_API_VERSION < 16
+#include "starboard/accessibility.h"
 
-namespace starboard {
-namespace shared {
-namespace starboard {
-namespace media {
+#include "starboard/common/memory.h"
 
-bool MediaIsAudioSupported(SbMediaAudioCodec audio_codec,
-                             const MimeType* content_type,
-                             int64_t bitrate) {
-    return bitrate < kSbMediaMaxAudioBitrateInBitsPerSecond &&
-         third_party::starboard::rdk::shared::media::
-             GstRegistryHasElementForMediaType(audio_codec);
+#include "third_party/starboard/rdk/shared/rdkservices.h"
+
+bool SbAccessibilityGetTextToSpeechSettings(
+    SbAccessibilityTextToSpeechSettings* out_setting) {
+  if (!out_setting ||
+      !starboard::MemoryIsZero(
+        out_setting, sizeof(SbAccessibilityTextToSpeechSettings))) {
+    return false;
+  }
+  out_setting->has_text_to_speech_setting = true;
+  out_setting->is_text_to_speech_enabled =
+      third_party::starboard::rdk::shared::TextToSpeech::IsEnabled();
+  return true;
 }
-
-}  // namespace media
-}  // namespace starboard
-}  // namespace shared
-}  // namespace starboard
+#endif

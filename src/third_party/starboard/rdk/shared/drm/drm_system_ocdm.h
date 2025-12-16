@@ -82,7 +82,7 @@ class DrmSystemOcdm : public SbDrmSystemPrivate, public ::starboard::RefCountedT
                      int key_size,
                      const void* session_id,
                      int session_id_size) override;
-  DecryptStatus Decrypt(InputBuffer* buffer) override;
+  DecryptStatus Decrypt(::starboard::InputBuffer* buffer) override;
   bool IsServerCertificateUpdatable() override { return false; }
   void UpdateServerCertificate(int ticket,
                                const void* certificate,

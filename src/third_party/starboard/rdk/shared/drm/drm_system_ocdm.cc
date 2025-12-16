@@ -146,7 +146,7 @@ class Session {
     kUpdate,
   };
 
-  ::starboard::shared::starboard::ThreadChecker thread_checker_;
+  ::starboard::ThreadChecker thread_checker_;
   Operation operation_{Operation::kNone};
   int ticket_{0};
   DrmSystemOcdm* drm_system_;
@@ -630,7 +630,8 @@ void DrmSystemOcdm::UpdateServerCertificate(int ticket,
       "Error");
 }
 
-SbDrmSystemPrivate::DecryptStatus DrmSystemOcdm::Decrypt(InputBuffer* buffer) {
+SbDrmSystemPrivate::DecryptStatus DrmSystemOcdm::Decrypt(
+    ::starboard::InputBuffer* buffer) {
   SB_NOTREACHED();
   return kFailure;
 }

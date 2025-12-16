@@ -50,14 +50,14 @@ namespace starboard {
 namespace rdk {
 namespace shared {
 
-class Application : public ::starboard::shared::starboard::QueueApplication {
+class Application : public ::starboard::QueueApplication {
  public:
   explicit Application(SbEventHandleCallback sb_event_handle_callback);
   ~Application() override;
 
   static third_party::starboard::rdk::shared::Application* Get() {
     return static_cast<third_party::starboard::rdk::shared::Application*>(
-        ::starboard::shared::starboard::Application::Get());
+        ::starboard::Application::Get());
   }
 
   SbWindow CreateSbWindow(const SbWindowOptions* options);

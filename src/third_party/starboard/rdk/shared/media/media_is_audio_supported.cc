@@ -35,8 +35,6 @@
 #include "starboard/shared/starboard/media/media_support_internal.h"
 #include "third_party/starboard/rdk/shared/media/gst_media_utils.h"
 
-using ::starboard::shared::starboard::media::MimeType;
-
 namespace starboard {
 namespace shared {
 namespace starboard {

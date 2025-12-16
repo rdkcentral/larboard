@@ -102,7 +102,7 @@ static void setTimerInterval(int fd, microseconds time) {
   }
 }
 
-using ::starboard::shared::starboard::audio_sink::SbAudioSinkImpl;
+using ::starboard::SbAudioSinkImpl;
 
 Application::Application(SbEventHandleCallback sb_event_handle_callback)
   : QueueApplication(sb_event_handle_callback)
@@ -144,8 +144,8 @@ void Application::Initialize() {
 
   SbAudioSinkImpl::Initialize();
   libcobalt_api::Initialize();
-  using ::starboard::shared::starboard::media::KeySystemSupportabilityCache;
-  using ::starboard::shared::starboard::media::MimeSupportabilityCache;
+  using ::starboard::KeySystemSupportabilityCache;
+  using ::starboard::MimeSupportabilityCache;
   MimeSupportabilityCache::GetInstance()->SetCacheEnabled(true);
   KeySystemSupportabilityCache::GetInstance()->SetCacheEnabled(true);
 
@@ -168,7 +168,7 @@ bool Application::MayHaveSystemEvents() {
   return true;
 }
 
-::starboard::shared::starboard::Application::Event*
+::starboard::Application::Event*
 Application::PollNextSystemEvent() {
   auto now = steady_clock::now();
   if ((now - ess_loop_last_ts_) > kEssRunLoopPeriod) {
@@ -178,7 +178,7 @@ Application::PollNextSystemEvent() {
   return NULL;
 }
 
-::starboard::shared::starboard::Application::Event*
+::starboard::Application::Event*
 Application::WaitForSystemEventWithTimeout(int64_t time) {
   struct timespec timeout;
   struct pollfd fds[3];

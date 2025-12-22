@@ -31,5 +31,5 @@
 #include "starboard/speech_synthesis.h"
 
 bool SbSpeechSynthesisIsSupported() {
-  return true;
+  return false;
 }

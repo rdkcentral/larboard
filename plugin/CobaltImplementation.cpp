@@ -420,7 +420,7 @@ private:
             args_str += " ";
           args_str += arg;
         }
-        SYSLOG(Logging::Notification, (_T("StarboardMain args: %s\n"), args_str.c_str()));
+        SYSLOG(Logging::Notification, (_T("==> JSK StarboardMain args: %s\n"), args_str.c_str()));
       }
 
       if (IsRunning() == true)
@@ -471,7 +471,7 @@ public:
   }
 
   virtual void SetURL(const string &URL) override {
-    SYSLOG(Logging::Notification, (_T("deeplink=%s\n"), URL.c_str()));
+    SYSLOG(Logging::Notification, (_T("==> JSK deeplink=%s\n"), URL.c_str()));
     SbRdkHandleDeepLink(URL.c_str());
   }
 

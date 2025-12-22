@@ -128,7 +128,7 @@ bool GetStorageDirectory(char* out_path, int path_size) {
          (stat(out_path, &info) == 0 && S_ISDIR(info.st_mode));
     }
     else
-      SB_LOG(ERROR) << "GetStorageDirectory: out_path exceeds max file path size";
+      SB_LOG(ERROR) << "==> JSK GetStorageDirectory: out_path exceeds max file path size";
   }
 
   std::vector<char> home_path(kSbFileMaxPath + 1);
@@ -142,7 +142,7 @@ bool GetStorageDirectory(char* out_path, int path_size) {
     out_path[0] = '\0';
     return false;
   }
-  SB_LOG(INFO) << "SbSysGetPath: StorageDirectoy = " << std::string(out_path);
+  SB_LOG(INFO) << "==> JSK SbSysGetPath: StorageDirectoy = " << std::string(out_path);
   struct stat info;
   return mkdir(out_path, 0700) == 0 ||
          (stat(out_path, &info) == 0 && S_ISDIR(info.st_mode));

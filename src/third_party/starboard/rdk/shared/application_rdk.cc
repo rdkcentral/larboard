@@ -443,6 +443,13 @@ int64_t Application::CheckMemoryUsage() {
   return kSbTimeSecond;
 }
 
+void Application::InjectAccessibilityTextToSpeechSettingsChanged(bool enabled) {
+  bool* enabled_data = new bool(enabled);
+  Inject(new Event(kSbEventTypeAccessibilityTextToSpeechSettingsChanged,
+                   enabled_data,
+                   &Application::DeleteDestructor<bool>));
+}
+
 }  // namespace shared
 }  // namespace rdk
 }  // namespace starboard

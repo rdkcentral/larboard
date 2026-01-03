@@ -73,6 +73,8 @@ class Application : public ::starboard::QueueApplication {
   bool IsStartImmediate() override { return !HasPreloadSwitch(); }
   bool IsPreloadImmediate() override { return HasPreloadSwitch(); }
 
+  void InjectAccessibilityTextToSpeechSettingsChanged(bool enabled);
+
  protected:
   // --- Application overrides ---
   void Initialize() override;

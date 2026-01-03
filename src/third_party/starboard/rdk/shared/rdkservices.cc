@@ -406,7 +406,7 @@ public:
     }
     if (notify_on_change && Application::Get()) {
       SB_LOG(INFO) << "Accessibility voice guidance setting changed, enabled = " << enabled;
-      Application::Get()->InjectAccessibilityTextToSpeechSettingsChanged();
+      Application::Get()->InjectAccessibilityTextToSpeechSettingsChanged(enabled);
     }
   }
 

@@ -1284,6 +1284,17 @@ private:
     }
   };
 
+  struct SupportedaudioportsData : public Core::JSON::Container {
+    SupportedaudioportsData()
+      : Core::JSON::Container() {
+      Add(_T("supportedAudioPorts"), &SupportedAudioPorts);
+    }
+    SupportedaudioportsData(const SupportedaudioportsData&) = delete;
+    SupportedaudioportsData& operator=(const SupportedaudioportsData&) = delete;
+
+    Core::JSON::ArrayType<Core::JSON::String> SupportedAudioPorts;
+  };
+
   void OnBluetoothStatusChanged(const StatusChangedData&);
   void Refresh();
   void ForceNeedsRefresh() {  needs_refresh_.store(true); }

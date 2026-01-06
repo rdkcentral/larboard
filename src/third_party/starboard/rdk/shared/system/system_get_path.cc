@@ -102,19 +102,6 @@ bool GetExecutableDirectory(char* out_path, int path_size) {
   return true;
 }
 
-
-// Checks if content dir is valid, i.e it indeed contains cobalt lib
-bool IsValidContentDirectory(const char* path) {
-  if (!path || path[0] == '\0') {
-    return false;
-  }
-
-  const std::string testFilePath = "/app/cobalt/lib/libcobalt.lz4";
-  struct stat info;
-  std::string fullPath = std::string(path) + testFilePath;
-  return (stat(fullPath.c_str(), &info) == 0);
-}
-
 } // namespace
 
 namespace third_party {
@@ -125,33 +112,10 @@ namespace system {
 
 // Gets the path to the content directory.
 bool GetContentDirectory(char* out_path, int path_size) {
-  // `COBALT_CONTENT_DIR` is used to provide the path of content directory in
-  // PATH-like format. This is not a evergreen standard but required for RDK
-  // plugin environment where cobalt plugin uses `COBALT_CONTENT_DIR` env to
-  // set the content path.
-  const char* paths = std::getenv("COBALT_CONTENT_DIR");
-  if (paths && paths[0] != '\0') {
-    // Treat the environment variable as PATH-like search variable
-    std::stringstream pathsStream(paths);
-    std::string contentPath;
-    while (getline(pathsStream, contentPath, ':')) {
-      if (IsValidContentDirectory(contentPath.c_str())) {
-        return (starboard::strlcat<char>(out_path, contentPath.c_str(),
-                                         path_size) < path_size);
-      }
-    }
-    SB_LOG(WARNING) << "GetContentDirectory: COBALT_CONTENT_DIR=" << paths
-                    << " don't have cobalt libs";
+  if (!GetExecutableDirectory(out_path, path_size)) {
+    return false;
   }
-
-  if (GetExecutableDirectory(out_path, path_size) &&
-      IsValidContentDirectory(out_path)) {
-    return true;
-  }
-
-  // Default path as expected by cobalt plugin
-  return (starboard::strlcat<char>(out_path, "/usr/share/content/data",
-                                   path_size) < path_size);
+  return true;
 }
 
 }  // namespace system

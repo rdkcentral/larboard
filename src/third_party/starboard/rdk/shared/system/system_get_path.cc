@@ -102,6 +102,21 @@ bool GetExecutableDirectory(char* out_path, int path_size) {
   return true;
 }
 
+
+// Checks if content directory is valid.
+bool IsValidContentDirectory(const char* path) {
+  if (!path || path[0] == '\0') {
+    return false;
+  }
+
+  // The content directory is assummed valid if it contains fonts/fonts.xml file.
+  // TODO: we need to find better way to validate content directory since
+  // below checking is just an assumption not a standard.
+  const std::string testFontsFullPath = std::string(path) + "/fonts/fonts.xml";
+  struct stat info;
+  return (stat(testFontsFullPath.c_str(), &info) == 0);
+}
+
 } // namespace
 
 namespace third_party {
@@ -112,10 +127,34 @@ namespace system {
 
 // Gets the path to the content directory.
 bool GetContentDirectory(char* out_path, int path_size) {
-  if (!GetExecutableDirectory(out_path, path_size)) {
-    return false;
+  // `COBALT_CONTENT_DIR` is used to provide the path of content directory in
+  // PATH-like format. This is not a evergreen standard but required for RDK
+  // plugin environment where cobalt plugin uses `COBALT_CONTENT_DIR` env to
+  // set the content path.
+  const char* paths = std::getenv("COBALT_CONTENT_DIR");
+  if (paths && paths[0] != '\0') {
+    // Treat the environment variable as PATH-like search variable
+    std::stringstream pathsStream(paths);
+    std::string contentPath;
+    while (getline(pathsStream, contentPath, ':')) {
+      if (IsValidContentDirectory(contentPath.c_str())) {
+        return (starboard::strlcat<char>(out_path, contentPath.c_str(),
+                                         path_size) < path_size);
+      }
+    }
+    SB_LOG(WARNING) << "GetContentDirectory: COBALT_CONTENT_DIR=" << paths
+                    << " don't have cobalt libs";
   }
-  return true;
+
+  if (GetExecutableDirectory(out_path, path_size) &&
+      IsValidContentDirectory(out_path)) {
+    return true;
+  }
+
+  out_path[0] = '\0';
+  // Default path as expected by cobalt plugin
+  return (starboard::strlcat<char>(out_path, "/usr/share/content/data",
+                                   path_size) < path_size);
 }
 
 }  // namespace system

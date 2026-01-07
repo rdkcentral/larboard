@@ -144,7 +144,7 @@ bool GetStorageDirectory(char* out_path, int path_size) {
   }
   SB_LOG(INFO) << "SbSysGetPath: StorageDirectoy = " << std::string(out_path);
   struct stat info;
-  return mkdir(out_path, 0700) == 0 ||
+  return mkdir(out_path, 0777) == 0 ||
          (stat(out_path, &info) == 0 && S_ISDIR(info.st_mode));
 }
 
@@ -302,7 +302,8 @@ bool SbSystemGetPath(SbSystemPathId path_id, char* out_path, int path_size) {
 
     case kSbSystemPathStorageDirectory:
       if (!GetStorageDirectory(path, kPathSize)) {
-          return false;
+           SB_LOG(INFO) << "==> Cobalt storage directory is created/available ";
+	   return false;
       }
       break;
 

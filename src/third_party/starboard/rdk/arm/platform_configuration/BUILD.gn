@@ -28,6 +28,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import("//starboard/build/config/linux/rdk/config_variables.gni")
 import("$rdk_starboard_root/third_party/starboard/rdk/shared/build/rdk_toolchain.gni")
 
 config("platform_configuration") {

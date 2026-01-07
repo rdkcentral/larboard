@@ -28,6 +28,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import("//starboard/build/config/linux/rdk/config_variables.gni")
 import("//build/toolchain/gcc_toolchain.gni")
 
 declare_args() {

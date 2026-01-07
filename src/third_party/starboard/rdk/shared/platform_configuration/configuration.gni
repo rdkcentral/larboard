@@ -29,7 +29,7 @@
 # limitations under the License.
 
 import("//starboard/build/config/base_configuration.gni")
-import("//starboard/build/config/linux/rdk/starboard_rdk_path.gni")
+import("//starboard/build/config/linux/rdk/config_variables.gni")
 
 # TODO(b/435468447): the current player_filter_tests depend on some shared player
 # sources which are not included in RDK builds, let's disable them for now.

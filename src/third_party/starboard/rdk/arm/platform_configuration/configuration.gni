@@ -28,9 +28,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import("//starboard/build/config/linux/rdk/starboard_rdk_path.gni")
+
 declare_args() {
   rdk_arm_call_convention = "hardfp"
 }
+
+rdk_home_dir = getenv("RDK_HOME")
+assert(rdk_home_dir != "",
+       "RDK builds require the 'RDK_HOME' environment variable to be set.")
+
+rdk_sysroot = "$rdk_home_dir/sysroots/aarch64-rdk-linux"
 
 if (current_toolchain == default_toolchain &&
     build_with_separate_cobalt_toolchain) {
@@ -40,7 +48,9 @@ if (current_toolchain == default_toolchain &&
 
 } else {
 
-  import("//third_party/starboard/rdk/shared/platform_configuration/configuration.gni")
+  import("$rdk_starboard_root/third_party/starboard/rdk/shared/platform_configuration/configuration.gni")
   sabi_path = "//starboard/sabi/arm/$rdk_arm_call_convention/sabi-v$sb_api_version.json"
 
 }
+
+use_crashpad = true

@@ -29,6 +29,7 @@ set(PLUGIN_COBALT_CLOSUREPOLICY "quit" CACHE STRING "Configures how to handle wi
 set(PLUGIN_COBALT_AUTOSTART "false" CACHE STRING "Automatically start Cobalt plugin")
 set(PLUGIN_COBALT_MODE "Local" CACHE STRING "Controls if the plugin should run in its own process, in process or remote")
 set(PLUGIN_COBALT_LIMIT_AD_TRACKING false CACHE STRING "Disable Ad Tracking and measurement.")
+set(PLUGIN_COBALT_EXTERNAL_COBALT_LIBRARY "" CACHE STRING "Path of libloader_app.so for external build" )
 
 option(PLUGIN_COBALT_EVEGREEN_LITE "Enable Evergreen Lite build configuration." OFF)
 
@@ -53,6 +54,18 @@ add_library(${MODULE_NAME} SHARED
     CobaltJsonRpc.cpp
     Module.cpp
     )
+
+if (PLUGIN_COBALT_EVEGREEN_COMPATIBLE)
+  if (NOT "${PLUGIN_COBALT_EXTERNAL_COBALT_LIBRARY}" STREQUAL "")
+    set(COBALT_LIBRARY ${PLUGIN_COBALT_EXTERNAL_COBALT_LIBRARY})
+  else()
+    find_library(COBALT_LIBRARY loader_app REQUIRED)
+  endif()
+else()
+    find_library(COBALT_LIBRARY cobalt REQUIRED)
+endif()
+
+message(STATUS "Cobalt library path: ${COBALT_LIBRARY}")
 
 target_link_libraries(${MODULE_NAME}
     PRIVATE
@@ -83,4 +96,4 @@ install(
     DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/${STORAGENAME}/plugins
     COMPONENT ${PROJECT_NAME})
 
-write_config(${PLUGIN_NAME})
+write_config()

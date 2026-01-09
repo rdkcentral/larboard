@@ -28,25 +28,57 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import("//cobalt/build/configs/hacks.gni")
 import("//starboard/build/toolchain/cobalt_toolchains.gni")
-import("//third_party/starboard/rdk/shared/build/rdk_toolchain.gni")
+import("$rdk_starboard_root/third_party/starboard/rdk/shared/build/rdk_toolchain.gni")
 
-cobalt_clang_toolchain("cobalt") {
-  native_linker_path = getenv("CXX")
+_rdk_toolchain_path = "$rdk_home_dir/sysroots/x86_64-rdksdk-linux/usr/bin/arm-rdkmllib32-linux-gnueabi"
+_rdk_toolchain_toolprefix = "$_rdk_toolchain_path/arm-rdkmllib32-linux-gnueabi-"
+_rdk_toolchain_platform_cflags = ""
+
+if (!rdk_build_with_yocto) {
+  _rdk_toolchain_platform_cflags += "-march=armv7-a -mthumb -mfpu=neon"
+  if (rdk_arm_call_convention == "softfp") {
+    _rdk_toolchain_platform_cflags += " -mfloat-abi=softfp"
+  } else {
+    _rdk_toolchain_platform_cflags += " -mfloat-abi=hard"
+  }
 }
 
 rdk_gcc_toolchain("starboard") {
-  envprefix = ""
-}
+  if (rdk_build_with_yocto) {
+    envprefix = ""
+  } else {
+    toolprefix = _rdk_toolchain_toolprefix
+    platform_cflags = _rdk_toolchain_platform_cflags
+  }
+  toolchain_args = {
+    is_starboard = true
+    sysroot = "$rdk_sysroot"
+    build_base_with_cpp17 = true
+    enable_base_tracing = false
 
-rdk_gcc_toolchain("target") {
-  envprefix = ""
+    # TODO: b/451695911 - enable remote compilation, when we can.
+    use_remoteexec = false
+  }
+  propagates_configs = !enable_cobalt_hermetic_hacks
 }
 
 rdk_gcc_toolchain("native_target") {
-  envprefix = ""
+  if (rdk_build_with_yocto) {
+    envprefix = ""
+  } else {
+    toolprefix = _rdk_toolchain_toolprefix
+    platform_cflags = _rdk_toolchain_platform_cflags
+  }
   toolchain_args = {
     is_starboard = false
     is_native_target_build = true
+    sysroot = "$rdk_sysroot"
+    build_base_with_cpp17 = true
+    enable_base_tracing = false
+
+    # TODO: b/451695911 - enable remote compilation, when we can.
+    use_remoteexec = false
   }
 }

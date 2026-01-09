@@ -29,8 +29,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <limits>
+
 #define kSbTimeMillisecond 1000
 #define kSbTimeSecond (kSbTimeMillisecond * 1000)
 #define kSbTimeMinute (kSbTimeSecond * 60)
 #define kSbTimeNanosecondsPerMicrosecond 1000
-#define kSbTimeMax (kSbInt64Max)

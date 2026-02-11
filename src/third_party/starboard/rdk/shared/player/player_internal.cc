@@ -466,6 +466,7 @@ void gst_cobalt_src_setup_and_add_app_src(SbMediaType media_type,
     gst_element_link(src_elem, payloader);
     src_elem = payloader;
   }
+  
   #if 0
   {
     GstElement* queue = gst_element_factory_make("queue", nullptr);

@@ -102,9 +102,7 @@ seconds get_check_interval() {
 struct HangDetector
 {
   static void* ThreadEntryPoint(void* context) {
-#if SB_API_VERSION >= 16
     SbThreadSetPriority(kSbThreadNoPriority);
-#endif
     SB_DCHECK(context);
     static_cast<HangDetector*>(context)->DoWork();
     return nullptr;

@@ -63,7 +63,6 @@ namespace rdk {
 namespace shared {
 namespace player {
 
-static constexpr gint64 kCachedPositionRefreshIntervalMs = 50; // milliseconds
 static constexpr int kMaxNumberOfSamplesPerWrite = 1;
 static const char kCustomInstantRateChangeEventName[] = "custom-instant-rate-change";
 static const char kDidReceiveFirstSegmentMsgName[] = "did-receive-first-segment";
@@ -164,31 +163,6 @@ bool enableNativeAudio() {
   }
 
   return enable_native_audio;
-}
-
-GstClockTime chooseAudioWriteDuration(SbPlayer player) {
-  const auto hasRemoteAudioOutputs = [](SbMediaAudioConnector connector) {
-    switch (connector) {
-      case kSbMediaAudioConnectorBluetooth:
-      case kSbMediaAudioConnectorRemoteWired:
-      case kSbMediaAudioConnectorRemoteWireless:
-      case kSbMediaAudioConnectorRemoteOther:
-        return true;
-      default:
-        return false;
-    }
-  };
-  constexpr int kMaxAudioConfigurations = 32;
-  for (int i = 0; i < kMaxAudioConfigurations; ++i) {
-    SbMediaAudioConfiguration audio_config;
-    if (!SbPlayerGetAudioConfiguration(player, i, &audio_config)) {
-      break;
-    }
-    if (hasRemoteAudioOutputs(audio_config.connector)) {
-      return kSbPlayerWriteDurationRemote * GST_USECOND;
-    }
-  }
-  return kSbPlayerWriteDurationLocal * GST_USECOND;
 }
 
 G_BEGIN_DECLS
@@ -493,8 +467,7 @@ void gst_cobalt_src_setup_and_add_app_src(SbMediaType media_type,
     src_elem = payloader;
   }
 
-  #if 0
-  if (!isRialtoEnabled()) {
+  {
     GstElement* queue = gst_element_factory_make("queue", nullptr);
     g_object_set (
       G_OBJECT (queue),
@@ -999,22 +972,6 @@ enum class MediaType {
   kBoth = kAudio | kVideo
 };
 
-class ScopedUnlock {
- public:
-  explicit ScopedUnlock(const ::starboard::Mutex& mutex)
-    : mutex_(mutex) {
-    mutex_.DCheckAcquired();
-    mutex_.Release();
-  }
-  ~ScopedUnlock() {
-    mutex_.Acquire();
-  }
-private:
-  const ::starboard::Mutex& mutex_;
-  ScopedUnlock(const ScopedUnlock&) = delete;
-  void operator=(const ScopedUnlock&) = delete;
-};
-
 struct Task {
   virtual ~Task() {}
   virtual void Do() = 0;
@@ -1332,9 +1289,6 @@ class PlayerImpl : public Player {
   guint DispatchOnWorkerThread(Task* task) const;
   void InvokeOnWorkerThreadAndWait(Task* task);
   GstClockTime GetPosition() const;
-  GstClockTime GetPositionLocked() const;
-  bool UpdateCachedPositionLocked();
-  bool UpdateSrcCaps(const SbPlayerSampleInfo& sample_info);
   bool WriteSample(SbMediaType sample_type,
                    GstBuffer* buffer,
                    uint64_t serial_id);
@@ -1342,48 +1296,7 @@ class PlayerImpl : public Player {
   void RecordTimestamp(SbMediaType type, GstClockTime timestamp);
   GstClockTime MinTimestamp(MediaType* origin) const;
 
-  // Delay audio decoder NeedData status notification
-  bool DelayAudioDecoderNeedsData() {
-    mutex_.DCheckAcquired();
-
-    // Don't throttle during pre-roll
-    if (state_ != State::kPresenting)
-      return false;
-
-    // Already delayed
-    if (delay_audio_need_data_src_)
-      return true;
-
-    const auto adjustDuration = [](double rate, gint64 duration) -> gint64 {
-      if (rate <= 1.0)
-        return duration;
-      return static_cast<gint64>(rate * duration);
-    };
-
-    GstClockTime min_ts = max_sample_timestamps_[kAudioIndex];
-    if (!GST_CLOCK_TIME_IS_VALID(min_ts) ||
-        !GST_CLOCK_TIME_IS_VALID(audio_write_duration_) ||
-        GST_CLOCK_DIFF(GetPositionLocked(), min_ts) < adjustDuration(rate_, audio_write_duration_)) {
-      return false;
-    }
-
-    SB_DCHECK(audio_write_duration_ > kCachedPositionRefreshIntervalMs * GST_MSECOND);
-
-    // Retry after playback position refresh
-    delay_audio_need_data_src_ = g_timeout_source_new(kCachedPositionRefreshIntervalMs);
-    g_source_set_callback(delay_audio_need_data_src_, [](gpointer data) {
-      PlayerImpl* self = static_cast<PlayerImpl*>(data);
-      ::starboard::ScopedLock lock(self->mutex_);
-      g_clear_pointer(&self->delay_audio_need_data_src_, g_source_unref);
-      self->DecoderNeedsData(lock, MediaType::kAudio);
-      return G_SOURCE_REMOVE;
-    }, this, nullptr);
-    g_source_attach(delay_audio_need_data_src_, main_loop_context_);
-
-    return true;
-  }
-
-  void DecoderNeedsData(::starboard::ScopedLock&, MediaType media) {
+  void DecoderNeedsData(::starboard::ScopedLock&, MediaType media) const {
     mutex_.DCheckAcquired();
 
     int need_data = static_cast<int>(media) & ~decoder_state_data_;
@@ -1396,16 +1309,18 @@ class PlayerImpl : public Player {
       return;
     }
 
-    if (media == MediaType::kAudio && DelayAudioDecoderNeedsData()) {
-      GST_LOG_OBJECT(pipeline_, "Delaying NeedsData status for audio");
-      return;
-    }
-
     decoder_state_data_ |= need_data;
 
+#if 0
+    if ((need_data & static_cast<int>(MediaType::kAudio)) != 0)
+      decoder_status_func_(player_, context_, kSbMediaTypeAudio, kSbPlayerDecoderStateNeedsData, ticket_);
+    if ((need_data & static_cast<int>(MediaType::kVideo)) != 0)
+      decoder_status_func_(player_, context_, kSbMediaTypeVideo, kSbPlayerDecoderStateNeedsData, ticket_);
+#else
     DispatchOnWorkerThread(new DecoderStatusTask(
       decoder_status_func_, player_, ticket_, context_,
       kSbPlayerDecoderStateNeedsData, static_cast<MediaType>(need_data)));
+#endif
   }
 
   gboolean HandleBusMessage(GstBus* bus, GstMessage* message);
@@ -1467,7 +1382,6 @@ class PlayerImpl : public Player {
   State state_{State::kNull};
   PendingSamples pending_samples_;
   mutable GstClockTime cached_position_ns_{GST_CLOCK_TIME_NONE};
-  gint64 cached_position_expiration_time_ {0};
   PendingBounds pending_bounds_;
   SbMediaColorMetadata color_metadata_{};
   bool force_stop_ { false };
@@ -1485,9 +1399,6 @@ class PlayerImpl : public Player {
   int need_first_segment_ack_ { static_cast<int>(MediaType::kBoth) };
   int buffering_state_ { 0 };
   mutable guint playing_state_update_source_id_{0u};
-
-  mutable GSource* delay_audio_need_data_src_ { nullptr };
-  const GstClockTime audio_write_duration_ { GST_CLOCK_TIME_NONE };
 };
 
 struct PlayerRegistry
@@ -1572,8 +1483,7 @@ PlayerImpl::PlayerImpl(SbPlayer player,
       player_status_func_(player_status_func),
       player_error_func_(player_error_func),
       context_(context),
-      max_video_capabilities_(max_video_capabilities),
-      audio_write_duration_(chooseAudioWriteDuration(player)) {
+      max_video_capabilities_(max_video_capabilities) {
 
   GST_DEBUG_CATEGORY_INIT(cobalt_gst_player_debug, "gstplayer", 0,
                           "Cobalt player");
@@ -1682,7 +1592,6 @@ PlayerImpl::PlayerImpl(SbPlayer player,
   }
 
   ChangePipelineState(GST_STATE_READY);
-
   g_main_context_pop_thread_default(main_loop_context_);
 
   if (gst_element_get_state(pipeline_, nullptr, nullptr, 0) == GST_STATE_CHANGE_FAILURE)
@@ -1735,7 +1644,6 @@ PlayerImpl::~PlayerImpl() {
   if (video_caps_) {
     gst_caps_unref(video_caps_);
   }
-  g_clear_pointer(&delay_audio_need_data_src_, g_source_unref);
   g_main_loop_unref(main_loop_);
   g_main_context_unref(main_loop_context_);
   GST_INFO_OBJECT(pipeline_, "BYE BYE player");
@@ -1948,9 +1856,7 @@ gboolean PlayerImpl::HandleBusMessage(GstBus* bus, GstMessage* message) {
 
 // static
 void* PlayerImpl::ThreadEntryPoint(void* context) {
-#if SB_API_VERSION >= 16
   SbThreadSetPriority(kSbThreadPriorityRealTime);
-#endif
   SB_DCHECK(context);
   GST_TRACE("%d", SbThreadGetId());
 
@@ -2750,7 +2656,6 @@ void PlayerImpl::Seek(int64_t seek_to_timestamp, int ticket) {
       buf_target_min_ts_ = GST_CLOCK_TIME_NONE;
       dropped_video_frames_ = 0;
       total_video_frames_ = 0;
-      cached_position_expiration_time_ = 0;
     }
 
     ticket_ = ticket;
@@ -2805,7 +2710,6 @@ bool PlayerImpl::SetRate(double rate) {
   old_rate = rate_;
   rate_ = rate;
   pending_rate_ = .0;
-  cached_position_expiration_time_ = 0;
 
   if (state_ == State::kInitial) {
     mutex_.Release();
@@ -2861,18 +2765,14 @@ bool PlayerImpl::SetRate(double rate) {
 
 void PlayerImpl::GetInfo(SbPlayerInfo* out_player_info) {
 
-  GstClockTime position;
-  {
-    ::starboard::ScopedLock lock(mutex_);
-    if (cached_position_expiration_time_ < g_get_monotonic_time()) {
-      if (UpdateCachedPositionLocked())
-        cached_position_expiration_time_ = g_get_monotonic_time() + kCachedPositionRefreshIntervalMs * 1'000;
-    }
-    position = GetPositionLocked();
-    out_player_info->dropped_video_frames = dropped_video_frames_;
-  }
+  GstClockTime position = GetPosition();
 
   CheckBuffering(position);
+
+  GST_LOG_OBJECT(
+    pipeline_,"Current position: %" GST_TIME_FORMAT " (Seek position: %" GST_TIME_FORMAT ")",
+    GST_TIME_ARGS(position),
+    GST_TIME_ARGS(seek_position_));
 
   out_player_info->duration = SB_PLAYER_NO_DURATION;
   out_player_info->current_media_timestamp =
@@ -2887,17 +2787,19 @@ void PlayerImpl::GetInfo(SbPlayerInfo* out_player_info) {
       GST_STREAM_VOLUME(pipeline_), GST_STREAM_VOLUME_FORMAT_LINEAR);
   out_player_info->total_video_frames = total_video_frames_;
   out_player_info->corrupted_video_frames = 0;
-  out_player_info->playback_rate = rate_;
 
-  GST_LOG_OBJECT(
-    pipeline_,"Current position: %" GST_TIME_FORMAT " (Seek position: %" GST_TIME_FORMAT ")",
-    GST_TIME_ARGS(position),
-    GST_TIME_ARGS(seek_position_));
+  {
+    ::starboard::ScopedLock lock(mutex_);
+    out_player_info->dropped_video_frames = dropped_video_frames_;
+  }
+
   GST_LOG_OBJECT(
     pipeline_,
     "Frames dropped: %d, Frames corrupted: %d",
     out_player_info->dropped_video_frames,
     out_player_info->corrupted_video_frames);
+
+  out_player_info->playback_rate = rate_;
 }
 
 void PlayerImpl::SetBounds(int zindex, int x, int y, int w, int h) {
@@ -2989,8 +2891,8 @@ void PlayerImpl::CheckBuffering(GstClockTime position) {
   if (max_video_capabilities_.streaming.value_or(false))
     return;
 
-  constexpr GstClockTimeDiff kTargetBufferDurationNs =
-      500 * GST_MSECOND;
+  constexpr GstClockTimeDiff kMarginNs =
+      50 * GST_MSECOND;
 
   MediaType origin = MediaType::kNone;
   GstClockTime min_ts = MinTimestamp(&origin);
@@ -3005,7 +2907,7 @@ void PlayerImpl::CheckBuffering(GstClockTime position) {
     {
       ::starboard::ScopedLock lock(mutex_);
       DecoderNeedsData(lock, origin);
-      buf_target_min_ts_ = position + kTargetBufferDurationNs;
+      buf_target_min_ts_ = position + kMarginNs;
     }
     PrintPositionPerSink(pipeline_, GST_LEVEL_INFO);
     GST_INFO_OBJECT(pipeline_, "Pause for buffering. Pos: %" GST_TIME_FORMAT
@@ -3030,81 +2932,52 @@ void PlayerImpl::CheckBuffering(GstClockTime position) {
   }
 }
 
-bool PlayerImpl::UpdateCachedPositionLocked() {
+GstClockTime PlayerImpl::GetPosition() const {
   gint64 position = -1;
 
+  GstQuery* query = gst_query_new_position(GST_FORMAT_TIME);
+  if (gst_element_query(pipeline_, query))
+    gst_query_parse_position(query, 0, &position);
+  gst_query_unref(query);
+
   {
-    ScopedUnlock scope_unlock(mutex_);
-    GstState current, pending;
-    current = pending = GST_STATE_VOID_PENDING;
-    gst_element_get_state(pipeline_, &current, &pending, 0);
-    if (current < GST_STATE_PAUSED || (pending != GST_STATE_VOID_PENDING && pending < GST_STATE_PAUSED))
-      return false;
-    GstQuery* query = gst_query_new_position(GST_FORMAT_TIME);
-    if (isRialtoEnabled()) {
-      GstElement* sink = nullptr;
-      g_object_get(pipeline_, "audio-sink", &sink, nullptr);
-      if (!sink) {
-        g_object_get(pipeline_, "video-sink", &sink, nullptr);
-      }
-      if (sink) {
-        if (gst_element_query(sink, query)) {
-          gst_query_parse_position(query, 0, &position);
-        }
-        gst_object_unref(GST_OBJECT(sink));
-      }
+    ::starboard::ScopedLock lock(mutex_);
+    double rate = rate_;
+
+    if (!GST_CLOCK_TIME_IS_VALID(position)) {
+      if (GST_CLOCK_TIME_IS_VALID(seek_position_))
+        return seek_position_;
+      if (GST_CLOCK_TIME_IS_VALID(cached_position_ns_))
+        return cached_position_ns_;
+      return 0;
     }
-    else if (gst_element_query(pipeline_, query)) {
-      gst_query_parse_position(query, 0, &position);
+
+    if (GST_CLOCK_TIME_IS_VALID(seek_position_)) {
+      if (GST_STATE(pipeline_) != GST_STATE_PLAYING)
+        return seek_position_;
+
+      if ((rate >= 0. && position <= seek_position_) ||
+          (rate < 0. && position >= seek_position_)) {
+        return seek_position_;
+      }
+
+      cached_position_ns_ = seek_position_;
+      seek_position_ = GST_CLOCK_TIME_NONE;
     }
-    gst_query_unref(query);
   }
 
-  if (!GST_CLOCK_TIME_IS_VALID(position))
-    return false;
-
-  GstClockTime prev_position;
-  if (GST_CLOCK_TIME_IS_VALID(seek_position_)) {
-    if (GST_STATE(pipeline_) != GST_STATE_PLAYING) {
-      return false;
-    }
-    if ((rate_ >= 0. && position <= seek_position_) ||
-        (rate_ < 0. && position >= seek_position_)) {
-      return false;
-    }
-    cached_position_ns_ = seek_position_;
-    seek_position_ = GST_CLOCK_TIME_NONE;
-  }
-  prev_position = cached_position_ns_;
-  cached_position_ns_ = GstClockTime(position);
-
-  if (GST_CLOCK_TIME_IS_VALID(prev_position) &&
-      std::abs(GST_CLOCK_DIFF(GstClockTime(position), prev_position)) > GST_SECOND) {
+  if (GST_CLOCK_TIME_IS_VALID(cached_position_ns_) &&
+      std::abs(GST_CLOCK_DIFF(GstClockTime(position), cached_position_ns_)) > GST_SECOND) {
     PrintPositionPerSink(pipeline_, GST_LEVEL_WARNING);
     GST_WARNING_OBJECT(pipeline_, "Unexpected position! More than 1 second jump detected: "
                 "%" GST_TIME_FORMAT " --> %" GST_TIME_FORMAT "",
-                GST_TIME_ARGS(prev_position),
+                GST_TIME_ARGS(cached_position_ns_),
                 GST_TIME_ARGS(position));
   }
-  else {
-    PrintPositionPerSink(pipeline_, GST_LEVEL_TRACE);
-  }
 
-  return true;
-}
-
-GstClockTime PlayerImpl::GetPosition() const {
-  ::starboard::ScopedLock lock(mutex_);
-  return GetPositionLocked();
-}
-
-GstClockTime PlayerImpl::GetPositionLocked() const {
-  mutex_.DCheckAcquired();
-  if (GST_CLOCK_TIME_IS_VALID(seek_position_))
-    return seek_position_;
-  if (GST_CLOCK_TIME_IS_VALID(cached_position_ns_))
-    return cached_position_ns_;
-  return 0;
+  PrintPositionPerSink(pipeline_, GST_LEVEL_LOG);
+  cached_position_ns_ = GstClockTime(position);
+  return cached_position_ns_;
 }
 
 void PlayerImpl::WritePendingSamples() {
@@ -3452,11 +3325,6 @@ void PlayerImpl::SchedulePlayingStateUpdate() {
 }
 
 void PlayerImpl::DidEnd() {
-  {
-    ::starboard::ScopedLock lock(mutex_);
-    cached_position_expiration_time_ = 0;
-  }
-
   if (state_ < State::kPresenting) {
     DispatchOnWorkerThread(
       new PlayerStatusTask(

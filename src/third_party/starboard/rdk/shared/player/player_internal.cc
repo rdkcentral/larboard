@@ -466,7 +466,7 @@ void gst_cobalt_src_setup_and_add_app_src(SbMediaType media_type,
     gst_element_link(src_elem, payloader);
     src_elem = payloader;
   }
-
+  #if 0
   {
     GstElement* queue = gst_element_factory_make("queue", nullptr);
     g_object_set (
@@ -1289,6 +1289,7 @@ class PlayerImpl : public Player {
   guint DispatchOnWorkerThread(Task* task) const;
   void InvokeOnWorkerThreadAndWait(Task* task);
   GstClockTime GetPosition() const;
+  bool UpdateSrcCaps(const SbPlayerSampleInfo& sample_info);
   bool WriteSample(SbMediaType sample_type,
                    GstBuffer* buffer,
                    uint64_t serial_id);

@@ -59,6 +59,20 @@ static bool gPbufferSupported = true;
 static bool gSurfacelessContextSupported = false;
 static bool gCapabilitiesChecked = false;
 
+// When pbuffers are not supported but surfaceless contexts are, some Cobalt
+// branches still attempt to create a tiny pbuffer for a "null" surface and
+// CHECK() that it succeeds. To avoid patching Cobalt, we emulate a pbuffer
+// surface handle and translate it to surfaceless eglMakeCurrent.
+static int gFakePbufferSurfaceStorage;
+static EGLSurface gFakePbufferSurface =
+    reinterpret_cast<EGLSurface>(&gFakePbufferSurfaceStorage);
+static EGLint gFakePbufferWidth = 1;
+static EGLint gFakePbufferHeight = 1;
+
+inline bool IsFakePbufferSurface(EGLSurface surface) {
+  return surface == gFakePbufferSurface;
+}
+
 #ifdef EGL_PLATFORM_WAYLAND_EXT
 static PFNEGLCREATEPLATFORMWINDOWSURFACEEXTPROC gEglCreatePlatformWindowSurfaceEXT;
 static PFNEGLGETPLATFORMDISPLAYEXTPROC gEglGetPlatformDisplayEXT;
@@ -87,9 +101,10 @@ void checkEglCapabilities(EGLDisplay display) {
   // Check for surfaceless context support
   const char* egl_extensions = eglQueryString(display, EGL_EXTENSIONS);
   if (egl_extensions) {
+    // NOTE: EGL_KHR_no_config_context is not the same as surfaceless contexts.
+    // Only treat EGL_KHR_surfaceless_context as surfaceless support.
     gSurfacelessContextSupported =
-        isExtensionSupported(egl_extensions, "EGL_KHR_surfaceless_context") ||
-        isExtensionSupported(egl_extensions, "EGL_KHR_no_config_context");
+      isExtensionSupported(egl_extensions, "EGL_KHR_surfaceless_context");
 
     if (gSurfacelessContextSupported) {
       SB_LOG(INFO) << "Surfaceless context support detected, pbuffers optional";
@@ -145,8 +160,8 @@ SbEglBoolean SbEglChooseConfigWrapper(SbEglDisplay dpy,
                                       SbEglConfig* configs,
                                       SbEglInt32 config_size,
                                       SbEglInt32* num_config) {
-  // Fast path: Direct pass-through for platforms with pbuffer or surfaceless support
-  if (gPbufferSupported || gSurfacelessContextSupported) {
+  // Fast path: Direct pass-through for platforms with pbuffer support
+  if (gPbufferSupported) {
     return eglChooseConfig(dpy, attrib_list, configs, config_size, num_config);
   }
 
@@ -186,9 +201,99 @@ SbEglSurface SbEglCreatePbufferSurfaceStub(SbEglDisplay dpy,
     return eglCreatePbufferSurface(dpy, config, attrib_list);
   }
 
-  SB_LOG(ERROR) << "eglCreatePbufferSurface called but pbuffers not supported on this platform";
-  SB_LOG(ERROR) << "Consider using EGL_KHR_surfaceless_context or window-based surfaces";
+  SB_LOG(WARNING)
+      << "eglCreatePbufferSurface called but pbuffers not supported on this platform";
+
+  // If surfaceless contexts are supported, emulate a pbuffer surface handle.
+  // This allows higher layers that assume a pbuffer exists to proceed, while
+  // we translate usage to surfaceless eglMakeCurrent.
+  if (gSurfacelessContextSupported) {
+    EGLint width = 1;
+    EGLint height = 1;
+    if (attrib_list) {
+      for (int i = 0; attrib_list[i] != EGL_NONE; i += 2) {
+        if (attrib_list[i] == EGL_WIDTH) {
+          width = attrib_list[i + 1];
+        } else if (attrib_list[i] == EGL_HEIGHT) {
+          height = attrib_list[i + 1];
+        }
+      }
+    }
+    if (width <= 0) width = 1;
+    if (height <= 0) height = 1;
+    gFakePbufferWidth = width;
+    gFakePbufferHeight = height;
+    SB_LOG(INFO) << "Emulating pbuffer surface via surfaceless context ("
+                 << width << "x" << height << ")";
+    return gFakePbufferSurface;
+  }
+
+  SB_LOG(ERROR) << "Surfaceless contexts not supported; cannot emulate pbuffers";
+  SB_LOG(ERROR)
+      << "Consider using EGL_KHR_surfaceless_context or window-based surfaces";
   return EGL_NO_SURFACE;
+}
+
+SbEglBoolean SbEglMakeCurrentWrapper(SbEglDisplay dpy,
+                                    SbEglSurface draw,
+                                    SbEglSurface read,
+                                    SbEglContext ctx) {
+  if (gPbufferSupported) {
+    return eglMakeCurrent(dpy, draw, read, ctx);
+  }
+
+  EGLSurface real_draw = IsFakePbufferSurface(draw) ? EGL_NO_SURFACE : draw;
+  EGLSurface real_read = IsFakePbufferSurface(read) ? EGL_NO_SURFACE : read;
+  return eglMakeCurrent(dpy, real_draw, real_read, ctx);
+}
+
+SbEglBoolean SbEglDestroySurfaceWrapper(SbEglDisplay dpy, SbEglSurface surface) {
+  if (IsFakePbufferSurface(surface)) {
+    return EGL_TRUE;
+  }
+  return eglDestroySurface(dpy, surface);
+}
+
+SbEglBoolean SbEglQuerySurfaceWrapper(SbEglDisplay dpy,
+                                     SbEglSurface surface,
+                                     SbEglInt32 attribute,
+                                     SbEglInt32* value) {
+  if (IsFakePbufferSurface(surface)) {
+    if (!value) {
+      return EGL_FALSE;
+    }
+
+    switch (attribute) {
+      case EGL_WIDTH:
+        *value = gFakePbufferWidth;
+        return EGL_TRUE;
+      case EGL_HEIGHT:
+        *value = gFakePbufferHeight;
+        return EGL_TRUE;
+      default:
+        // Unknown attribute; behave like a minimal surface.
+        return EGL_FALSE;
+    }
+  }
+  return eglQuerySurface(dpy, surface, attribute, value);
+}
+
+SbEglBoolean SbEglSurfaceAttribWrapper(SbEglDisplay dpy,
+                                      SbEglSurface surface,
+                                      SbEglInt32 attribute,
+                                      SbEglInt32 value) {
+  if (IsFakePbufferSurface(surface)) {
+    return EGL_TRUE;
+  }
+  return eglSurfaceAttrib(dpy, surface, attribute, value);
+}
+
+SbEglBoolean SbEglSwapBuffersWrapper(SbEglDisplay dpy, SbEglSurface surface) {
+  if (IsFakePbufferSurface(surface)) {
+    SB_LOG(ERROR) << "eglSwapBuffers called on fake pbuffer surface";
+    return EGL_FALSE;
+  }
+  return eglSwapBuffers(dpy, surface);
 }
 
 // Convenience functions that redirect to the intended function but "cast" the
@@ -286,10 +391,17 @@ SbEglDisplay SbEglGetDisplay(SbEglNativeDisplayType display_id) {
 SbEglBoolean SbEglInitializeWrapper(SbEglDisplay dpy, SbEglInt32* major, SbEglInt32* minor) {
   SbEglBoolean result = eglInitialize(dpy, major, minor);
 
+  if (!result) {
+    SB_LOG(ERROR) << "eglInitialize failed, err: " << eglGetError();
+    return result;
+  }
+
   // Check capabilities after successful initialization (requires initialized display)
-  if (result && !gCapabilitiesChecked) {
+  if (!gCapabilitiesChecked) {
+    EGLint maj = major ? *major : 0;
+    EGLint min = minor ? *minor : 0;
+    SB_LOG(INFO) << "EGL " << maj << "." << min << " initialized successfully";
     checkEglCapabilities(dpy);
-    SB_LOG(INFO) << "EGL " << (major ? *major : 0) << "." << (minor ? *minor : 0) << " initialized";
   }
 
   return result;
@@ -303,7 +415,7 @@ const SbEglInterface g_sb_egl_interface = {
     &SbEglCreatePixmapSurface,
     &SbEglCreateWindowSurface,
     &eglDestroyContext,
-    &eglDestroySurface,
+  &SbEglDestroySurfaceWrapper,
     &eglGetConfigAttrib,
     &eglGetConfigs,
     &eglGetCurrentDisplay,
@@ -312,17 +424,17 @@ const SbEglInterface g_sb_egl_interface = {
     &eglGetError,
     &eglGetProcAddress,
     &SbEglInitializeWrapper,
-    &eglMakeCurrent,
+  &SbEglMakeCurrentWrapper,
     &eglQueryContext,
     &eglQueryString,
-    &eglQuerySurface,
-    &eglSwapBuffers,
+  &SbEglQuerySurfaceWrapper,
+  &SbEglSwapBuffersWrapper,
     &eglTerminate,
     &eglWaitGL,
     &eglWaitNative,
     &eglBindTexImage,
     &eglReleaseTexImage,
-    &eglSurfaceAttrib,
+  &SbEglSurfaceAttribWrapper,
     &eglSwapInterval,
     &eglBindAPI,
     &eglQueryAPI,

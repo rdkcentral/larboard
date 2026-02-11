@@ -38,7 +38,7 @@
 
 #include <cstring>
 #include <mutex>
-#include <cstring>
+#include <vector>
 #include <essos-app.h>
 
 #ifdef EGL_PLATFORM_WAYLAND_EXT
@@ -53,11 +53,21 @@ extern "C" EssAppPlatformDisplayType EssContextGetAppPlatformDisplayType( EssCtx
 
 namespace {
 
+// Global state for EGL capabilities
+// Assume supported until proven otherwise to avoid unnecessary overhead on platforms with support.
+static bool gPbufferSupported = true;
+static bool gSurfacelessContextSupported = false;
+static bool gCapabilitiesChecked = false;
+
 #ifdef EGL_PLATFORM_WAYLAND_EXT
 static PFNEGLCREATEPLATFORMWINDOWSURFACEEXTPROC gEglCreatePlatformWindowSurfaceEXT;
 static PFNEGLGETPLATFORMDISPLAYEXTPROC gEglGetPlatformDisplayEXT;
+#endif
 
 bool isExtensionSupported(const char* extension_list, const char* extension) {
+  if (!extension_list || !extension) {
+    return false;
+  }
   int len = strlen(extension);
   const char* ptr = extension_list;
   while ((ptr = strstr(ptr, extension))) {
@@ -68,6 +78,40 @@ bool isExtensionSupported(const char* extension_list, const char* extension) {
   return false;
 }
 
+void checkEglCapabilities(EGLDisplay display) {
+  if (gCapabilitiesChecked) {
+    return;
+  }
+  gCapabilitiesChecked = true;
+
+  // Check for surfaceless context support
+  const char* egl_extensions = eglQueryString(display, EGL_EXTENSIONS);
+  if (egl_extensions) {
+    gSurfacelessContextSupported =
+        isExtensionSupported(egl_extensions, "EGL_KHR_surfaceless_context") ||
+        isExtensionSupported(egl_extensions, "EGL_KHR_no_config_context");
+
+    if (gSurfacelessContextSupported) {
+      SB_LOG(INFO) << "Surfaceless context support detected, pbuffers optional";
+    }
+  }
+
+  // Test if pbuffers are actually supported by attempting to query configs
+  EGLint pbuffer_attribs[] = {
+      EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+      EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+      EGL_NONE
+  };
+  EGLint num_configs = 0;
+  if (eglChooseConfig(display, pbuffer_attribs, nullptr, 0, &num_configs)) {
+    if (num_configs == 0) {
+      gPbufferSupported = false;
+      SB_LOG(WARNING) << "No EGL configs with EGL_PBUFFER_BIT support found";
+    }
+  }
+}
+
+#ifdef EGL_PLATFORM_WAYLAND_EXT
 bool resolveEglPlatfromExtFns() {
   static std::once_flag flag;
   std::call_once(flag, [] {
@@ -93,6 +137,59 @@ bool resolveEglPlatfromExtFns() {
   return gEglGetPlatformDisplayEXT && gEglCreatePlatformWindowSurfaceEXT;
 }
 #endif
+
+// Wrapper for eglChooseConfig that filters pbuffer requirements if unsupported
+// For platforms with pbuffer support, this is just a direct pass-through with zero overhead
+SbEglBoolean SbEglChooseConfigWrapper(SbEglDisplay dpy,
+                                      const SbEglInt32* attrib_list,
+                                      SbEglConfig* configs,
+                                      SbEglInt32 config_size,
+                                      SbEglInt32* num_config) {
+  // Fast path: Direct pass-through for platforms with pbuffer or surfaceless support
+  if (gPbufferSupported || gSurfacelessContextSupported) {
+    return eglChooseConfig(dpy, attrib_list, configs, config_size, num_config);
+  }
+
+  // Platform doesn't support pbuffers - filter the config attributes
+  SB_LOG(WARNING) << "Filtering EGL_PBUFFER_BIT from config request (pbuffers unsupported)";
+
+  // Count attributes and copy to new list, filtering EGL_SURFACE_TYPE
+  std::vector<SbEglInt32> filtered_attribs;
+  if (attrib_list) {
+    for (int i = 0; attrib_list[i] != EGL_NONE; i += 2) {
+      if (attrib_list[i] == EGL_SURFACE_TYPE) {
+        // Remove EGL_PBUFFER_BIT from surface type
+        SbEglInt32 surface_type = attrib_list[i + 1];
+        surface_type &= ~EGL_PBUFFER_BIT;
+        if (surface_type != 0) {
+          filtered_attribs.push_back(EGL_SURFACE_TYPE);
+          filtered_attribs.push_back(surface_type);
+        }
+      } else {
+        filtered_attribs.push_back(attrib_list[i]);
+        filtered_attribs.push_back(attrib_list[i + 1]);
+      }
+    }
+  }
+  filtered_attribs.push_back(EGL_NONE);
+
+  return eglChooseConfig(dpy, filtered_attribs.data(), configs, config_size, num_config);
+}
+
+// Wrapper for eglCreatePbufferSurface that provides graceful fallback when unsupported
+// For platforms with pbuffer support, this is a direct pass-through with zero overhead
+SbEglSurface SbEglCreatePbufferSurfaceStub(SbEglDisplay dpy,
+                                           SbEglConfig config,
+                                           const SbEglInt32* attrib_list) {
+  // Fast path: Direct pass-through for platforms with pbuffer support
+  if (gPbufferSupported) {
+    return eglCreatePbufferSurface(dpy, config, attrib_list);
+  }
+
+  SB_LOG(ERROR) << "eglCreatePbufferSurface called but pbuffers not supported on this platform";
+  SB_LOG(ERROR) << "Consider using EGL_KHR_surfaceless_context or window-based surfaces";
+  return EGL_NO_SURFACE;
+}
 
 // Convenience functions that redirect to the intended function but "cast" the
 // type of the SbEglNative*Type parameter into the desired type. Depending on
@@ -148,6 +245,9 @@ SbEglDisplay SbEglGetDisplay(SbEglNativeDisplayType display_id) {
     display_type = reinterpret_cast<NativeDisplayType>(display_id);
   }
 
+  // Get the display first
+  EGLDisplay display = EGL_NO_DISPLAY;
+
 #ifdef EGL_PLATFORM_WAYLAND_EXT
   if (EssContextGetAppPlatformDisplayType == nullptr) {
     SB_LOG(INFO) << "'EssContextGetAppPlatformDisplayType' is not available. Fallback to eglGetDisplay.";
@@ -170,19 +270,36 @@ SbEglDisplay SbEglGetDisplay(SbEglNativeDisplayType display_id) {
       gEglCreatePlatformWindowSurfaceEXT = nullptr;
     } else {
       SB_LOG(INFO) << "Using display=" << result << ", returned by eglGetPlatformDisplayEXT.";
-      return result;
+      display = result;
     }
   }
 #endif
 
-  return eglGetDisplay(reinterpret_cast<EGLNativeDisplayType>(display_type));
+  if (display == EGL_NO_DISPLAY) {
+    display = eglGetDisplay(reinterpret_cast<EGLNativeDisplayType>(display_type));
+  }
+
+  return display;
+}
+
+// Wrapper for eglInitialize that performs capability detection after initialization
+SbEglBoolean SbEglInitializeWrapper(SbEglDisplay dpy, SbEglInt32* major, SbEglInt32* minor) {
+  SbEglBoolean result = eglInitialize(dpy, major, minor);
+
+  // Check capabilities after successful initialization (requires initialized display)
+  if (result && !gCapabilitiesChecked) {
+    checkEglCapabilities(dpy);
+    SB_LOG(INFO) << "EGL " << (major ? *major : 0) << "." << (minor ? *minor : 0) << " initialized";
+  }
+
+  return result;
 }
 
 const SbEglInterface g_sb_egl_interface = {
-    &eglChooseConfig,
+    &SbEglChooseConfigWrapper,
     &SbEglCopyBuffers,
     &eglCreateContext,
-    &eglCreatePbufferSurface,
+    &SbEglCreatePbufferSurfaceStub,
     &SbEglCreatePixmapSurface,
     &SbEglCreateWindowSurface,
     &eglDestroyContext,
@@ -194,7 +311,7 @@ const SbEglInterface g_sb_egl_interface = {
     &SbEglGetDisplay,
     &eglGetError,
     &eglGetProcAddress,
-    &eglInitialize,
+    &SbEglInitializeWrapper,
     &eglMakeCurrent,
     &eglQueryContext,
     &eglQueryString,

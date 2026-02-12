@@ -59,10 +59,31 @@ static bool gPbufferSupported = true;
 static bool gSurfacelessContextSupported = false;
 static bool gCapabilitiesChecked = false;
 
-// When pbuffers are not supported but surfaceless contexts are, some Cobalt
-// branches still attempt to create a tiny pbuffer for a "null" surface and
-// CHECK() that it succeeds. To avoid patching Cobalt, we emulate a pbuffer
-// surface handle and translate it to surfaceless eglMakeCurrent.
+/*
+Some Cobalt branches create a tiny pbuffer as an "offscreen" surface and may CHECK()
+that eglCreatePbufferSurface() succeeds.
+
+On some EGL stacks (notably Mesa VC4/V3D), EGL_KHR_surfaceless_context can be present
+even though no EGL config advertises EGL_PBUFFER_BIT. In that case pbuffer creation
+fails and Cobalt can crash.
+
+Workaround in this file: if pbuffers aren't supported but surfaceless is, return a
+fake pbuffer handle and treat it as surfaceless (EGL_NO_SURFACE) in MakeCurrent.
+This keeps older branches running without needing a Cobalt patch.
+
+Upstream reference (youtube/cobalt main / Chromium ui/gl) has a native surfaceless path:
+- Surfaceless surface contract (also expects GL_OES_surfaceless_context):
+  https://github.com/youtube/cobalt/blob/main/ui/gl/gl_surface_egl.h
+- SurfacelessEGL returns EGL_NO_SURFACE:
+  https://github.com/youtube/cobalt/blob/main/ui/gl/gl_surface_egl.cc
+- Display capability detection (egl_surfaceless_context_supported_):
+  https://github.com/youtube/cobalt/blob/main/ui/gl/gl_display.cc
+- Offscreen selection (SurfacelessEGL vs PbufferGLSurfaceEGL):
+  https://github.com/youtube/cobalt/blob/main/ui/gl/init/gl_factory_android.cc
+  https://github.com/youtube/cobalt/blob/main/ui/ozone/platform/x11/x11_surface_factory.cc
+  https://github.com/youtube/cobalt/blob/main/ui/ozone/platform/wayland/gpu/wayland_surface_factory.cc
+*/
+
 static int gFakePbufferSurfaceStorage;
 static EGLSurface gFakePbufferSurface =
     reinterpret_cast<EGLSurface>(&gFakePbufferSurfaceStorage);
@@ -437,7 +458,7 @@ const SbEglInterface g_sb_egl_interface = {
     &SbEglCreatePixmapSurface,
     &SbEglCreateWindowSurface,
     &eglDestroyContext,
-  &SbEglDestroySurfaceWrapper,
+    &SbEglDestroySurfaceWrapper,
     &eglGetConfigAttrib,
     &eglGetConfigs,
     &eglGetCurrentDisplay,
@@ -446,17 +467,17 @@ const SbEglInterface g_sb_egl_interface = {
     &eglGetError,
     &eglGetProcAddress,
     &SbEglInitializeWrapper,
-  &SbEglMakeCurrentWrapper,
+    &SbEglMakeCurrentWrapper,
     &eglQueryContext,
     &eglQueryString,
-  &SbEglQuerySurfaceWrapper,
-  &SbEglSwapBuffersWrapper,
+    &SbEglQuerySurfaceWrapper,
+    &SbEglSwapBuffersWrapper,
     &eglTerminate,
     &eglWaitGL,
     &eglWaitNative,
     &eglBindTexImage,
     &eglReleaseTexImage,
-  &SbEglSurfaceAttribWrapper,
+    &SbEglSurfaceAttribWrapper,
     &SbEglSwapIntervalWrapper,
     &eglBindAPI,
     &eglQueryAPI,

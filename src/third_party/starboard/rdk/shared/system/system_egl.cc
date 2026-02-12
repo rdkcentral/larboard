@@ -290,10 +290,32 @@ SbEglBoolean SbEglSurfaceAttribWrapper(SbEglDisplay dpy,
 
 SbEglBoolean SbEglSwapBuffersWrapper(SbEglDisplay dpy, SbEglSurface surface) {
   if (IsFakePbufferSurface(surface)) {
-    SB_LOG(ERROR) << "eglSwapBuffers called on fake pbuffer surface";
-    return EGL_FALSE;
+    // Some higher-level code may still call SwapBuffers on an offscreen
+    // surface to drive its frame loop. Returning EGL_FALSE here can cause
+    // busy-loop retries and log spam. Treat it as a no-op success.
+    static std::once_flag once;
+    std::call_once(once, [] {
+      SB_LOG(INFO) << "Ignoring eglSwapBuffers on emulated pbuffer surface";
+    });
+    return EGL_TRUE;
   }
   return eglSwapBuffers(dpy, surface);
+}
+
+SbEglBoolean SbEglSwapIntervalWrapper(SbEglDisplay dpy, SbEglInt32 interval) {
+  if (gPbufferSupported) {
+    return eglSwapInterval(dpy, interval);
+  }
+
+  // When using surfaceless contexts (EGL_NO_SURFACE) for emulated pbuffers,
+  // eglSwapInterval would fail with EGL_BAD_SURFACE. Higher layers may treat
+  // that as an error and spin/retry. Make it a no-op success in that case.
+  EGLSurface current_draw = eglGetCurrentSurface(EGL_DRAW);
+  if (current_draw == EGL_NO_SURFACE) {
+    return EGL_TRUE;
+  }
+
+  return eglSwapInterval(dpy, interval);
 }
 
 // Convenience functions that redirect to the intended function but "cast" the
@@ -435,7 +457,7 @@ const SbEglInterface g_sb_egl_interface = {
     &eglBindTexImage,
     &eglReleaseTexImage,
   &SbEglSurfaceAttribWrapper,
-    &eglSwapInterval,
+    &SbEglSwapIntervalWrapper,
     &eglBindAPI,
     &eglQueryAPI,
     &eglCreatePbufferFromClientBuffer,

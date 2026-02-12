@@ -38,6 +38,7 @@
 
 #include <atomic>
 #include <cstring>
+#include <iomanip>
 #include <mutex>
 #include <vector>
 #include <essos-app.h>
@@ -92,6 +93,14 @@ struct FakePbufferSurfaceInfo {
 };
 
 struct FakePbufferSurfaceSlot {
+  static constexpr uint32_t kMagic = 0x50425546u;  // 'PBUF'
+
+  constexpr FakePbufferSurfaceSlot()
+      : magic(kMagic),
+        in_use(false),
+        info{1, 1} {}
+
+  uint32_t magic;
   bool in_use;
   FakePbufferSurfaceInfo info;
 };
@@ -105,7 +114,7 @@ inline bool IsFakePbufferSurfaceUnchecked(EGLSurface surface) {
   auto* slot = reinterpret_cast<const FakePbufferSurfaceSlot*>(surface);
   const auto* begin = &gFakePbufferPool[0];
   const auto* end = &gFakePbufferPool[kMaxFakePbufferSurfaces];
-  return slot >= begin && slot < end;
+  return slot >= begin && slot < end && slot->magic == FakePbufferSurfaceSlot::kMagic;
 }
 
 inline bool IsFakePbufferSurface(EGLSurface surface) {
@@ -186,27 +195,40 @@ void checkEglCapabilities(EGLDisplay display) {
     // that can false-negative depending on renderable bits.
     EGLint num_configs = 0;
     bool any_pbuffer_config = false;
-    if (eglGetConfigs(display, nullptr, 0, &num_configs) && num_configs > 0) {
-      std::vector<EGLConfig> configs(static_cast<size_t>(num_configs));
-      EGLint out_configs = 0;
-      if (eglGetConfigs(display, configs.data(), num_configs, &out_configs)) {
-        configs.resize(static_cast<size_t>(out_configs));
-        for (EGLConfig config : configs) {
-          EGLint surface_type = 0;
-          if (eglGetConfigAttrib(display, config, EGL_SURFACE_TYPE,
-                                 &surface_type) &&
-              (surface_type & EGL_PBUFFER_BIT) != 0) {
-            any_pbuffer_config = true;
-            break;
+    bool configs_enumerated = false;
+
+    if (eglGetConfigs(display, nullptr, 0, &num_configs)) {
+      if (num_configs > 0) {
+        std::vector<EGLConfig> configs(static_cast<size_t>(num_configs));
+        EGLint out_configs = 0;
+        if (eglGetConfigs(display, configs.data(), num_configs, &out_configs)) {
+          configs_enumerated = true;
+          configs.resize(static_cast<size_t>(out_configs));
+          for (EGLConfig config : configs) {
+            EGLint surface_type = 0;
+            if (eglGetConfigAttrib(display, config, EGL_SURFACE_TYPE,
+                                   &surface_type) &&
+                (surface_type & EGL_PBUFFER_BIT) != 0) {
+              any_pbuffer_config = true;
+              break;
+            }
           }
         }
+      } else {
+        // Successfully queried, but implementation reports zero configs.
+        configs_enumerated = true;
       }
     }
 
-    if (!any_pbuffer_config) {
+    if (configs_enumerated && !any_pbuffer_config) {
       gPbufferSupported.store(false, std::memory_order_release);
       SB_LOG(WARNING)
           << "No EGL configs advertise EGL_PBUFFER_BIT (pbuffer unsupported)";
+    } else if (!configs_enumerated) {
+      EGLint error = eglGetError();
+      SB_LOG(ERROR)
+          << "Failed to enumerate EGL configs for pbuffer detection; keeping default pbuffer support; eglGetError=0x"
+          << std::hex << error;
     }
 
     gCapabilitiesChecked.store(true, std::memory_order_release);
@@ -219,7 +241,8 @@ bool resolveEglPlatfromExtFns() {
   std::call_once(flag, [] {
     const char* extensions = eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS);
     if (!isExtensionSupported(extensions, "EGL_EXT_platform_wayland")) {
-      SB_LOG(INFO) << "Wayland EGL platform extension is not supported. Supported extensions: " << extensions;
+      SB_LOG(INFO) << "Wayland EGL platform extension is not supported. Supported extensions: "
+                   << (extensions ? extensions : "<null>");
     }
     else {
       gEglGetPlatformDisplayEXT = (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress("eglGetPlatformDisplayEXT");
@@ -292,8 +315,11 @@ SbEglSurface SbEglCreatePbufferSurfaceStub(SbEglDisplay dpy,
     return eglCreatePbufferSurface(dpy, config, attrib_list);
   }
 
-  SB_LOG(WARNING)
-      << "eglCreatePbufferSurface called but pbuffers not supported on this platform";
+  static std::once_flag log_once;
+  std::call_once(log_once, [] {
+    SB_LOG(WARNING)
+        << "eglCreatePbufferSurface called but pbuffers not supported on this platform";
+  });
 
   // If surfaceless contexts are supported, emulate a pbuffer surface handle.
   // This allows higher layers that assume a pbuffer exists to proceed, while

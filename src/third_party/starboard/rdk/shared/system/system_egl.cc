@@ -36,6 +36,7 @@
 #include "third_party/starboard/rdk/shared/application_rdk.h"
 #include "third_party/starboard/rdk/shared/log_override.h"
 
+#include <atomic>
 #include <cstring>
 #include <mutex>
 #include <vector>
@@ -55,9 +56,10 @@ namespace {
 
 // Global state for EGL capabilities
 // Assume supported until proven otherwise to avoid unnecessary overhead on platforms with support.
-static bool gPbufferSupported = true;
-static bool gSurfacelessContextSupported = false;
-static bool gCapabilitiesChecked = false;
+static std::atomic<bool> gPbufferSupported{true};
+static std::atomic<bool> gSurfacelessContextSupported{false};
+static std::atomic<bool> gCapabilitiesChecked{false};
+static std::once_flag gCapabilitiesOnce;
 
 /*
 Some Cobalt branches create a tiny pbuffer as an "offscreen" surface and may CHECK()
@@ -67,7 +69,7 @@ On some EGL stacks (notably Mesa VC4/V3D), EGL_KHR_surfaceless_context can be pr
 even though no EGL config advertises EGL_PBUFFER_BIT. In that case pbuffer creation
 fails and Cobalt can crash.
 
-Workaround in this file: if pbuffers aren't supported but surfaceless is, return a
+Implementation note: if pbuffers aren't supported but surfaceless is, return a
 fake pbuffer handle and treat it as surfaceless (EGL_NO_SURFACE) in MakeCurrent.
 This keeps older branches running without needing a Cobalt patch.
 
@@ -84,14 +86,63 @@ Upstream reference (youtube/cobalt main / Chromium ui/gl) has a native surfacele
   https://github.com/youtube/cobalt/blob/main/ui/ozone/platform/wayland/gpu/wayland_surface_factory.cc
 */
 
-static int gFakePbufferSurfaceStorage;
-static EGLSurface gFakePbufferSurface =
-    reinterpret_cast<EGLSurface>(&gFakePbufferSurfaceStorage);
-static EGLint gFakePbufferWidth = 1;
-static EGLint gFakePbufferHeight = 1;
+struct FakePbufferSurfaceInfo {
+  EGLint width;
+  EGLint height;
+};
+
+struct FakePbufferSurfaceSlot {
+  bool in_use;
+  FakePbufferSurfaceInfo info;
+};
+
+// Keep this bounded to avoid unbounded allocations in a low-level EGL wrapper.
+static constexpr size_t kMaxFakePbufferSurfaces = 32;
+static std::mutex gFakePbufferMutex;
+static FakePbufferSurfaceSlot gFakePbufferPool[kMaxFakePbufferSurfaces] = {};
+
+inline bool IsFakePbufferSurfaceUnchecked(EGLSurface surface) {
+  auto* slot = reinterpret_cast<const FakePbufferSurfaceSlot*>(surface);
+  const auto* begin = &gFakePbufferPool[0];
+  const auto* end = &gFakePbufferPool[kMaxFakePbufferSurfaces];
+  return slot >= begin && slot < end;
+}
 
 inline bool IsFakePbufferSurface(EGLSurface surface) {
-  return surface == gFakePbufferSurface;
+  if (surface == EGL_NO_SURFACE) {
+    return false;
+  }
+  return IsFakePbufferSurfaceUnchecked(surface);
+}
+
+EGLSurface AllocateFakePbufferSurface(EGLint width, EGLint height) {
+  std::lock_guard<std::mutex> lock(gFakePbufferMutex);
+  for (size_t i = 0; i < kMaxFakePbufferSurfaces; ++i) {
+    if (!gFakePbufferPool[i].in_use) {
+      gFakePbufferPool[i].in_use = true;
+      gFakePbufferPool[i].info.width = width;
+      gFakePbufferPool[i].info.height = height;
+      return reinterpret_cast<EGLSurface>(&gFakePbufferPool[i]);
+    }
+  }
+  SB_LOG(ERROR) << "Fake pbuffer pool exhausted (" << kMaxFakePbufferSurfaces
+                << ")";
+  return EGL_NO_SURFACE;
+}
+
+bool FreeFakePbufferSurface(EGLSurface surface) {
+  if (!IsFakePbufferSurface(surface)) {
+    return false;
+  }
+  std::lock_guard<std::mutex> lock(gFakePbufferMutex);
+  auto* slot = reinterpret_cast<FakePbufferSurfaceSlot*>(surface);
+  if (!IsFakePbufferSurfaceUnchecked(surface) || !slot->in_use) {
+    return false;
+  }
+  slot->in_use = false;
+  slot->info.width = 1;
+  slot->info.height = 1;
+  return true;
 }
 
 #ifdef EGL_PLATFORM_WAYLAND_EXT
@@ -114,37 +165,52 @@ bool isExtensionSupported(const char* extension_list, const char* extension) {
 }
 
 void checkEglCapabilities(EGLDisplay display) {
-  if (gCapabilitiesChecked) {
-    return;
-  }
-  gCapabilitiesChecked = true;
-
-  // Check for surfaceless context support
-  const char* egl_extensions = eglQueryString(display, EGL_EXTENSIONS);
-  if (egl_extensions) {
-    // NOTE: EGL_KHR_no_config_context is not the same as surfaceless contexts.
-    // Only treat EGL_KHR_surfaceless_context as surfaceless support.
-    gSurfacelessContextSupported =
-      isExtensionSupported(egl_extensions, "EGL_KHR_surfaceless_context");
-
-    if (gSurfacelessContextSupported) {
-      SB_LOG(INFO) << "Surfaceless context support detected, pbuffers optional";
+  std::call_once(gCapabilitiesOnce, [display] {
+    // Check for surfaceless context support
+    const char* egl_extensions = eglQueryString(display, EGL_EXTENSIONS);
+    if (egl_extensions) {
+      // NOTE: EGL_KHR_no_config_context is not the same as surfaceless contexts.
+      // Only treat EGL_KHR_surfaceless_context as surfaceless support.
+      const bool surfaceless_supported =
+          isExtensionSupported(egl_extensions, "EGL_KHR_surfaceless_context");
+      gSurfacelessContextSupported.store(surfaceless_supported,
+                                         std::memory_order_release);
+      if (surfaceless_supported) {
+        SB_LOG(INFO)
+            << "Surfaceless context support detected, pbuffers optional";
+      }
     }
-  }
 
-  // Test if pbuffers are actually supported by attempting to query configs
-  EGLint pbuffer_attribs[] = {
-      EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
-      EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-      EGL_NONE
-  };
-  EGLint num_configs = 0;
-  if (eglChooseConfig(display, pbuffer_attribs, nullptr, 0, &num_configs)) {
-    if (num_configs == 0) {
-      gPbufferSupported = false;
-      SB_LOG(WARNING) << "No EGL configs with EGL_PBUFFER_BIT support found";
+    // Detect pbuffer support by enumerating all configs and checking
+    // EGL_SURFACE_TYPE & EGL_PBUFFER_BIT. Avoid overly-restrictive probes
+    // that can false-negative depending on renderable bits.
+    EGLint num_configs = 0;
+    bool any_pbuffer_config = false;
+    if (eglGetConfigs(display, nullptr, 0, &num_configs) && num_configs > 0) {
+      std::vector<EGLConfig> configs(static_cast<size_t>(num_configs));
+      EGLint out_configs = 0;
+      if (eglGetConfigs(display, configs.data(), num_configs, &out_configs)) {
+        configs.resize(static_cast<size_t>(out_configs));
+        for (EGLConfig config : configs) {
+          EGLint surface_type = 0;
+          if (eglGetConfigAttrib(display, config, EGL_SURFACE_TYPE,
+                                 &surface_type) &&
+              (surface_type & EGL_PBUFFER_BIT) != 0) {
+            any_pbuffer_config = true;
+            break;
+          }
+        }
+      }
     }
-  }
+
+    if (!any_pbuffer_config) {
+      gPbufferSupported.store(false, std::memory_order_release);
+      SB_LOG(WARNING)
+          << "No EGL configs advertise EGL_PBUFFER_BIT (pbuffer unsupported)";
+    }
+
+    gCapabilitiesChecked.store(true, std::memory_order_release);
+  });
 }
 
 #ifdef EGL_PLATFORM_WAYLAND_EXT
@@ -182,12 +248,16 @@ SbEglBoolean SbEglChooseConfigWrapper(SbEglDisplay dpy,
                                       SbEglInt32 config_size,
                                       SbEglInt32* num_config) {
   // Fast path: Direct pass-through for platforms with pbuffer support
-  if (gPbufferSupported) {
+  if (gPbufferSupported.load(std::memory_order_acquire)) {
     return eglChooseConfig(dpy, attrib_list, configs, config_size, num_config);
   }
 
   // Platform doesn't support pbuffers - filter the config attributes
-  SB_LOG(WARNING) << "Filtering EGL_PBUFFER_BIT from config request (pbuffers unsupported)";
+  static std::once_flag log_once;
+  std::call_once(log_once, [] {
+    SB_LOG(WARNING)
+        << "Filtering EGL_PBUFFER_BIT from config request (pbuffers unsupported)";
+  });
 
   // Count attributes and copy to new list, filtering EGL_SURFACE_TYPE
   std::vector<SbEglInt32> filtered_attribs;
@@ -218,7 +288,7 @@ SbEglSurface SbEglCreatePbufferSurfaceStub(SbEglDisplay dpy,
                                            SbEglConfig config,
                                            const SbEglInt32* attrib_list) {
   // Fast path: Direct pass-through for platforms with pbuffer support
-  if (gPbufferSupported) {
+  if (gPbufferSupported.load(std::memory_order_acquire)) {
     return eglCreatePbufferSurface(dpy, config, attrib_list);
   }
 
@@ -228,7 +298,7 @@ SbEglSurface SbEglCreatePbufferSurfaceStub(SbEglDisplay dpy,
   // If surfaceless contexts are supported, emulate a pbuffer surface handle.
   // This allows higher layers that assume a pbuffer exists to proceed, while
   // we translate usage to surfaceless eglMakeCurrent.
-  if (gSurfacelessContextSupported) {
+  if (gSurfacelessContextSupported.load(std::memory_order_acquire)) {
     EGLint width = 1;
     EGLint height = 1;
     if (attrib_list) {
@@ -242,11 +312,15 @@ SbEglSurface SbEglCreatePbufferSurfaceStub(SbEglDisplay dpy,
     }
     if (width <= 0) width = 1;
     if (height <= 0) height = 1;
-    gFakePbufferWidth = width;
-    gFakePbufferHeight = height;
+
+    EGLSurface handle = AllocateFakePbufferSurface(width, height);
+    if (handle == EGL_NO_SURFACE) {
+      SB_LOG(ERROR) << "Failed to emulate pbuffer surface; out of fake handles";
+      return EGL_NO_SURFACE;
+    }
     SB_LOG(INFO) << "Emulating pbuffer surface via surfaceless context ("
                  << width << "x" << height << ")";
-    return gFakePbufferSurface;
+    return handle;
   }
 
   SB_LOG(ERROR) << "Surfaceless contexts not supported; cannot emulate pbuffers";
@@ -259,7 +333,7 @@ SbEglBoolean SbEglMakeCurrentWrapper(SbEglDisplay dpy,
                                     SbEglSurface draw,
                                     SbEglSurface read,
                                     SbEglContext ctx) {
-  if (gPbufferSupported) {
+  if (gPbufferSupported.load(std::memory_order_acquire)) {
     return eglMakeCurrent(dpy, draw, read, ctx);
   }
 
@@ -269,8 +343,10 @@ SbEglBoolean SbEglMakeCurrentWrapper(SbEglDisplay dpy,
 }
 
 SbEglBoolean SbEglDestroySurfaceWrapper(SbEglDisplay dpy, SbEglSurface surface) {
-  if (IsFakePbufferSurface(surface)) {
-    return EGL_TRUE;
+  if (!gPbufferSupported.load(std::memory_order_acquire)) {
+    if (FreeFakePbufferSurface(surface)) {
+      return EGL_TRUE;
+    }
   }
   return eglDestroySurface(dpy, surface);
 }
@@ -279,17 +355,30 @@ SbEglBoolean SbEglQuerySurfaceWrapper(SbEglDisplay dpy,
                                      SbEglSurface surface,
                                      SbEglInt32 attribute,
                                      SbEglInt32* value) {
-  if (IsFakePbufferSurface(surface)) {
+  if (!gPbufferSupported.load(std::memory_order_acquire) &&
+      IsFakePbufferSurface(surface)) {
     if (!value) {
       return EGL_FALSE;
     }
 
+    EGLint width = 1;
+    EGLint height = 1;
+    {
+      std::lock_guard<std::mutex> lock(gFakePbufferMutex);
+      auto* slot = reinterpret_cast<const FakePbufferSurfaceSlot*>(surface);
+      if (!IsFakePbufferSurfaceUnchecked(surface) || !slot->in_use) {
+        return EGL_FALSE;
+      }
+      width = slot->info.width;
+      height = slot->info.height;
+    }
+
     switch (attribute) {
       case EGL_WIDTH:
-        *value = gFakePbufferWidth;
+        *value = width;
         return EGL_TRUE;
       case EGL_HEIGHT:
-        *value = gFakePbufferHeight;
+        *value = height;
         return EGL_TRUE;
       default:
         // Unknown attribute; behave like a minimal surface.
@@ -303,13 +392,17 @@ SbEglBoolean SbEglSurfaceAttribWrapper(SbEglDisplay dpy,
                                       SbEglSurface surface,
                                       SbEglInt32 attribute,
                                       SbEglInt32 value) {
-  if (IsFakePbufferSurface(surface)) {
+  if (!gPbufferSupported.load(std::memory_order_acquire) &&
+      IsFakePbufferSurface(surface)) {
     return EGL_TRUE;
   }
   return eglSurfaceAttrib(dpy, surface, attribute, value);
 }
 
 SbEglBoolean SbEglSwapBuffersWrapper(SbEglDisplay dpy, SbEglSurface surface) {
+  if (gPbufferSupported.load(std::memory_order_acquire)) {
+    return eglSwapBuffers(dpy, surface);
+  }
   if (IsFakePbufferSurface(surface)) {
     // Some higher-level code may still call SwapBuffers on an offscreen
     // surface to drive its frame loop. Returning EGL_FALSE here can cause
@@ -324,7 +417,7 @@ SbEglBoolean SbEglSwapBuffersWrapper(SbEglDisplay dpy, SbEglSurface surface) {
 }
 
 SbEglBoolean SbEglSwapIntervalWrapper(SbEglDisplay dpy, SbEglInt32 interval) {
-  if (gPbufferSupported) {
+  if (gPbufferSupported.load(std::memory_order_acquire)) {
     return eglSwapInterval(dpy, interval);
   }
 
@@ -440,12 +533,12 @@ SbEglBoolean SbEglInitializeWrapper(SbEglDisplay dpy, SbEglInt32* major, SbEglIn
   }
 
   // Check capabilities after successful initialization (requires initialized display)
-  if (!gCapabilitiesChecked) {
+  if (!gCapabilitiesChecked.load(std::memory_order_acquire)) {
     EGLint maj = major ? *major : 0;
     EGLint min = minor ? *minor : 0;
     SB_LOG(INFO) << "EGL " << maj << "." << min << " initialized successfully";
-    checkEglCapabilities(dpy);
   }
+  checkEglCapabilities(dpy);
 
   return result;
 }

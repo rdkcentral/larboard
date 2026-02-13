@@ -37,6 +37,8 @@
 #include "third_party/starboard/rdk/shared/log_override.h"
 
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <iomanip>
 #include <mutex>
@@ -59,8 +61,9 @@ namespace {
 // Assume supported until proven otherwise to avoid unnecessary overhead on platforms with support.
 static std::atomic<bool> gPbufferSupported{true};
 static std::atomic<bool> gSurfacelessContextSupported{false};
-static std::atomic<bool> gCapabilitiesChecked{false};
 static std::once_flag gCapabilitiesOnce;
+static EGLDisplay gCapabilitiesDisplay = EGL_NO_DISPLAY;
+static std::once_flag gCapabilitiesDisplayMismatchOnce;
 
 /*
 Some Cobalt branches create a tiny pbuffer as an "offscreen" surface and may CHECK()
@@ -105,22 +108,40 @@ struct FakePbufferSurfaceSlot {
   FakePbufferSurfaceInfo info;
 };
 
+static_assert(offsetof(FakePbufferSurfaceSlot, magic) == 0,
+              "FakePbufferSurfaceSlot::magic must be first for quick validation");
+static_assert(sizeof(FakePbufferSurfaceSlot::kMagic) == sizeof(uint32_t),
+              "Unexpected magic size");
+static_assert(sizeof(FakePbufferSurfaceSlot) <= 32,
+              "FakePbufferSurfaceSlot grew unexpectedly; keep it small");
+
 // Keep this bounded to avoid unbounded allocations in a low-level EGL wrapper.
 static constexpr size_t kMaxFakePbufferSurfaces = 32;
 static std::mutex gFakePbufferMutex;
 static FakePbufferSurfaceSlot gFakePbufferPool[kMaxFakePbufferSurfaces] = {};
+static std::atomic<size_t> gFakePbufferInUse{0};
+static std::atomic<size_t> gFakePbufferHighWater{0};
+static std::once_flag gFakePbufferNearExhaustionOnce;
 
 inline bool IsFakePbufferSurfaceUnchecked(EGLSurface surface) {
+  // REQUIRES: gFakePbufferMutex is held by the caller.
+  // Avoid pointer relational comparisons on unrelated pointers by comparing addresses.
+  const uintptr_t addr = reinterpret_cast<uintptr_t>(surface);
+  const uintptr_t begin = reinterpret_cast<uintptr_t>(&gFakePbufferPool[0]);
+  const uintptr_t end =
+      reinterpret_cast<uintptr_t>(&gFakePbufferPool[kMaxFakePbufferSurfaces]);
+  if (addr < begin || addr >= end) {
+    return false;
+  }
   auto* slot = reinterpret_cast<const FakePbufferSurfaceSlot*>(surface);
-  const auto* begin = &gFakePbufferPool[0];
-  const auto* end = &gFakePbufferPool[kMaxFakePbufferSurfaces];
-  return slot >= begin && slot < end && slot->magic == FakePbufferSurfaceSlot::kMagic;
+  return slot->magic == FakePbufferSurfaceSlot::kMagic;
 }
 
 inline bool IsFakePbufferSurface(EGLSurface surface) {
   if (surface == EGL_NO_SURFACE) {
     return false;
   }
+  std::lock_guard<std::mutex> lock(gFakePbufferMutex);
   return IsFakePbufferSurfaceUnchecked(surface);
 }
 
@@ -131,6 +152,22 @@ EGLSurface AllocateFakePbufferSurface(EGLint width, EGLint height) {
       gFakePbufferPool[i].in_use = true;
       gFakePbufferPool[i].info.width = width;
       gFakePbufferPool[i].info.height = height;
+
+      const size_t in_use = gFakePbufferInUse.fetch_add(1, std::memory_order_relaxed) + 1;
+      size_t prev_high = gFakePbufferHighWater.load(std::memory_order_relaxed);
+      while (in_use > prev_high &&
+             !gFakePbufferHighWater.compare_exchange_weak(
+                 prev_high, in_use, std::memory_order_relaxed,
+                 std::memory_order_relaxed)) {
+      }
+      if (in_use >= (kMaxFakePbufferSurfaces - 4)) {
+        std::call_once(gFakePbufferNearExhaustionOnce, [in_use] {
+          SB_LOG(WARNING) << "Fake pbuffer pool nearing exhaustion (in_use="
+                          << in_use << ", max=" << kMaxFakePbufferSurfaces
+                          << ")";
+        });
+      }
+
       return reinterpret_cast<EGLSurface>(&gFakePbufferPool[i]);
     }
   }
@@ -140,9 +177,6 @@ EGLSurface AllocateFakePbufferSurface(EGLint width, EGLint height) {
 }
 
 bool FreeFakePbufferSurface(EGLSurface surface) {
-  if (!IsFakePbufferSurface(surface)) {
-    return false;
-  }
   std::lock_guard<std::mutex> lock(gFakePbufferMutex);
   auto* slot = reinterpret_cast<FakePbufferSurfaceSlot*>(surface);
   if (!IsFakePbufferSurfaceUnchecked(surface) || !slot->in_use) {
@@ -151,6 +185,7 @@ bool FreeFakePbufferSurface(EGLSurface surface) {
   slot->in_use = false;
   slot->info.width = 1;
   slot->info.height = 1;
+  gFakePbufferInUse.fetch_sub(1, std::memory_order_relaxed);
   return true;
 }
 
@@ -163,10 +198,15 @@ bool isExtensionSupported(const char* extension_list, const char* extension) {
   if (!extension_list || !extension) {
     return false;
   }
-  int len = strlen(extension);
+  const size_t len = strlen(extension);
+  if (len == 0) {
+    return false;
+  }
   const char* ptr = extension_list;
   while ((ptr = strstr(ptr, extension))) {
-    if (ptr[len] == ' ' || ptr[len] == '\0')
+    const bool start_ok = (ptr == extension_list) || (ptr[-1] == ' ');
+    const bool end_ok = (ptr[len] == ' ' || ptr[len] == '\0');
+    if (start_ok && end_ok)
       return true;
     ptr += len;
   }
@@ -174,7 +214,13 @@ bool isExtensionSupported(const char* extension_list, const char* extension) {
 }
 
 void checkEglCapabilities(EGLDisplay display) {
+  if (display == EGL_NO_DISPLAY) {
+    // Avoid caching invalid results; allow a later call with a valid display.
+    SB_LOG(ERROR) << "checkEglCapabilities called with EGL_NO_DISPLAY";
+    return;
+  }
   std::call_once(gCapabilitiesOnce, [display] {
+    gCapabilitiesDisplay = display;
     // Check for surfaceless context support
     const char* egl_extensions = eglQueryString(display, EGL_EXTENSIONS);
     if (egl_extensions) {
@@ -230,13 +276,19 @@ void checkEglCapabilities(EGLDisplay display) {
           << "Failed to enumerate EGL configs for pbuffer detection; keeping default pbuffer support; eglGetError=0x"
           << std::hex << error;
     }
-
-    gCapabilitiesChecked.store(true, std::memory_order_release);
   });
+
+  if (gCapabilitiesDisplay != EGL_NO_DISPLAY && display != gCapabilitiesDisplay) {
+    std::call_once(gCapabilitiesDisplayMismatchOnce, [display] {
+      SB_LOG(WARNING)
+          << "EGL capabilities were cached for a different EGLDisplay; "
+          << "subsequent checks will reuse cached results";
+    });
+  }
 }
 
 #ifdef EGL_PLATFORM_WAYLAND_EXT
-bool resolveEglPlatfromExtFns() {
+bool resolveEglPlatformExtFns() {
   static std::once_flag flag;
   std::call_once(flag, [] {
     const char* extensions = eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS);
@@ -263,6 +315,12 @@ bool resolveEglPlatfromExtFns() {
 }
 #endif
 
+// Cap attribute parsing to avoid runaway reads if an attribute list is malformed.
+// NOTE: This cannot fully prevent out-of-bounds reads if the caller provides a
+// non-terminated pointer to a too-small buffer; the EGL API relies on a proper
+// EGL_NONE terminator.
+static constexpr int kMaxEglAttribPairs = 64;
+
 // Wrapper for eglChooseConfig that filters pbuffer requirements if unsupported
 // For platforms with pbuffer support, this is just a direct pass-through with zero overhead
 SbEglBoolean SbEglChooseConfigWrapper(SbEglDisplay dpy,
@@ -285,7 +343,8 @@ SbEglBoolean SbEglChooseConfigWrapper(SbEglDisplay dpy,
   // Count attributes and copy to new list, filtering EGL_SURFACE_TYPE
   std::vector<SbEglInt32> filtered_attribs;
   if (attrib_list) {
-    for (int i = 0; attrib_list[i] != EGL_NONE; i += 2) {
+    int i = 0;
+    for (; i < (kMaxEglAttribPairs * 2) && attrib_list[i] != EGL_NONE; i += 2) {
       if (attrib_list[i] == EGL_SURFACE_TYPE) {
         // Remove EGL_PBUFFER_BIT from surface type
         SbEglInt32 surface_type = attrib_list[i + 1];
@@ -293,11 +352,19 @@ SbEglBoolean SbEglChooseConfigWrapper(SbEglDisplay dpy,
         if (surface_type != 0) {
           filtered_attribs.push_back(EGL_SURFACE_TYPE);
           filtered_attribs.push_back(surface_type);
+        } else {
+          // If filtering removes all requested surface types, omit the attribute
+          // pair entirely and let eglChooseConfig select any available surface type.
         }
       } else {
         filtered_attribs.push_back(attrib_list[i]);
         filtered_attribs.push_back(attrib_list[i + 1]);
       }
+    }
+    if (i >= (kMaxEglAttribPairs * 2)) {
+      SB_LOG(ERROR)
+          << "EGL attrib_list missing EGL_NONE terminator (cap="
+          << kMaxEglAttribPairs << " pairs); truncating";
     }
   }
   filtered_attribs.push_back(EGL_NONE);
@@ -328,12 +395,18 @@ SbEglSurface SbEglCreatePbufferSurfaceStub(SbEglDisplay dpy,
     EGLint width = 1;
     EGLint height = 1;
     if (attrib_list) {
-      for (int i = 0; attrib_list[i] != EGL_NONE; i += 2) {
+      int i = 0;
+      for (; i < (kMaxEglAttribPairs * 2) && attrib_list[i] != EGL_NONE; i += 2) {
         if (attrib_list[i] == EGL_WIDTH) {
           width = attrib_list[i + 1];
         } else if (attrib_list[i] == EGL_HEIGHT) {
           height = attrib_list[i + 1];
         }
+      }
+      if (i >= (kMaxEglAttribPairs * 2)) {
+        SB_LOG(ERROR)
+            << "EGL attrib_list missing EGL_NONE terminator (cap="
+            << kMaxEglAttribPairs << " pairs); using default width/height";
       }
     }
     if (width <= 0) width = 1;
@@ -359,12 +432,22 @@ SbEglBoolean SbEglMakeCurrentWrapper(SbEglDisplay dpy,
                                     SbEglSurface draw,
                                     SbEglSurface read,
                                     SbEglContext ctx) {
+  checkEglCapabilities(dpy);
   if (gPbufferSupported.load(std::memory_order_acquire)) {
     return eglMakeCurrent(dpy, draw, read, ctx);
   }
 
-  EGLSurface real_draw = IsFakePbufferSurface(draw) ? EGL_NO_SURFACE : draw;
-  EGLSurface real_read = IsFakePbufferSurface(read) ? EGL_NO_SURFACE : read;
+  const bool draw_fake = IsFakePbufferSurface(draw);
+  const bool read_fake = IsFakePbufferSurface(read);
+  if ((draw_fake || read_fake) &&
+      !gSurfacelessContextSupported.load(std::memory_order_acquire)) {
+    SB_LOG(ERROR)
+        << "Fake pbuffer surface used without EGL_KHR_surfaceless_context support";
+    return EGL_FALSE;
+  }
+
+  EGLSurface real_draw = draw_fake ? EGL_NO_SURFACE : draw;
+  EGLSurface real_read = read_fake ? EGL_NO_SURFACE : read;
   return eglMakeCurrent(dpy, real_draw, real_read, ctx);
 }
 
@@ -387,24 +470,18 @@ SbEglBoolean SbEglQuerySurfaceWrapper(SbEglDisplay dpy,
       return EGL_FALSE;
     }
 
-    EGLint width = 1;
-    EGLint height = 1;
-    {
-      std::lock_guard<std::mutex> lock(gFakePbufferMutex);
-      auto* slot = reinterpret_cast<const FakePbufferSurfaceSlot*>(surface);
-      if (!IsFakePbufferSurfaceUnchecked(surface) || !slot->in_use) {
-        return EGL_FALSE;
-      }
-      width = slot->info.width;
-      height = slot->info.height;
+    std::lock_guard<std::mutex> lock(gFakePbufferMutex);
+    auto* slot = reinterpret_cast<const FakePbufferSurfaceSlot*>(surface);
+    if (!IsFakePbufferSurfaceUnchecked(surface) || !slot->in_use) {
+      return EGL_FALSE;
     }
 
     switch (attribute) {
       case EGL_WIDTH:
-        *value = width;
+        *value = slot->info.width;
         return EGL_TRUE;
       case EGL_HEIGHT:
-        *value = height;
+        *value = slot->info.height;
         return EGL_TRUE;
       default:
         // Unknown attribute; behave like a minimal surface.
@@ -526,7 +603,7 @@ SbEglDisplay SbEglGetDisplay(SbEglNativeDisplayType display_id) {
                  << EssAppPlatformDisplayType_waylandExtension << ")."
                  << " Fallback to eglGetDisplay.";
   }
-  else if (!resolveEglPlatfromExtFns()) {
+  else if (!resolveEglPlatformExtFns()) {
     SB_LOG(INFO) << "eglGetPlatformDisplayEXT is not available or failed. Fallback to eglGetDisplay.";
   }
   else {
@@ -559,11 +636,12 @@ SbEglBoolean SbEglInitializeWrapper(SbEglDisplay dpy, SbEglInt32* major, SbEglIn
   }
 
   // Check capabilities after successful initialization (requires initialized display)
-  if (!gCapabilitiesChecked.load(std::memory_order_acquire)) {
+  static std::once_flag log_once;
+  std::call_once(log_once, [major, minor] {
     EGLint maj = major ? *major : 0;
     EGLint min = minor ? *minor : 0;
     SB_LOG(INFO) << "EGL " << maj << "." << min << " initialized successfully";
-  }
+  });
   checkEglCapabilities(dpy);
 
   return result;

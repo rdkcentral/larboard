@@ -40,7 +40,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <iomanip>
+#include <ios>
 #include <mutex>
 #include <vector>
 #include <essos-app.h>
@@ -299,7 +299,7 @@ void checkEglCapabilities(EGLDisplay display) {
   });
 
   if (gCapabilitiesDisplay != EGL_NO_DISPLAY && display != gCapabilitiesDisplay) {
-    std::call_once(gCapabilitiesDisplayMismatchOnce, [display] {
+    std::call_once(gCapabilitiesDisplayMismatchOnce, [] {
       SB_LOG(WARNING)
           << "EGL capabilities were cached for a different EGLDisplay; "
           << "subsequent checks will reuse cached results";
@@ -394,7 +394,7 @@ SbEglBoolean SbEglChooseConfigWrapper(SbEglDisplay dpy,
 
 // Wrapper for eglCreatePbufferSurface that provides graceful fallback when unsupported
 // For platforms with pbuffer support, this is a direct pass-through with zero overhead
-SbEglSurface SbEglCreatePbufferSurfaceStub(SbEglDisplay dpy,
+SbEglSurface SbEglCreatePbufferSurfaceWrapper(SbEglDisplay dpy,
                                            SbEglConfig config,
                                            const SbEglInt32* attrib_list) {
   // Fast path: Direct pass-through for platforms with pbuffer support
@@ -671,7 +671,7 @@ const SbEglInterface g_sb_egl_interface = {
     &SbEglChooseConfigWrapper,
     &SbEglCopyBuffers,
     &eglCreateContext,
-    &SbEglCreatePbufferSurfaceStub,
+    &SbEglCreatePbufferSurfaceWrapper,
     &SbEglCreatePixmapSurface,
     &SbEglCreateWindowSurface,
     &eglDestroyContext,

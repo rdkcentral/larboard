@@ -306,61 +306,61 @@ void checkEglCapabilities(EGLDisplay display) {
       }
 
       gCapabilitiesDisplay = display;
-    // Check for surfaceless context support
-    const char* egl_extensions = eglQueryString(display, EGL_EXTENSIONS);
-    if (egl_extensions) {
-      // NOTE: EGL_KHR_no_config_context is not the same as surfaceless contexts.
-      // Only treat EGL_KHR_surfaceless_context as surfaceless support.
-      const bool surfaceless_supported =
-          isExtensionSupported(egl_extensions, "EGL_KHR_surfaceless_context");
-      gSurfacelessContextSupported.store(surfaceless_supported,
-                                         std::memory_order_release);
-      if (surfaceless_supported) {
-        SB_LOG(INFO)
-            << "Surfaceless context support detected, pbuffers optional";
+      // Check for surfaceless context support
+      const char* egl_extensions = eglQueryString(display, EGL_EXTENSIONS);
+      if (egl_extensions) {
+        // NOTE: EGL_KHR_no_config_context is not the same as surfaceless contexts.
+        // Only treat EGL_KHR_surfaceless_context as surfaceless support.
+        const bool surfaceless_supported =
+            isExtensionSupported(egl_extensions, "EGL_KHR_surfaceless_context");
+        gSurfacelessContextSupported.store(surfaceless_supported,
+                                           std::memory_order_release);
+        if (surfaceless_supported) {
+          SB_LOG(INFO)
+              << "Surfaceless context support detected, pbuffers optional";
+        }
       }
-    }
 
-    // Detect pbuffer support by enumerating all configs and checking
-    // EGL_SURFACE_TYPE & EGL_PBUFFER_BIT. Avoid overly-restrictive probes
-    // that can false-negative depending on renderable bits.
-    EGLint num_configs = 0;
-    bool any_pbuffer_config = false;
-    bool configs_enumerated = false;
+      // Detect pbuffer support by enumerating all configs and checking
+      // EGL_SURFACE_TYPE & EGL_PBUFFER_BIT. Avoid overly-restrictive probes
+      // that can false-negative depending on renderable bits.
+      EGLint num_configs = 0;
+      bool any_pbuffer_config = false;
+      bool configs_enumerated = false;
 
-    if (eglGetConfigs(display, nullptr, 0, &num_configs)) {
-      if (num_configs > 0) {
-        std::vector<EGLConfig> configs(static_cast<size_t>(num_configs));
-        EGLint out_configs = 0;
-        if (eglGetConfigs(display, configs.data(), num_configs, &out_configs)) {
-          configs_enumerated = true;
-          configs.resize(static_cast<size_t>(out_configs));
-          for (EGLConfig config : configs) {
-            EGLint surface_type = 0;
-            if (eglGetConfigAttrib(display, config, EGL_SURFACE_TYPE,
-                                   &surface_type) &&
-                (surface_type & EGL_PBUFFER_BIT) != 0) {
-              any_pbuffer_config = true;
-              break;
+      if (eglGetConfigs(display, nullptr, 0, &num_configs)) {
+        if (num_configs > 0) {
+          std::vector<EGLConfig> configs(static_cast<size_t>(num_configs));
+          EGLint out_configs = 0;
+          if (eglGetConfigs(display, configs.data(), num_configs, &out_configs)) {
+            configs_enumerated = true;
+            configs.resize(static_cast<size_t>(out_configs));
+            for (EGLConfig config : configs) {
+              EGLint surface_type = 0;
+              if (eglGetConfigAttrib(display, config, EGL_SURFACE_TYPE,
+                                     &surface_type) &&
+                  (surface_type & EGL_PBUFFER_BIT) != 0) {
+                any_pbuffer_config = true;
+                break;
+              }
             }
           }
+        } else {
+          // Successfully queried, but implementation reports zero configs.
+          configs_enumerated = true;
         }
-      } else {
-        // Successfully queried, but implementation reports zero configs.
-        configs_enumerated = true;
       }
-    }
 
-    if (configs_enumerated && !any_pbuffer_config) {
-      gPbufferSupported.store(false, std::memory_order_release);
-      SB_LOG(WARNING)
-          << "No EGL configs advertise EGL_PBUFFER_BIT (pbuffer unsupported)";
-    } else if (!configs_enumerated) {
-      EGLint error = eglGetError();
-      SB_LOG(ERROR)
-          << "Failed to enumerate EGL configs for pbuffer detection; keeping default pbuffer support; eglGetError=0x"
-          << std::hex << error;
-    }
+      if (configs_enumerated && !any_pbuffer_config) {
+        gPbufferSupported.store(false, std::memory_order_release);
+        SB_LOG(WARNING)
+            << "No EGL configs advertise EGL_PBUFFER_BIT (pbuffer unsupported)";
+      } else if (!configs_enumerated) {
+        EGLint error = eglGetError();
+        SB_LOG(ERROR)
+            << "Failed to enumerate EGL configs for pbuffer detection; keeping default pbuffer support; eglGetError=0x"
+            << std::hex << error;
+      }
 
       gCapabilitiesInitialized.store(true, std::memory_order_release);
     }

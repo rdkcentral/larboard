@@ -62,7 +62,8 @@ namespace {
 // Assume supported until proven otherwise to avoid unnecessary overhead on platforms with support.
 static std::atomic<bool> gPbufferSupported{true};
 static std::atomic<bool> gSurfacelessContextSupported{false};
-static std::once_flag gCapabilitiesOnce;
+static std::atomic<bool> gCapabilitiesInitialized{false};
+static std::mutex gCapabilitiesMutex;
 static EGLDisplay gCapabilitiesDisplay = EGL_NO_DISPLAY;
 static std::once_flag gCapabilitiesDisplayMismatchOnce;
 
@@ -140,7 +141,8 @@ static std::atomic<size_t> gEmulatedPbufferInUse{0};
 static std::atomic<size_t> gEmulatedPbufferHighWater{0};
 static std::atomic<bool> gEmulatedPbufferNearExhaustion{false};
 
-inline bool IsEmulatedPbufferSurfaceUnchecked(EGLSurface surface) {
+inline EmulatedPbufferSurfaceSlot* GetEmulatedPbufferSurfaceSlotUnchecked(
+    EGLSurface surface) {
   // REQUIRES: gEmulatedPbufferMutex is held by the caller.
   // Avoid pointer relational comparisons on unrelated pointers by comparing addresses.
   const uintptr_t addr = reinterpret_cast<uintptr_t>(surface);
@@ -148,18 +150,35 @@ inline bool IsEmulatedPbufferSurfaceUnchecked(EGLSurface surface) {
   const uintptr_t end =
       reinterpret_cast<uintptr_t>(&gEmulatedPbufferPool[kMaxEmulatedPbufferSurfaces]);
   if (addr < begin || addr >= end) {
-    return false;
+    return nullptr;
   }
 
   // Ensure that the address is aligned to the start of an EmulatedPbufferSurfaceSlot.
   const uintptr_t offset = addr - begin;
   if (offset % sizeof(EmulatedPbufferSurfaceSlot) != 0) {
-    return false;
+    return nullptr;
   }
 
   const size_t index = static_cast<size_t>(offset / sizeof(EmulatedPbufferSurfaceSlot));
-  const EmulatedPbufferSurfaceSlot* slot = &gEmulatedPbufferPool[index];
-  return slot->magic == EmulatedPbufferSurfaceSlot::kMagic;
+  EmulatedPbufferSurfaceSlot* slot = &gEmulatedPbufferPool[index];
+  if (slot->magic != EmulatedPbufferSurfaceSlot::kMagic) {
+    return nullptr;
+  }
+  return slot;
+}
+
+inline bool IsEmulatedPbufferSurfaceHandleUnchecked(EGLSurface surface) {
+  // REQUIRES: gEmulatedPbufferMutex is held by the caller.
+  // True if |surface| is an emulated-handle value (regardless of whether it is
+  // currently allocated/in_use).
+  return GetEmulatedPbufferSurfaceSlotUnchecked(surface) != nullptr;
+}
+
+inline bool IsEmulatedPbufferSurfaceInUseUnchecked(EGLSurface surface) {
+  // REQUIRES: gEmulatedPbufferMutex is held by the caller.
+  // True only if |surface| is an emulated handle AND it is currently allocated.
+  EmulatedPbufferSurfaceSlot* slot = GetEmulatedPbufferSurfaceSlotUnchecked(surface);
+  return slot && slot->in_use;
 }
 
 inline bool IsEmulatedPbufferSurface(EGLSurface surface) {
@@ -167,7 +186,15 @@ inline bool IsEmulatedPbufferSurface(EGLSurface surface) {
     return false;
   }
   std::lock_guard<std::mutex> lock(gEmulatedPbufferMutex);
-  return IsEmulatedPbufferSurfaceUnchecked(surface);
+  return IsEmulatedPbufferSurfaceHandleUnchecked(surface);
+}
+
+inline bool IsEmulatedPbufferSurfaceInUse(EGLSurface surface) {
+  if (surface == EGL_NO_SURFACE) {
+    return false;
+  }
+  std::lock_guard<std::mutex> lock(gEmulatedPbufferMutex);
+  return IsEmulatedPbufferSurfaceInUseUnchecked(surface);
 }
 
 EGLSurface AllocateEmulatedPbufferSurface(EGLint width, EGLint height) {
@@ -204,8 +231,8 @@ EGLSurface AllocateEmulatedPbufferSurface(EGLint width, EGLint height) {
 
 bool FreeEmulatedPbufferSurface(EGLSurface surface) {
   std::lock_guard<std::mutex> lock(gEmulatedPbufferMutex);
-  auto* slot = reinterpret_cast<EmulatedPbufferSurfaceSlot*>(surface);
-  if (!IsEmulatedPbufferSurfaceUnchecked(surface) || !slot->in_use) {
+  EmulatedPbufferSurfaceSlot* slot = GetEmulatedPbufferSurfaceSlotUnchecked(surface);
+  if (!slot || !slot->in_use) {
     return false;
   }
   slot->in_use = false;
@@ -250,19 +277,35 @@ void checkEglCapabilities(EGLDisplay display) {
     return;
   }
 
-  // std::call_once permanently caches results. Only enter the once block after
-  // we have evidence the EGLDisplay is initialized; otherwise we might cache the
-  // default capability values (e.g., pbuffer supported) and regress behavior.
-  const char* version = eglQueryString(display, EGL_VERSION);
-  if (!version) {
-    const EGLint error = eglGetError();
-    if (error == EGL_NOT_INITIALIZED || error == EGL_BAD_DISPLAY) {
-      return;
+  // Fast-path once capabilities have been initialized.
+  if (gCapabilitiesInitialized.load(std::memory_order_acquire)) {
+    if (gCapabilitiesDisplay != EGL_NO_DISPLAY && display != gCapabilitiesDisplay) {
+      std::call_once(gCapabilitiesDisplayMismatchOnce, [] {
+        SB_LOG(WARNING)
+            << "EGL capabilities were cached for a different EGLDisplay; "
+            << "subsequent checks will reuse cached results";
+      });
     }
+    return;
   }
 
-  std::call_once(gCapabilitiesOnce, [display] {
-    gCapabilitiesDisplay = display;
+  // Initialize capabilities once we have evidence the EGLDisplay is initialized.
+  // This is retryable: if the display isn't initialized yet (or is invalid), we
+  // don't cache defaults.
+  {
+    std::lock_guard<std::mutex> lock(gCapabilitiesMutex);
+    if (gCapabilitiesInitialized.load(std::memory_order_relaxed)) {
+      // Another thread won the race while we waited for the lock.
+    } else {
+      const char* version = eglQueryString(display, EGL_VERSION);
+      if (!version) {
+        const EGLint error = eglGetError();
+        if (error == EGL_NOT_INITIALIZED || error == EGL_BAD_DISPLAY) {
+          return;
+        }
+      }
+
+      gCapabilitiesDisplay = display;
     // Check for surfaceless context support
     const char* egl_extensions = eglQueryString(display, EGL_EXTENSIONS);
     if (egl_extensions) {
@@ -318,7 +361,10 @@ void checkEglCapabilities(EGLDisplay display) {
           << "Failed to enumerate EGL configs for pbuffer detection; keeping default pbuffer support; eglGetError=0x"
           << std::hex << error;
     }
-  });
+
+      gCapabilitiesInitialized.store(true, std::memory_order_release);
+    }
+  }
 
   if (gCapabilitiesDisplay != EGL_NO_DISPLAY && display != gCapabilitiesDisplay) {
     std::call_once(gCapabilitiesDisplayMismatchOnce, [] {
@@ -370,6 +416,12 @@ SbEglBoolean SbEglChooseConfigWrapper(SbEglDisplay dpy,
                                       SbEglConfig* configs,
                                       SbEglInt32 config_size,
                                       SbEglInt32* num_config) {
+  // Capability detection is normally triggered by eglInitialize/eglMakeCurrent,
+  // but eglChooseConfig may be called first on some stacks.
+  if (!gCapabilitiesInitialized.load(std::memory_order_acquire)) {
+    checkEglCapabilities(dpy);
+  }
+
   // Fast path: Direct pass-through for platforms with pbuffer support
   if (gPbufferSupported.load(std::memory_order_acquire)) {
     return eglChooseConfig(dpy, attrib_list, configs, config_size, num_config);
@@ -426,6 +478,11 @@ SbEglBoolean SbEglChooseConfigWrapper(SbEglDisplay dpy,
 SbEglSurface SbEglCreatePbufferSurfaceWrapper(SbEglDisplay dpy,
                                            SbEglConfig config,
                                            const SbEglInt32* attrib_list) {
+  // eglCreatePbufferSurface can be the first EGL call on some code paths.
+  if (!gCapabilitiesInitialized.load(std::memory_order_acquire)) {
+    checkEglCapabilities(dpy);
+  }
+
   // Fast path: Direct pass-through for platforms with pbuffer support
   if (gPbufferSupported.load(std::memory_order_acquire)) {
     return eglCreatePbufferSurface(dpy, config, attrib_list);
@@ -493,17 +550,28 @@ SbEglBoolean SbEglMakeCurrentWrapper(SbEglDisplay dpy,
     return eglMakeCurrent(dpy, draw, read, ctx);
   }
 
-  const bool draw_fake = IsEmulatedPbufferSurface(draw);
-  const bool read_fake = IsEmulatedPbufferSurface(read);
-  if ((draw_fake || read_fake) &&
+  const bool draw_emulated = IsEmulatedPbufferSurface(draw);
+  const bool read_emulated = IsEmulatedPbufferSurface(read);
+  if ((draw_emulated || read_emulated) &&
       !gSurfacelessContextSupported.load(std::memory_order_acquire)) {
     SB_LOG(ERROR)
         << "Emulated pbuffer surface used without EGL_KHR_surfaceless_context support";
     return EGL_FALSE;
   }
 
-  EGLSurface real_draw = draw_fake ? EGL_NO_SURFACE : draw;
-  EGLSurface real_read = read_fake ? EGL_NO_SURFACE : read;
+  // If the handle points into our emulated pool but is no longer allocated,
+  // treat it as invalid rather than silently mapping it to EGL_NO_SURFACE.
+  if (draw_emulated && !IsEmulatedPbufferSurfaceInUse(draw)) {
+    SB_LOG(ERROR) << "Invalid or already-freed emulated pbuffer draw surface";
+    return EGL_FALSE;
+  }
+  if (read_emulated && !IsEmulatedPbufferSurfaceInUse(read)) {
+    SB_LOG(ERROR) << "Invalid or already-freed emulated pbuffer read surface";
+    return EGL_FALSE;
+  }
+
+  EGLSurface real_draw = draw_emulated ? EGL_NO_SURFACE : draw;
+  EGLSurface real_read = read_emulated ? EGL_NO_SURFACE : read;
   return eglMakeCurrent(dpy, real_draw, real_read, ctx);
 }
 
@@ -562,8 +630,8 @@ SbEglBoolean SbEglQuerySurfaceWrapper(SbEglDisplay dpy,
     }
 
     std::lock_guard<std::mutex> lock(gEmulatedPbufferMutex);
-    auto* slot = reinterpret_cast<const EmulatedPbufferSurfaceSlot*>(surface);
-    if (!IsEmulatedPbufferSurfaceUnchecked(surface) || !slot->in_use) {
+    EmulatedPbufferSurfaceSlot* slot = GetEmulatedPbufferSurfaceSlotUnchecked(surface);
+    if (!slot || !slot->in_use) {
       return EGL_FALSE;
     }
 

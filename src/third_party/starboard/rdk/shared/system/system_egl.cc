@@ -133,7 +133,15 @@ inline bool IsFakePbufferSurfaceUnchecked(EGLSurface surface) {
   if (addr < begin || addr >= end) {
     return false;
   }
-  auto* slot = reinterpret_cast<const FakePbufferSurfaceSlot*>(surface);
+
+  // Ensure that the address is aligned to the start of a FakePbufferSurfaceSlot.
+  const uintptr_t offset = addr - begin;
+  if (offset % sizeof(FakePbufferSurfaceSlot) != 0) {
+    return false;
+  }
+
+  const size_t index = static_cast<size_t>(offset / sizeof(FakePbufferSurfaceSlot));
+  const FakePbufferSurfaceSlot* slot = &gFakePbufferPool[index];
   return slot->magic == FakePbufferSurfaceSlot::kMagic;
 }
 
@@ -219,6 +227,18 @@ void checkEglCapabilities(EGLDisplay display) {
     SB_LOG(ERROR) << "checkEglCapabilities called with EGL_NO_DISPLAY";
     return;
   }
+
+  // std::call_once permanently caches results. Only enter the once block after
+  // we have evidence the EGLDisplay is initialized; otherwise we might cache the
+  // default capability values (e.g., pbuffer supported) and regress behavior.
+  const char* version = eglQueryString(display, EGL_VERSION);
+  if (!version) {
+    const EGLint error = eglGetError();
+    if (error == EGL_NOT_INITIALIZED || error == EGL_BAD_DISPLAY) {
+      return;
+    }
+  }
+
   std::call_once(gCapabilitiesOnce, [display] {
     gCapabilitiesDisplay = display;
     // Check for surfaceless context support

@@ -1350,6 +1350,14 @@ class PlayerImpl : public Player {
     if (state_ != State::kPresenting)
       return false;
 
+    // Don't throttle in paused state
+    if (rate_ == .0)
+      return false;
+
+    // Don't throttle when the cached position is stale
+    if ((cached_position_expiration_time_ + kCachedPositionRefreshIntervalMs * 1'000) < g_get_monotonic_time())
+      return false;
+
     // Already delayed
     if (delay_audio_need_data_src_)
       return true;

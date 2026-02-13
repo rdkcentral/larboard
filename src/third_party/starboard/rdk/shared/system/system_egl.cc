@@ -375,12 +375,6 @@ SbEglBoolean SbEglChooseConfigWrapper(SbEglDisplay dpy,
             << kMaxEglAttribPairs << " pairs); truncating";
         break;
       }
-      if (attrib_list[i + 1] == EGL_NONE) {
-        SB_LOG(ERROR)
-            << "EGL attrib_list malformed (EGL_NONE in value position; cap="
-            << kMaxEglAttribPairs << " pairs); truncating";
-        break;
-      }
       if (attrib_list[i] == EGL_SURFACE_TYPE) {
         // Remove EGL_PBUFFER_BIT from surface type
         SbEglInt32 surface_type = attrib_list[i + 1];
@@ -437,12 +431,6 @@ SbEglSurface SbEglCreatePbufferSurfaceWrapper(SbEglDisplay dpy,
         if (i + 1 >= kMaxAttribInts) {
           SB_LOG(ERROR)
               << "EGL attrib_list malformed (odd length; cap="
-              << kMaxEglAttribPairs << " pairs); using default width/height";
-          break;
-        }
-        if (attrib_list[i + 1] == EGL_NONE) {
-          SB_LOG(ERROR)
-              << "EGL attrib_list malformed (EGL_NONE in value position; cap="
               << kMaxEglAttribPairs << " pairs); using default width/height";
           break;
         }

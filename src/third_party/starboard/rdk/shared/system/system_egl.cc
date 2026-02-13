@@ -119,11 +119,26 @@ static_assert(sizeof(EmulatedPbufferSurfaceSlot) <= 32,
 
 // Keep this bounded to avoid unbounded allocations in a low-level EGL wrapper.
 static constexpr size_t kMaxEmulatedPbufferSurfaces = 32;
+static constexpr size_t kEmulatedPbufferNearExhaustionMargin = 4;
+static constexpr size_t kEmulatedPbufferNearExhaustionResetMargin = 8;
+static_assert(kEmulatedPbufferNearExhaustionMargin > 0,
+        "kEmulatedPbufferNearExhaustionMargin must be > 0");
+static_assert(kEmulatedPbufferNearExhaustionResetMargin >
+          kEmulatedPbufferNearExhaustionMargin,
+        "kEmulatedPbufferNearExhaustionResetMargin must be > warning margin");
+static_assert(kMaxEmulatedPbufferSurfaces >= kEmulatedPbufferNearExhaustionMargin,
+        "kMaxEmulatedPbufferSurfaces must be >= warning margin");
+static_assert(kMaxEmulatedPbufferSurfaces >= kEmulatedPbufferNearExhaustionResetMargin,
+        "kMaxEmulatedPbufferSurfaces must be >= reset margin");
+static constexpr size_t kEmulatedPbufferNearExhaustionThreshold =
+    kMaxEmulatedPbufferSurfaces - kEmulatedPbufferNearExhaustionMargin;
+static constexpr size_t kEmulatedPbufferNearExhaustionResetThreshold =
+    kMaxEmulatedPbufferSurfaces - kEmulatedPbufferNearExhaustionResetMargin;
 static std::mutex gEmulatedPbufferMutex;
 static EmulatedPbufferSurfaceSlot gEmulatedPbufferPool[kMaxEmulatedPbufferSurfaces] = {};
 static std::atomic<size_t> gEmulatedPbufferInUse{0};
 static std::atomic<size_t> gEmulatedPbufferHighWater{0};
-static std::once_flag gEmulatedPbufferNearExhaustionOnce;
+static std::atomic<bool> gEmulatedPbufferNearExhaustion{false};
 
 inline bool IsEmulatedPbufferSurfaceUnchecked(EGLSurface surface) {
   // REQUIRES: gEmulatedPbufferMutex is held by the caller.
@@ -171,12 +186,12 @@ EGLSurface AllocateEmulatedPbufferSurface(EGLint width, EGLint height) {
                  prev_high, in_use, std::memory_order_relaxed,
                  std::memory_order_relaxed)) {
       }
-      if (in_use >= (kMaxEmulatedPbufferSurfaces - 4)) {
-        std::call_once(gEmulatedPbufferNearExhaustionOnce, [in_use] {
-          SB_LOG(WARNING) << "Emulated pbuffer pool nearing exhaustion (in_use="
-                          << in_use << ", max=" << kMaxEmulatedPbufferSurfaces
-                          << ")";
-        });
+      if (in_use >= kEmulatedPbufferNearExhaustionThreshold &&
+          !gEmulatedPbufferNearExhaustion.exchange(true,
+                                                   std::memory_order_relaxed)) {
+        SB_LOG(WARNING) << "Emulated pbuffer pool nearing exhaustion (in_use="
+                        << in_use << ", max=" << kMaxEmulatedPbufferSurfaces
+                        << ")";
       }
 
       return reinterpret_cast<EGLSurface>(&gEmulatedPbufferPool[i]);
@@ -196,7 +211,11 @@ bool FreeEmulatedPbufferSurface(EGLSurface surface) {
   slot->in_use = false;
   slot->info.width = 1;
   slot->info.height = 1;
-  gEmulatedPbufferInUse.fetch_sub(1, std::memory_order_relaxed);
+  const size_t in_use =
+      gEmulatedPbufferInUse.fetch_sub(1, std::memory_order_relaxed) - 1;
+  if (in_use <= kEmulatedPbufferNearExhaustionResetThreshold) {
+    gEmulatedPbufferNearExhaustion.store(false, std::memory_order_relaxed);
+  }
   return true;
 }
 

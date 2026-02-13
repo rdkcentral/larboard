@@ -42,6 +42,7 @@
 #include <cstring>
 #include <ios>
 #include <mutex>
+#include <type_traits>
 #include <vector>
 #include <essos-app.h>
 
@@ -110,8 +111,9 @@ struct FakePbufferSurfaceSlot {
 
 static_assert(offsetof(FakePbufferSurfaceSlot, magic) == 0,
               "FakePbufferSurfaceSlot::magic must be first for quick validation");
-static_assert(sizeof(FakePbufferSurfaceSlot::kMagic) == sizeof(uint32_t),
-              "Unexpected magic size");
+static_assert(
+  std::is_same<decltype(FakePbufferSurfaceSlot::kMagic), const uint32_t>::value,
+  "FakePbufferSurfaceSlot::kMagic must remain uint32_t");
 static_assert(sizeof(FakePbufferSurfaceSlot) <= 32,
               "FakePbufferSurfaceSlot grew unexpectedly; keep it small");
 

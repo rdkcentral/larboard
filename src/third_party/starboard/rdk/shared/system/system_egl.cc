@@ -74,8 +74,8 @@ On some EGL stacks (notably Mesa VC4/V3D), EGL_KHR_surfaceless_context can be pr
 even though no EGL config advertises EGL_PBUFFER_BIT. In that case pbuffer creation
 fails and Cobalt can crash.
 
-Implementation note: if pbuffers aren't supported but surfaceless is, return a
-fake pbuffer handle and treat it as surfaceless (EGL_NO_SURFACE) in MakeCurrent.
+Implementation note: if pbuffers aren't supported but surfaceless is, return an
+emulated pbuffer handle and treat it as surfaceless (EGL_NO_SURFACE) in MakeCurrent.
 This keeps older branches running without needing a Cobalt patch.
 
 Upstream reference (youtube/cobalt main / Chromium ui/gl) has a native surfaceless path:
@@ -91,111 +91,112 @@ Upstream reference (youtube/cobalt main / Chromium ui/gl) has a native surfacele
   https://github.com/youtube/cobalt/blob/main/ui/ozone/platform/wayland/gpu/wayland_surface_factory.cc
 */
 
-struct FakePbufferSurfaceInfo {
+struct EmulatedPbufferSurfaceInfo {
   EGLint width;
   EGLint height;
 };
 
-struct FakePbufferSurfaceSlot {
+struct EmulatedPbufferSurfaceSlot {
   static constexpr uint32_t kMagic = 0x50425546u;  // 'PBUF'
 
-  constexpr FakePbufferSurfaceSlot()
+  constexpr EmulatedPbufferSurfaceSlot()
       : magic(kMagic),
         in_use(false),
         info{1, 1} {}
 
   uint32_t magic;
   bool in_use;
-  FakePbufferSurfaceInfo info;
+  EmulatedPbufferSurfaceInfo info;
 };
 
-static_assert(offsetof(FakePbufferSurfaceSlot, magic) == 0,
-              "FakePbufferSurfaceSlot::magic must be first for quick validation");
+static_assert(offsetof(EmulatedPbufferSurfaceSlot, magic) == 0,
+              "EmulatedPbufferSurfaceSlot::magic must be first for quick validation");
 static_assert(
-  std::is_same<decltype(FakePbufferSurfaceSlot::kMagic), const uint32_t>::value,
-  "FakePbufferSurfaceSlot::kMagic must remain uint32_t");
-static_assert(sizeof(FakePbufferSurfaceSlot) <= 32,
-              "FakePbufferSurfaceSlot grew unexpectedly; keep it small");
+  std::is_same<decltype(EmulatedPbufferSurfaceSlot::kMagic), const uint32_t>::value,
+  "EmulatedPbufferSurfaceSlot::kMagic must remain uint32_t");
+static_assert(sizeof(EmulatedPbufferSurfaceSlot) <= 32,
+              "EmulatedPbufferSurfaceSlot grew unexpectedly; keep it small");
 
 // Keep this bounded to avoid unbounded allocations in a low-level EGL wrapper.
-static constexpr size_t kMaxFakePbufferSurfaces = 32;
-static std::mutex gFakePbufferMutex;
-static FakePbufferSurfaceSlot gFakePbufferPool[kMaxFakePbufferSurfaces] = {};
-static std::atomic<size_t> gFakePbufferInUse{0};
-static std::atomic<size_t> gFakePbufferHighWater{0};
-static std::once_flag gFakePbufferNearExhaustionOnce;
+static constexpr size_t kMaxEmulatedPbufferSurfaces = 32;
+static std::mutex gEmulatedPbufferMutex;
+static EmulatedPbufferSurfaceSlot gEmulatedPbufferPool[kMaxEmulatedPbufferSurfaces] = {};
+static std::atomic<size_t> gEmulatedPbufferInUse{0};
+static std::atomic<size_t> gEmulatedPbufferHighWater{0};
+static std::once_flag gEmulatedPbufferNearExhaustionOnce;
 
-inline bool IsFakePbufferSurfaceUnchecked(EGLSurface surface) {
-  // REQUIRES: gFakePbufferMutex is held by the caller.
+inline bool IsEmulatedPbufferSurfaceUnchecked(EGLSurface surface) {
+  // REQUIRES: gEmulatedPbufferMutex is held by the caller.
   // Avoid pointer relational comparisons on unrelated pointers by comparing addresses.
   const uintptr_t addr = reinterpret_cast<uintptr_t>(surface);
-  const uintptr_t begin = reinterpret_cast<uintptr_t>(&gFakePbufferPool[0]);
+  const uintptr_t begin = reinterpret_cast<uintptr_t>(&gEmulatedPbufferPool[0]);
   const uintptr_t end =
-      reinterpret_cast<uintptr_t>(&gFakePbufferPool[kMaxFakePbufferSurfaces]);
+      reinterpret_cast<uintptr_t>(&gEmulatedPbufferPool[kMaxEmulatedPbufferSurfaces]);
   if (addr < begin || addr >= end) {
     return false;
   }
 
-  // Ensure that the address is aligned to the start of a FakePbufferSurfaceSlot.
+  // Ensure that the address is aligned to the start of an EmulatedPbufferSurfaceSlot.
   const uintptr_t offset = addr - begin;
-  if (offset % sizeof(FakePbufferSurfaceSlot) != 0) {
+  if (offset % sizeof(EmulatedPbufferSurfaceSlot) != 0) {
     return false;
   }
 
-  const size_t index = static_cast<size_t>(offset / sizeof(FakePbufferSurfaceSlot));
-  const FakePbufferSurfaceSlot* slot = &gFakePbufferPool[index];
-  return slot->magic == FakePbufferSurfaceSlot::kMagic;
+  const size_t index = static_cast<size_t>(offset / sizeof(EmulatedPbufferSurfaceSlot));
+  const EmulatedPbufferSurfaceSlot* slot = &gEmulatedPbufferPool[index];
+  return slot->magic == EmulatedPbufferSurfaceSlot::kMagic;
 }
 
-inline bool IsFakePbufferSurface(EGLSurface surface) {
+inline bool IsEmulatedPbufferSurface(EGLSurface surface) {
   if (surface == EGL_NO_SURFACE) {
     return false;
   }
-  std::lock_guard<std::mutex> lock(gFakePbufferMutex);
-  return IsFakePbufferSurfaceUnchecked(surface);
+  std::lock_guard<std::mutex> lock(gEmulatedPbufferMutex);
+  return IsEmulatedPbufferSurfaceUnchecked(surface);
 }
 
-EGLSurface AllocateFakePbufferSurface(EGLint width, EGLint height) {
-  std::lock_guard<std::mutex> lock(gFakePbufferMutex);
-  for (size_t i = 0; i < kMaxFakePbufferSurfaces; ++i) {
-    if (!gFakePbufferPool[i].in_use) {
-      gFakePbufferPool[i].in_use = true;
-      gFakePbufferPool[i].info.width = width;
-      gFakePbufferPool[i].info.height = height;
+EGLSurface AllocateEmulatedPbufferSurface(EGLint width, EGLint height) {
+  std::lock_guard<std::mutex> lock(gEmulatedPbufferMutex);
+  for (size_t i = 0; i < kMaxEmulatedPbufferSurfaces; ++i) {
+    if (!gEmulatedPbufferPool[i].in_use) {
+      gEmulatedPbufferPool[i].in_use = true;
+      gEmulatedPbufferPool[i].info.width = width;
+      gEmulatedPbufferPool[i].info.height = height;
 
-      const size_t in_use = gFakePbufferInUse.fetch_add(1, std::memory_order_relaxed) + 1;
-      size_t prev_high = gFakePbufferHighWater.load(std::memory_order_relaxed);
+      const size_t in_use =
+          gEmulatedPbufferInUse.fetch_add(1, std::memory_order_relaxed) + 1;
+      size_t prev_high = gEmulatedPbufferHighWater.load(std::memory_order_relaxed);
       while (in_use > prev_high &&
-             !gFakePbufferHighWater.compare_exchange_weak(
+             !gEmulatedPbufferHighWater.compare_exchange_weak(
                  prev_high, in_use, std::memory_order_relaxed,
                  std::memory_order_relaxed)) {
       }
-      if (in_use >= (kMaxFakePbufferSurfaces - 4)) {
-        std::call_once(gFakePbufferNearExhaustionOnce, [in_use] {
-          SB_LOG(WARNING) << "Fake pbuffer pool nearing exhaustion (in_use="
-                          << in_use << ", max=" << kMaxFakePbufferSurfaces
+      if (in_use >= (kMaxEmulatedPbufferSurfaces - 4)) {
+        std::call_once(gEmulatedPbufferNearExhaustionOnce, [in_use] {
+          SB_LOG(WARNING) << "Emulated pbuffer pool nearing exhaustion (in_use="
+                          << in_use << ", max=" << kMaxEmulatedPbufferSurfaces
                           << ")";
         });
       }
 
-      return reinterpret_cast<EGLSurface>(&gFakePbufferPool[i]);
+      return reinterpret_cast<EGLSurface>(&gEmulatedPbufferPool[i]);
     }
   }
-  SB_LOG(ERROR) << "Fake pbuffer pool exhausted (" << kMaxFakePbufferSurfaces
+  SB_LOG(ERROR) << "Emulated pbuffer pool exhausted (" << kMaxEmulatedPbufferSurfaces
                 << ")";
   return EGL_NO_SURFACE;
 }
 
-bool FreeFakePbufferSurface(EGLSurface surface) {
-  std::lock_guard<std::mutex> lock(gFakePbufferMutex);
-  auto* slot = reinterpret_cast<FakePbufferSurfaceSlot*>(surface);
-  if (!IsFakePbufferSurfaceUnchecked(surface) || !slot->in_use) {
+bool FreeEmulatedPbufferSurface(EGLSurface surface) {
+  std::lock_guard<std::mutex> lock(gEmulatedPbufferMutex);
+  auto* slot = reinterpret_cast<EmulatedPbufferSurfaceSlot*>(surface);
+  if (!IsEmulatedPbufferSurfaceUnchecked(surface) || !slot->in_use) {
     return false;
   }
   slot->in_use = false;
   slot->info.width = 1;
   slot->info.height = 1;
-  gFakePbufferInUse.fetch_sub(1, std::memory_order_relaxed);
+  gEmulatedPbufferInUse.fetch_sub(1, std::memory_order_relaxed);
   return true;
 }
 
@@ -365,8 +366,21 @@ SbEglBoolean SbEglChooseConfigWrapper(SbEglDisplay dpy,
   // Count attributes and copy to new list, filtering EGL_SURFACE_TYPE
   std::vector<SbEglInt32> filtered_attribs;
   if (attrib_list) {
+    const int kMaxAttribInts = kMaxEglAttribPairs * 2;
     int i = 0;
-    for (; i < (kMaxEglAttribPairs * 2) && attrib_list[i] != EGL_NONE; i += 2) {
+    for (; i < kMaxAttribInts && attrib_list[i] != EGL_NONE; i += 2) {
+      if (i + 1 >= kMaxAttribInts) {
+        SB_LOG(ERROR)
+            << "EGL attrib_list malformed (odd length; cap="
+            << kMaxEglAttribPairs << " pairs); truncating";
+        break;
+      }
+      if (attrib_list[i + 1] == EGL_NONE) {
+        SB_LOG(ERROR)
+            << "EGL attrib_list malformed (EGL_NONE in value position; cap="
+            << kMaxEglAttribPairs << " pairs); truncating";
+        break;
+      }
       if (attrib_list[i] == EGL_SURFACE_TYPE) {
         // Remove EGL_PBUFFER_BIT from surface type
         SbEglInt32 surface_type = attrib_list[i + 1];
@@ -383,7 +397,7 @@ SbEglBoolean SbEglChooseConfigWrapper(SbEglDisplay dpy,
         filtered_attribs.push_back(attrib_list[i + 1]);
       }
     }
-    if (i >= (kMaxEglAttribPairs * 2)) {
+    if (i >= kMaxAttribInts) {
       SB_LOG(ERROR)
           << "EGL attrib_list missing EGL_NONE terminator (cap="
           << kMaxEglAttribPairs << " pairs); truncating";
@@ -417,15 +431,28 @@ SbEglSurface SbEglCreatePbufferSurfaceWrapper(SbEglDisplay dpy,
     EGLint width = 1;
     EGLint height = 1;
     if (attrib_list) {
+      const int kMaxAttribInts = kMaxEglAttribPairs * 2;
       int i = 0;
-      for (; i < (kMaxEglAttribPairs * 2) && attrib_list[i] != EGL_NONE; i += 2) {
+      for (; i < kMaxAttribInts && attrib_list[i] != EGL_NONE; i += 2) {
+        if (i + 1 >= kMaxAttribInts) {
+          SB_LOG(ERROR)
+              << "EGL attrib_list malformed (odd length; cap="
+              << kMaxEglAttribPairs << " pairs); using default width/height";
+          break;
+        }
+        if (attrib_list[i + 1] == EGL_NONE) {
+          SB_LOG(ERROR)
+              << "EGL attrib_list malformed (EGL_NONE in value position; cap="
+              << kMaxEglAttribPairs << " pairs); using default width/height";
+          break;
+        }
         if (attrib_list[i] == EGL_WIDTH) {
           width = attrib_list[i + 1];
         } else if (attrib_list[i] == EGL_HEIGHT) {
           height = attrib_list[i + 1];
         }
       }
-      if (i >= (kMaxEglAttribPairs * 2)) {
+      if (i >= kMaxAttribInts) {
         SB_LOG(ERROR)
             << "EGL attrib_list missing EGL_NONE terminator (cap="
             << kMaxEglAttribPairs << " pairs); using default width/height";
@@ -434,9 +461,9 @@ SbEglSurface SbEglCreatePbufferSurfaceWrapper(SbEglDisplay dpy,
     if (width <= 0) width = 1;
     if (height <= 0) height = 1;
 
-    EGLSurface handle = AllocateFakePbufferSurface(width, height);
+    EGLSurface handle = AllocateEmulatedPbufferSurface(width, height);
     if (handle == EGL_NO_SURFACE) {
-      SB_LOG(ERROR) << "Failed to emulate pbuffer surface; out of fake handles";
+      SB_LOG(ERROR) << "Failed to emulate pbuffer surface; out of emulated handles";
       return EGL_NO_SURFACE;
     }
     SB_LOG(INFO) << "Emulating pbuffer surface via surfaceless context ("
@@ -459,12 +486,12 @@ SbEglBoolean SbEglMakeCurrentWrapper(SbEglDisplay dpy,
     return eglMakeCurrent(dpy, draw, read, ctx);
   }
 
-  const bool draw_fake = IsFakePbufferSurface(draw);
-  const bool read_fake = IsFakePbufferSurface(read);
+  const bool draw_fake = IsEmulatedPbufferSurface(draw);
+  const bool read_fake = IsEmulatedPbufferSurface(read);
   if ((draw_fake || read_fake) &&
       !gSurfacelessContextSupported.load(std::memory_order_acquire)) {
     SB_LOG(ERROR)
-        << "Fake pbuffer surface used without EGL_KHR_surfaceless_context support";
+        << "Emulated pbuffer surface used without EGL_KHR_surfaceless_context support";
     return EGL_FALSE;
   }
 
@@ -475,11 +502,46 @@ SbEglBoolean SbEglMakeCurrentWrapper(SbEglDisplay dpy,
 
 SbEglBoolean SbEglDestroySurfaceWrapper(SbEglDisplay dpy, SbEglSurface surface) {
   if (!gPbufferSupported.load(std::memory_order_acquire)) {
-    if (FreeFakePbufferSurface(surface)) {
+    if (FreeEmulatedPbufferSurface(surface)) {
       return EGL_TRUE;
+    }
+    if (IsEmulatedPbufferSurface(surface)) {
+      SB_LOG(WARNING)
+          << "Attempted to destroy an invalid or already-freed emulated pbuffer surface";
+      return EGL_FALSE;
     }
   }
   return eglDestroySurface(dpy, surface);
+}
+
+SbEglBoolean SbEglBindTexImageWrapper(SbEglDisplay dpy,
+                                     SbEglSurface surface,
+                                     SbEglInt32 buffer) {
+  if (!gPbufferSupported.load(std::memory_order_acquire) &&
+      IsEmulatedPbufferSurface(surface)) {
+    static std::once_flag once;
+    std::call_once(once, [] {
+      SB_LOG(WARNING)
+          << "eglBindTexImage called with emulated pbuffer surface; rejecting";
+    });
+    return EGL_FALSE;
+  }
+  return eglBindTexImage(dpy, surface, buffer);
+}
+
+SbEglBoolean SbEglReleaseTexImageWrapper(SbEglDisplay dpy,
+                                        SbEglSurface surface,
+                                        SbEglInt32 buffer) {
+  if (!gPbufferSupported.load(std::memory_order_acquire) &&
+      IsEmulatedPbufferSurface(surface)) {
+    static std::once_flag once;
+    std::call_once(once, [] {
+      SB_LOG(WARNING)
+          << "eglReleaseTexImage called with emulated pbuffer surface; rejecting";
+    });
+    return EGL_FALSE;
+  }
+  return eglReleaseTexImage(dpy, surface, buffer);
 }
 
 SbEglBoolean SbEglQuerySurfaceWrapper(SbEglDisplay dpy,
@@ -487,14 +549,14 @@ SbEglBoolean SbEglQuerySurfaceWrapper(SbEglDisplay dpy,
                                      SbEglInt32 attribute,
                                      SbEglInt32* value) {
   if (!gPbufferSupported.load(std::memory_order_acquire) &&
-      IsFakePbufferSurface(surface)) {
+      IsEmulatedPbufferSurface(surface)) {
     if (!value) {
       return EGL_FALSE;
     }
 
-    std::lock_guard<std::mutex> lock(gFakePbufferMutex);
-    auto* slot = reinterpret_cast<const FakePbufferSurfaceSlot*>(surface);
-    if (!IsFakePbufferSurfaceUnchecked(surface) || !slot->in_use) {
+    std::lock_guard<std::mutex> lock(gEmulatedPbufferMutex);
+    auto* slot = reinterpret_cast<const EmulatedPbufferSurfaceSlot*>(surface);
+    if (!IsEmulatedPbufferSurfaceUnchecked(surface) || !slot->in_use) {
       return EGL_FALSE;
     }
 
@@ -518,7 +580,7 @@ SbEglBoolean SbEglSurfaceAttribWrapper(SbEglDisplay dpy,
                                       SbEglInt32 attribute,
                                       SbEglInt32 value) {
   if (!gPbufferSupported.load(std::memory_order_acquire) &&
-      IsFakePbufferSurface(surface)) {
+      IsEmulatedPbufferSurface(surface)) {
     return EGL_TRUE;
   }
   return eglSurfaceAttrib(dpy, surface, attribute, value);
@@ -528,7 +590,7 @@ SbEglBoolean SbEglSwapBuffersWrapper(SbEglDisplay dpy, SbEglSurface surface) {
   if (gPbufferSupported.load(std::memory_order_acquire)) {
     return eglSwapBuffers(dpy, surface);
   }
-  if (IsFakePbufferSurface(surface)) {
+  if (IsEmulatedPbufferSurface(surface)) {
     // Some higher-level code may still call SwapBuffers on an offscreen
     // surface to drive its frame loop. Returning EGL_FALSE here can cause
     // busy-loop retries and log spam. Treat it as a no-op success.
@@ -653,7 +715,8 @@ SbEglBoolean SbEglInitializeWrapper(SbEglDisplay dpy, SbEglInt32* major, SbEglIn
   SbEglBoolean result = eglInitialize(dpy, major, minor);
 
   if (!result) {
-    SB_LOG(ERROR) << "eglInitialize failed, err: " << eglGetError();
+    const EGLint error = eglGetError();
+    SB_LOG(ERROR) << "eglInitialize failed, err: 0x" << std::hex << error;
     return result;
   }
 
@@ -694,8 +757,8 @@ const SbEglInterface g_sb_egl_interface = {
     &eglTerminate,
     &eglWaitGL,
     &eglWaitNative,
-    &eglBindTexImage,
-    &eglReleaseTexImage,
+    &SbEglBindTexImageWrapper,
+    &SbEglReleaseTexImageWrapper,
     &SbEglSurfaceAttribWrapper,
     &SbEglSwapIntervalWrapper,
     &eglBindAPI,

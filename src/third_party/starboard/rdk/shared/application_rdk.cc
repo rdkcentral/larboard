@@ -39,6 +39,10 @@
 #include "third_party/starboard/rdk/shared/window/window_internal.h"
 #include "third_party/starboard/rdk/shared/log_override.h"
 #include "third_party/starboard/rdk/shared/time_constants.h"
+#ifdef ENABLE_FIREBOLT //pkp1
+#include "third_party/starboard/rdk/shared/firebolt_service.h"
+#endif
+
 
 #include <fcntl.h>
 #include <poll.h>
@@ -141,6 +145,11 @@ void Application::Initialize() {
 
   SbAudioSinkPrivate::Initialize();
   libcobalt_api::Initialize();
+  #ifdef ENABLE_FIREBOLT //pkp2
+  SB_LOG(INFO) << "[Firebolt][Application::Initialize] pravakar Initializing Firebolt Service...";
+  third_party::starboard::rdk::shared::FireboltService::Instance()->initialize();
+  SB_LOG(INFO) << "[Firebolt][Application::Initialize] pravakar Firebolt Service Initialized";
+  #endif
   using ::starboard::shared::starboard::media::KeySystemSupportabilityCache;
   using ::starboard::shared::starboard::media::MimeSupportabilityCache;
   MimeSupportabilityCache::GetInstance()->SetCacheEnabled(true);
@@ -153,6 +162,11 @@ void Application::Teardown() {
   SbAudioSinkPrivate::TearDown();
   libcobalt_api::Teardown();
   TeardownJSONRPCLink();
+#ifdef ENABLE_FIREBOLT //pkp3
+  SB_LOG(INFO) << "[Firebolt][Application::Teardown] pravakar Uninitializing Firebolt Service...";
+  third_party::starboard::rdk::shared::FireboltService::Instance()->uninitialize();
+  SB_LOG(INFO) << "[Firebolt][Application::Teardown] pravakar Firebolt Service Uninitialized";
+#endif
 
   close(ess_timer_fd_);
   close(wakeup_fd_);

@@ -34,6 +34,8 @@ declare_args() {
   rdk_enable_securityagent = true
   rdk_enable_ocdm = true
   rdk_enable_rfc_api = false
+  #pkp 1
+  enable_firebolt = true
 }
 
 pkg_config("glib") {
@@ -88,6 +90,9 @@ static_library("starboard_platform") {
   # has_pedantic_warnings = true
 
   defines = []
+  if (enable_firebolt) {
+    defines += [ "ENABLE_FIREBOLT" ]
+  }
 
   sources = [
     # Shared sources
@@ -396,7 +401,10 @@ static_library("starboard_platform") {
     "window/window_get_size.cc",
     "window/window_internal.cc",
   ]
-
+  #pkp4
+ if (enable_firebolt) {
+    sources += [ "firebolt_service.cc" ]
+  }
   if (target_platform == "rdk-rpi") {
     sources -= [
       "//starboard/shared/gles/system_gles2.cc",
@@ -425,14 +433,23 @@ static_library("starboard_platform") {
   }
 
   cflags = []
-
+  #pkp2
+if (enable_firebolt) {
+    defines += [ "ENABLE_FIREBOLT" ]
+  }
   libs = [
     "EGL",
     "GLESv2",
     "essos",
     "dl",
   ]
-
+  #pkp3
+  if (enable_firebolt) {
+    libs += [
+      "FireboltClient",
+      "FireboltTransport",
+    ]
+  }
   configs += [
     "//starboard/build/config:starboard_implementation",
     ":glib",

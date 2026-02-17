@@ -42,6 +42,11 @@
 
 #include "third_party/starboard/rdk/shared/rdkservices.h"
 #include "third_party/starboard/rdk/shared/log_override.h"
+#ifdef ENABLE_FIREBOLT
+#include "third_party/starboard/rdk/shared/firebolt_service.h"
+#endif
+
+
 
 using namespace third_party::starboard::rdk::shared;
 
@@ -238,22 +243,57 @@ bool GetCertificationScope(char* out_value, int value_length) {
   SB_LOG(INFO) << "Device cert scope: '" << buf.data() << "'";
   return starboard::strlcpy<char>(out_value, buf.data(), value_length);
 }
-
+//pkp3
 bool GetLimitAdTracking(char* out_value, int value_length) {
+  SB_LOG(INFO) << "[Firebolt][SbSystemGetProperty] pravakar GetLimitAdTracking called";
+
+  #ifdef ENABLE_FIREBOLT
+    bool optOut = false;
+    FireboltService::Instance()->isAdvertisingOptOut(optOut);
+
+    // Starboard property expects string, so return "1" or "0"
+    const char* lmt = optOut ? "1" : "0";
+    SB_LOG(INFO) << "[Firebolt][SbSystemGetProperty] pravakar LimitAdTracking (optOut): "
+                 << (optOut ? "true" : "false");
+    return CopyStringAndTestIfSuccess(out_value, value_length, lmt);
+#else
+ SB_LOG(INFO) << "[SbSystemGetProperty] pravakar Firebolt disabled, using RDK LimitAdTracking";
     std::string prop;
     if (AdvertisingId::GetLmtAdTracking(prop)) {
+      SB_LOG(INFO) << "[SbSystemGetProperty] LimitAdTracking from RDK: " << prop;
       return CopyStringAndTestIfSuccess(out_value, value_length, prop.c_str());
     }
+    SB_LOG(INFO) << "[SbSystemGetProperty] LimitAdTracking not available from RDK"
     return false;
+    #endif
 }
 
+//pkp2
 bool GetAdvertisingId(char* out_value, int value_length) {
+SB_LOG(INFO) << "[Firebolt][SbSystemGetProperty] pravakar GetAdvertisingId called";
+
+  #ifdef ENABLE_FIREBOLT
+    std::string ifa;
+    FireboltService::Instance()->getAdvertisingId(ifa);
+    if (!ifa.empty()) {
+      SB_LOG(INFO) << "[Firebolt][SbSystemGetProperty] pravakar AdvertisingId received: " << ifa;
+      return CopyStringAndTestIfSuccess(out_value, value_length, ifa.c_str());
+    }
+    SB_LOG(INFO) << "[Firebolt][SbSystemGetProperty] pravakar AdvertisingId EMPTY from Firebolt";
+    return false;
+#else
+    SB_LOG(INFO) << "[SbSystemGetProperty] pravakar Firebolt disabled, using RDK AdvertisingId";
     std::string prop;
     if (AdvertisingId::GetIfa(prop)) {
+      SB_LOG(INFO) << "[SbSystemGetProperty] pravakar AdvertisingId from RDK: " << prop;
       return CopyStringAndTestIfSuccess(out_value, value_length, prop.c_str());
     }
+    SB_LOG(INFO) << "[SbSystemGetProperty] pravakar AdvertisingId not available from RDK";
     return false;
+    #endif
 }
+
+
 
 bool GetDeviceType(char* out_value, int value_length) {
     std::string prop;

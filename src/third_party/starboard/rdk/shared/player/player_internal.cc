@@ -493,7 +493,6 @@ void gst_cobalt_src_setup_and_add_app_src(SbMediaType media_type,
     src_elem = payloader;
   }
 
-  #if 0
   if (!isRialtoEnabled()) {
     GstElement* queue = gst_element_factory_make("queue", nullptr);
     g_object_set (
@@ -508,7 +507,6 @@ void gst_cobalt_src_setup_and_add_app_src(SbMediaType media_type,
     gst_element_link(src_elem, queue);
     src_elem = queue;
   }
-  #endif
 
   GstPad* target_pad = gst_element_get_static_pad(src_elem, "src");
   GstPad* pad = gst_ghost_pad_new(name, target_pad);
@@ -1350,6 +1348,18 @@ class PlayerImpl : public Player {
     if (state_ != State::kPresenting)
       return false;
 
+    // Don't throttle after eos mark
+    if (eos_data_ != 0)
+      return false;
+
+    // Don't throttle in paused state
+    if (rate_ == .0)
+      return false;
+
+    // Don't throttle when the cached position is stale
+    if (cached_position_expiration_time_ < g_get_monotonic_time())
+      return false;
+
     // Already delayed
     if (delay_audio_need_data_src_)
       return true;
@@ -1369,13 +1379,13 @@ class PlayerImpl : public Player {
 
     SB_DCHECK(audio_write_duration_ > kCachedPositionRefreshIntervalMs * GST_MSECOND);
 
-    // Retry after playback position refresh
+    // Dispatch decoder status after playback position refresh
     delay_audio_need_data_src_ = g_timeout_source_new(kCachedPositionRefreshIntervalMs);
     g_source_set_callback(delay_audio_need_data_src_, [](gpointer data) {
       PlayerImpl* self = static_cast<PlayerImpl*>(data);
       ::starboard::ScopedLock lock(self->mutex_);
       g_clear_pointer(&self->delay_audio_need_data_src_, g_source_unref);
-      self->DecoderNeedsData(lock, MediaType::kAudio);
+      self->DecoderNeedsData(lock, MediaType::kAudio, false);
       return G_SOURCE_REMOVE;
     }, this, nullptr);
     g_source_attach(delay_audio_need_data_src_, main_loop_context_);
@@ -1383,7 +1393,7 @@ class PlayerImpl : public Player {
     return true;
   }
 
-  void DecoderNeedsData(::starboard::ScopedLock&, MediaType media) {
+  void DecoderNeedsData(::starboard::ScopedLock&, MediaType media, bool can_delay = true) {
     mutex_.DCheckAcquired();
 
     int need_data = static_cast<int>(media) & ~decoder_state_data_;
@@ -1396,7 +1406,7 @@ class PlayerImpl : public Player {
       return;
     }
 
-    if (media == MediaType::kAudio && DelayAudioDecoderNeedsData()) {
+    if (can_delay && media == MediaType::kAudio && DelayAudioDecoderNeedsData()) {
       GST_LOG_OBJECT(pipeline_, "Delaying NeedsData status for audio");
       return;
     }
@@ -2204,17 +2214,6 @@ void PlayerImpl::SetupElement(GstElement* pipeline,
     if (g_object_class_find_property(oclass, "has-drm")) {
       g_object_set(G_OBJECT(element), "has-drm", self->drm_system_ != nullptr, nullptr);
     }
-  }
-
-  if (g_str_has_prefix(GST_ELEMENT_NAME(element), "vqueue") &&
-      g_object_class_find_property(G_OBJECT_GET_CLASS(element), "max-size-buffers")) {
-    const guint kNumVideoBuffers = kVideoBufferDurationNs / (16 * GST_MSECOND);
-    guint max_size_buffers = 0;
-    g_object_get(element, "max-size-buffers", &max_size_buffers, nullptr);
-    GST_DEBUG_OBJECT(
-      pipeline, "Changing queue %" GST_PTR_FORMAT " max-size-buffers: %u -> %u",
-      element, max_size_buffers, max_size_buffers + kNumVideoBuffers);
-    g_object_set(element, "max-size-buffers", max_size_buffers + kNumVideoBuffers, nullptr);
   }
 }
 

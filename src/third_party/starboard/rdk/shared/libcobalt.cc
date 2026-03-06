@@ -26,10 +26,15 @@
 #include "starboard/memory.h"
 #include "starboard/string.h"
 
+#if defined(ENABLE_RDKSERVICES_API) && ENABLE_RDKSERVICES_API
 #include "third_party/starboard/rdk/shared/rdkservices.h"
+#endif
+
+#include "third_party/starboard/rdk/shared/system/system_properties_override.h"
 #include "third_party/starboard/rdk/shared/application_rdk.h"
 
 using namespace third_party::starboard::rdk::shared;
+using namespace third_party::starboard::rdk::shared::system;
 
 namespace
 {
@@ -267,10 +272,13 @@ void SbRdkSetSetting(const char* key, const char* json) {
   if (!key || key[0] == '\0' || !json)
     return;
 
+#if defined(ENABLE_RDKSERVICES_API) && ENABLE_RDKSERVICES_API
   if (strcmp(key, "accessibility") == 0) {
     Accessibility::SetSettings(json, GetContext()->IsAppRunning());
   }
-  else if (strcmp(key, "systemproperties") == 0) {
+  else
+#endif
+  if (strcmp(key, "systemproperties") == 0) {
     SystemProperties::SetSettings(json);
   }
   else if (strcmp(key, "advertisingid") == 0) {
@@ -285,10 +293,13 @@ int SbRdkGetSetting(const char* key, char** out_json) {
   bool result = false;
   std::string tmp;
 
+#if defined(ENABLE_RDKSERVICES_API) && ENABLE_RDKSERVICES_API
   if (strcmp(key, "accessibility") == 0) {
     result = Accessibility::GetSettings(tmp);
   }
-  else if (strcmp(key, "systemproperties") == 0) {
+  else
+#endif
+  if (strcmp(key, "systemproperties") == 0) {
     result = SystemProperties::GetSettings(tmp);
   }
   else if (strcmp(key, "advertisingid") == 0) {

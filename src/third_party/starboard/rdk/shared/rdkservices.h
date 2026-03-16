@@ -49,6 +49,8 @@ private:
     std::optional<std::string> firmware_version() override;
     std::optional<bool> is_connection_type_wireless() override;
     std::optional<bool> is_disconnected() override;
+    std::optional<std::string> advertising_id() override;
+    std::optional<bool> is_advertising_opt_out() override;
   };
 
   struct RDKTextToSpeech final : public ITextToSpeech {

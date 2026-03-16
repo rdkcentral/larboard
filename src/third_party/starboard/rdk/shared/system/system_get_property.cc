@@ -191,15 +191,31 @@ bool GetCertificationScope(char* out_value, int value_length) {
 
 bool GetLimitAdTracking(char* out_value, int value_length) {
   if (std::string prop; AdvertisingId::GetLmtAdTracking(prop)) {
+    SB_LOG(INFO) << "Pravakar GetLimitAdTracking: value from AdvertisingId override: " << prop;
     return CopyStringAndTestIfSuccess(out_value, value_length, prop.c_str());
   }
+
+  if (auto opt_out = platform::device().is_advertising_opt_out(); opt_out.has_value()) {
+    SB_LOG(INFO) << "Pravakar GetLimitAdTracking: value from platform::device(): " << (*opt_out ? "1" : "0");
+    return CopyStringAndTestIfSuccess(out_value, value_length, *opt_out ? "1" : "0");
+  }
+
+  SB_LOG(WARNING) << "Pravakar GetLimitAdTracking: no source available, returning false";
   return false;
 }
 
 bool GetAdvertisingId(char* out_value, int value_length) {
   if (std::string prop; AdvertisingId::GetIfa(prop)) {
+    SB_LOG(INFO) << "Pravakar GetAdvertisingId: value from AdvertisingId override: " << prop;
     return CopyStringAndTestIfSuccess(out_value, value_length, prop.c_str());
   }
+
+  if (auto ad_id = platform::device().advertising_id(); ad_id.has_value()) {
+    SB_LOG(INFO) << "Pravakar GetAdvertisingId: value from platform::device(): " << *ad_id;
+    return CopyStringAndTestIfSuccess(out_value, value_length, ad_id->c_str());
+  }
+
+  SB_LOG(WARNING) << "Pravakar GetAdvertisingId: no source available, returning false";
   return false;
 }
 

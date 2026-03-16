@@ -1629,6 +1629,14 @@ std::optional<bool> RDKServicesInterface::RDKDevice::is_disconnected() {
   return GetNetworkInfo()->IsDisconnected();
 }
 
+std::optional<std::string> RDKServicesInterface::RDKDevice::advertising_id() {
+  return {};
+}
+
+std::optional<bool> RDKServicesInterface::RDKDevice::is_advertising_opt_out() {
+  return {};
+}
+
 std::optional<bool> RDKServicesInterface::RDKTextToSpeech::cancel() {
   GetTextToSpeech()->Cancel();
   return true;

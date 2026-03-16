@@ -81,6 +81,12 @@ public:
 
   // Check if the device is currently disconnected.
   virtual std::optional<bool> is_disconnected() = 0;
+
+  // Get the advertising identifier.
+  virtual std::optional<std::string> advertising_id() = 0;
+
+  // Check if the user has opted out of advertising.
+  virtual std::optional<bool> is_advertising_opt_out() = 0;
 };
 
 // Interface for voice guidance.

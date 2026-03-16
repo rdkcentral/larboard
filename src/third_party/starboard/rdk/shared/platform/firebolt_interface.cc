@@ -25,6 +25,7 @@
 #include "third_party/starboard/rdk/shared/log_override.h"
 
 #include <firebolt/firebolt.h>
+#include <firebolt/gateway.h>
 
 #include <chrono>
 #include <cstring>
@@ -78,7 +79,6 @@ std::optional<float> FireboltInterface::FireboltDevice::diagonal_size_in_inches(
 
 std::optional<HDRFormat> FireboltInterface::FireboltDevice::hdr() {
   std::unique_lock<std::mutex> lock { mutex_ };
-
   // lazy init
   if (!hdr_format_.has_value() && !on_hdr_format_changed_id_.has_value()) {
     static const auto convert_hdr_format = [](const Firebolt::Device::HDRFormat& format) {
@@ -157,6 +157,30 @@ std::optional<bool> FireboltInterface::FireboltDevice::is_connection_type_wirele
 
 std::optional<bool> FireboltInterface::FireboltDevice::is_disconnected() {
   return {};
+}
+
+std::optional<std::string> FireboltInterface::FireboltDevice::advertising_id() {
+  auto &advertising = Firebolt::IFireboltAccessor::Instance().AdvertisingInterface();
+  auto result = advertising.advertisingId();
+  if (!result) {
+    SB_LOG(ERROR) << "advertising.advertisingId() failed, error code = " << result.error();
+    return {};
+  }
+  return result->ifa;
+}
+
+std::optional<bool> FireboltInterface::FireboltDevice::is_advertising_opt_out() {
+  auto& advertising = Firebolt::IFireboltAccessor::Instance().AdvertisingInterface();
+  auto result = advertising.advertisingId();
+
+  if (!result) {
+    SB_LOG(ERROR) << "advertising.advertisingId() failed, error code = " << result.error();
+    return {};
+  }
+  if (result->lmt.empty()) {
+    return {};
+  }
+  return result->lmt == "1";
 }
 
 void FireboltInterface::FireboltDevice::init() {
@@ -547,6 +571,9 @@ void FireboltInterface::lazy_init() {
     device_.init();
     text_to_speech_.init();
     const auto init_completed_tp = std::chrono::steady_clock::now();
+    // Lifecycle.1
+    auto& gateway = Firebolt::Transport::GetGatewayInstance();
+    auto result = gateway.request("Lifecycle.ready", {}).get();
     SB_LOG(INFO) << "Firebolt init completed."
                  << " Connect took: " << std::chrono::duration_cast<std::chrono::milliseconds>(connected_tp - start_tp).count() << " ms,"
                  << " init took: " << std::chrono::duration_cast<std::chrono::milliseconds>(init_completed_tp - connected_tp).count() << " ms,"

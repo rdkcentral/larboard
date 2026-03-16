@@ -158,6 +158,18 @@ class TracePlatformInterface final : public PlatformInterface {
       TRACE_INFO() << "device.is_disconnected: " << ret;
       return ret;
     }
+
+    std::optional<std::string> advertising_id() override {
+      auto ret = device_.advertising_id();
+      TRACE_INFO() << "device.advertising_id: " << ret;
+      return ret;
+    }
+
+    std::optional<bool> is_advertising_opt_out() override {
+      auto ret = device_.is_advertising_opt_out();
+      TRACE_INFO() << "device.is_advertising_opt_out: " << ret;
+      return ret;
+    }
   };
 
   struct TraceTextToSpeech final : public ITextToSpeech {
@@ -291,6 +303,18 @@ class CompositeInterface final : public PlatformInterface {
     std::optional<bool> is_disconnected() override {
       return parent_.forAnyDevice<bool>([](IDevice& device) {
         return device.is_disconnected();
+      });
+    }
+
+    std::optional<std::string> advertising_id() override {
+      return parent_.forAnyDevice<std::string>([](IDevice& device) {
+        return device.advertising_id();
+      });
+    }
+
+    std::optional<bool> is_advertising_opt_out() override {
+      return parent_.forAnyDevice<bool>([](IDevice& device) {
+        return device.is_advertising_opt_out();
       });
     }
   };

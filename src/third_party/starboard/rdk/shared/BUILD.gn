@@ -34,7 +34,7 @@ declare_args() {
   rdk_enable_securityagent = true
   rdk_enable_ocdm = true
   rdk_enable_rfc_api = false
-  rdk_enable_firebolt_api = false
+  rdk_enable_firebolt_api = true
   rdk_enable_rdkservices_api = true
   rdk_enable_wpecryptography = true
 }

@@ -25,6 +25,7 @@
 #include "third_party/starboard/rdk/shared/log_override.h"
 
 #include <firebolt/firebolt.h>
+#include <firebolt/gateway.h>
 
 #include <chrono>
 #include <cstring>
@@ -78,7 +79,6 @@ std::optional<float> FireboltInterface::FireboltDevice::diagonal_size_in_inches(
 
 std::optional<HDRFormat> FireboltInterface::FireboltDevice::hdr() {
   std::unique_lock<std::mutex> lock { mutex_ };
-
   // lazy init
   if (!hdr_format_.has_value() && !on_hdr_format_changed_id_.has_value()) {
     static const auto convert_hdr_format = [](const Firebolt::Device::HDRFormat& format) {
@@ -158,6 +158,75 @@ std::optional<bool> FireboltInterface::FireboltDevice::is_connection_type_wirele
 std::optional<bool> FireboltInterface::FireboltDevice::is_disconnected() {
   return {};
 }
+
+// FireboltAdvertising
+std::optional<std::string> FireboltInterface::FireboltAdvertising::advertising_id() {
+  auto &advertising = Firebolt::IFireboltAccessor::Instance().AdvertisingInterface();
+  auto result = advertising.advertisingId();
+  if (result.has_value()) {
+    SB_LOG(INFO) << " ##### patel advertising_id result: " << result->ifa;
+  } else {
+    SB_LOG(INFO) << " ##### patel advertising_id result: (error: " << result.error() << ')';
+  }
+  if (!result) {
+    SB_LOG(ERROR) << "advertising.advertisingId() failed, error code = " << result.error();
+    return {};
+  }
+
+  if (result->ifa.empty()) {
+    return {};
+  }
+
+  return result->ifa;
+}
+
+std::optional<bool> FireboltInterface::FireboltAdvertising::limit_ad_tracking() {
+  auto &advertising = Firebolt::IFireboltAccessor::Instance().AdvertisingInterface();
+  auto result = advertising.advertisingId();
+  if (result.has_value()) {
+    SB_LOG(INFO) << " ##### patel limit_ad_tracking result: " << result->lmt;
+  } else {
+    SB_LOG(INFO) << " ##### patel limit_ad_tracking result: (error: " << result.error() << ')';
+  }
+  if (!result) {
+    SB_LOG(ERROR) << "advertising.advertisingId() failed, error code = " << result.error();
+    return {};
+  }
+
+  if (result->lmt.empty()) {
+    return {};
+  }
+
+  return result->lmt == "1";
+}
+
+// std::optional<std::string> FireboltInterface::FireboltDevice::advertising_id() {
+//   SB_LOG(INFO) << "patel advertising_id: entering method";
+//   auto &advertising = Firebolt::IFireboltAccessor::Instance().AdvertisingInterface();
+//   SB_LOG(INFO) << "patel advertising_id: got AdvertisingInterface reference";
+//   auto result = advertising.advertisingId();
+//   SB_LOG(INFO) << "patel advertising_id: advertisingId() returned, result.has_value()=" << result.operator bool();
+//   if (!result) {
+//     SB_LOG(ERROR) << "patel advertising_id: advertisingId() failed, error code = " << result.error();
+//     return {};
+//   }
+//   SB_LOG(INFO) << "patel advertising_id: returning ifa = " << result->ifa;
+//   return result->ifa;
+// }
+
+// std::optional<bool> FireboltInterface::FireboltDevice::is_advertising_opt_out() {
+//   auto& advertising = Firebolt::IFireboltAccessor::Instance().AdvertisingInterface();
+//   auto result = advertising.advertisingId();
+
+//   if (!result) {
+//     SB_LOG(ERROR) << "advertising.advertisingId() failed, error code = " << result.error();
+//     return {};
+//   }
+//   if (result->lmt.empty()) {
+//     return {};
+//   }
+//   return result->lmt == "1";
+// }
 
 void FireboltInterface::FireboltDevice::init() {
   using namespace Firebolt::Device;
@@ -494,29 +563,35 @@ void FireboltInterface::lazy_init() {
   if (connected_.has_value())
     return;
 
+  SB_LOG(INFO) << "patel lazy_init: starting Firebolt initialization";
+
   const char* kFireboltEndpoint = getenv("FIREBOLT_ENDPOINT");
-  const bool kEnableLegacyRPCv1 = false;
+  SB_LOG(INFO) << "patel lazy_init: FIREBOLT_ENDPOINT=" << (kFireboltEndpoint ? kFireboltEndpoint : "(not set)");
+  
   const auto kConnectionTimeout = 3s;
 
   SB_DCHECK(kFireboltEndpoint && kFireboltEndpoint[0] != '\0');
   if (!kFireboltEndpoint || kFireboltEndpoint[0] == '\0') {
+    SB_LOG(ERROR) << "patel lazy_init: FIREBOLT_ENDPOINT not set, cannot connect";
     connected_ = false;
     return;
   }
 
   Firebolt::Config cfg { };
   cfg.wsUrl = kFireboltEndpoint;
-  cfg.legacyRPCv1 = kEnableLegacyRPCv1;
 #if !defined(COBALT_BUILD_TYPE_GOLD)
   cfg.log.level = Firebolt::LogLevel::Debug;
 #endif
 
   const auto start_tp = std::chrono::steady_clock::now();
+  SB_LOG(INFO) << "patel lazy_init: calling Firebolt::IFireboltAccessor::Instance().Connect()";
 
   auto rc = Firebolt::IFireboltAccessor::Instance().Connect(
     cfg, [this](const bool connected, const Firebolt::Error error) mutable {
       if (!connected) {
-        SB_LOG(INFO) << "Firebolt client disconnected, code = " << error;
+        SB_LOG(INFO) << "patel lazy_init callback: Firebolt client disconnected, code = " << error;
+      } else {
+        SB_LOG(INFO) << "patel lazy_init callback: Firebolt client connected successfully";
       }
       {
         std::unique_lock<std::mutex> lock{mutex_};
@@ -525,32 +600,46 @@ void FireboltInterface::lazy_init() {
       cv_.notify_all();
     });
 
+  SB_LOG(INFO) << "patel lazy_init: Connect() returned with error code = " << rc;
+
   switch (rc) {
     case Firebolt::Error::None:
+      SB_LOG(INFO) << "patel lazy_init: waiting for connection callback with timeout 3s";
       if (!cv_.wait_for(lock, kConnectionTimeout, [this](){ return connected_.has_value(); })) {
-        SB_LOG(ERROR) << "Firebolt client connection timed out.";
+        SB_LOG(ERROR) << "patel lazy_init: Firebolt client connection timed out.";
         connected_ = false;
       }
       break;
     case Firebolt::Error::AlreadyConnected:
+      SB_LOG(INFO) << "patel lazy_init: Firebolt already connected";
       connected_ = true;
       break;
     default:
+      SB_LOG(ERROR) << "patel lazy_init: Firebolt client connection failed, error = " << rc;
       connected_ = false;
-      SB_LOG(ERROR) << "Firebolt client connection failed, error = " << rc;
       break;
   }
 
   if (*connected_) {
-    SB_LOG(INFO) << "Firebolt client connected.";
+    SB_LOG(INFO) << "patel ok lazy_init: Firebolt client connected.";
     const auto connected_tp = std::chrono::steady_clock::now();
     device_.init();
     text_to_speech_.init();
     const auto init_completed_tp = std::chrono::steady_clock::now();
+    // Lifecycle.1
+    if (cfg.legacyRPCv1) {
+    auto& gateway = Firebolt::Transport::GetGatewayInstance();
+    auto result = gateway.request("Lifecycle.ready", {}).get();
+    }else
+    {
+      SB_LOG(INFO) << "patel ERROR Lifecycle disabled";
+    }
     SB_LOG(INFO) << "Firebolt init completed."
                  << " Connect took: " << std::chrono::duration_cast<std::chrono::milliseconds>(connected_tp - start_tp).count() << " ms,"
                  << " init took: " << std::chrono::duration_cast<std::chrono::milliseconds>(init_completed_tp - connected_tp).count() << " ms,"
                  << " total: " << std::chrono::duration_cast<std::chrono::milliseconds>(init_completed_tp - start_tp).count() << " ms.";
+  } else {
+    SB_LOG(ERROR) << "patel lazy_init: Firebolt connection failed, connected_=" << *connected_;
   }
 }
 
@@ -567,6 +656,11 @@ ITextToSpeech& FireboltInterface::text_to_speech() {
 IAccessibility& FireboltInterface::accessibility() {
   lazy_init();
   return accessibility_;
+}
+
+IAdvertising& FireboltInterface::advertising() {
+  lazy_init();
+  return advertising_;
 }
 
 void FireboltInterface::teardown() {

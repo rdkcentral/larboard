@@ -34,7 +34,7 @@ declare_args() {
   rdk_enable_securityagent = true
   rdk_enable_ocdm = true
   rdk_enable_rfc_api = false
-  rdk_enable_firebolt_api = false
+  rdk_enable_firebolt_api = true
   rdk_enable_rdkservices_api = true
   rdk_enable_wpecryptography = true
 }
@@ -317,7 +317,6 @@ static_library("starboard_platform") {
     "//starboard/shared/stub/window_update_on_screen_keyboard_suggestions.cc",
 
     # RDK implementation
-    "accessibility_data.cc",
     "accessibility_extension.cc",
     "accessibility_extension.h",
     "application_rdk.cc",
@@ -467,8 +466,12 @@ static_library("starboard_platform") {
     configs += [ ":ocdm" ]
   }
 
+ public_deps = []
+
   if (rdk_enable_rdkservices_api) {
     sources += [
+      "accessibility_data.cc",
+      "accessibility_data.h",
       "rdkservices.cc",
       "rdkservices.h",
     ]
@@ -483,9 +486,8 @@ static_library("starboard_platform") {
       "platform/firebolt_interface.cc",
       "platform/firebolt_interface.h",
     ]
-    libs += [
-      "FireboltClient",
-      "FireboltTransport",
+    public_deps += [
+    "firebolt_client:firebolt_client_group",
     ]
     defines += [ "ENABLE_FIREBOLT_API=1" ]
   }
@@ -496,7 +498,7 @@ static_library("starboard_platform") {
     ]
   }
 
-  public_deps = [
+  public_deps +=[
     "//starboard:starboard_headers_only",
     "//starboard/common",
     "//starboard/shared/starboard/media:media_util",

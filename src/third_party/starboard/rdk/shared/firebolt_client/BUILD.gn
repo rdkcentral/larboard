@@ -1,0 +1,229 @@
+# Copyright 2026 Comcast Cable Communications Management, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Copyright 2021 The Cobalt Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+declare_args() {
+  firebolt_client_version_major = 0
+  firebolt_client_version_minor = 5
+  firebolt_client_version_patch = 5
+
+  firebolt_transport_version_major = 1
+  firebolt_transport_version_minor = 1
+  firebolt_transport_version_patch = 6
+
+  legacy_rpc_v1 = true
+  use_system_firebolt_libs = false
+}
+
+firebolt_client_version_string = "${firebolt_client_version_major}.${firebolt_client_version_minor}.${firebolt_client_version_patch}"
+firebolt_transport_version_string = "${firebolt_transport_version_major}.${firebolt_transport_version_minor}.${firebolt_transport_version_patch}"
+
+template("generate_export_header") {
+  action(target_name) {
+    script = "build/generate_export_header.py"
+    forward_variables_from(invoker, [ "deps", "visibility" ])
+    outputs = [ invoker.output ]
+    args = [
+      "--output", rebase_path(invoker.output, root_build_dir),
+      "--prefix", invoker.prefix,
+    ]
+  }
+}
+
+template("configure_file") {
+  action(target_name) {
+    script = "build/configure_file.py"
+    inputs  = [ invoker.input ]
+    outputs = [ invoker.output ]
+    _vars = []
+    if (defined(invoker.vars)) {
+      foreach(v, invoker.vars) {
+        _vars += [ "--var", v ]
+      }
+    }
+    args = [
+      "--input",  rebase_path(invoker.input,  root_build_dir),
+      "--output", rebase_path(invoker.output, root_build_dir),
+    ] + _vars
+  }
+}
+
+configure_file("generate_firebolt_transport_config_header") {
+  input  = "//third_party/firebolt-cpp-transport/include/firebolt/config.h.in"
+  output = "$target_gen_dir/firebolt/config.h"
+  vars   = [
+    "FIREBOLT_LEGACY_RPC_V1=${legacy_rpc_v1}",
+  ]
+}
+
+configure_file("generate_firebolt_transport_version_header") {
+  input  = "//third_party/firebolt-cpp-transport/include/firebolt/version.h.in"
+  output = "$target_gen_dir/firebolt/transport_version.h"
+  vars   = [
+    "PROJECT_VERSION_MAJOR=${firebolt_transport_version_major}",
+    "PROJECT_VERSION_MINOR=${firebolt_transport_version_minor}",
+    "PROJECT_VERSION_PATCH=${firebolt_transport_version_patch}",
+    "PROJECT_VERSION=${firebolt_transport_version_string}",
+  ]
+}
+
+configure_file("generate_firebolt_client_version_header") {
+  input  = "//third_party/firebolt-cpp-client/include/firebolt/version.h.in"
+  output = "$target_gen_dir/firebolt/client_version.h"
+  vars   = [
+    "PROJECT_VERSION_MAJOR=${firebolt_client_version_major}",
+    "PROJECT_VERSION_MINOR=${firebolt_client_version_minor}",
+    "PROJECT_VERSION_PATCH=${firebolt_client_version_patch}",
+    "PROJECT_VERSION=${firebolt_client_version_string}",
+  ]
+}
+
+generate_export_header("generate_firebolt_transport_export_header") {
+  output = "$target_gen_dir/firebolt/transport_export.h"
+  prefix = "FIREBOLTTRANSPORT"
+}
+
+generate_export_header("generate_firebolt_client_export_header") {
+  output = "$target_gen_dir/firebolt/client_export.h"
+  prefix = "FIREBOLTCLIENT"
+}
+
+config("firebolt_client_src_config") {
+  include_dirs = [
+    "//third_party/firebolt-cpp-client/include",
+    "//third_party/firebolt-cpp-client/src",
+    "//third_party/firebolt-cpp-transport/include",
+    "//third_party/firebolt-cpp-transport/src",
+    "$target_gen_dir",
+  ]
+}
+
+static_library("firebolt_client") {
+  check_includes = false
+  # build_loader = false
+  sources = [
+    "//third_party/firebolt-cpp-transport/include/config.h",
+    "//third_party/firebolt-cpp-transport/include/gateway.h",
+    "//third_party/firebolt-cpp-transport/include/helpers.h",
+    "//third_party/firebolt-cpp-transport/include/json_types.h",
+    "//third_party/firebolt-cpp-transport/include/logger.h",
+    "//third_party/firebolt-cpp-transport/include/types.h",
+    "//third_party/firebolt-cpp-transport/src/gateway.cpp",
+    "//third_party/firebolt-cpp-transport/src/helpers_impl.cpp",
+    "//third_party/firebolt-cpp-transport/src/helpers_impl.h",
+    "//third_party/firebolt-cpp-transport/src/logger.cpp",
+    "//third_party/firebolt-cpp-transport/src/transport.cpp",
+    "//third_party/firebolt-cpp-transport/src/transport.h",
+    "//third_party/firebolt-cpp-transport/src/utils.cpp",
+    "//third_party/firebolt-cpp-transport/src/utils.h",
+    "//third_party/firebolt-cpp-client/include/accessibility.h",
+    "//third_party/firebolt-cpp-client/include/advertising.h",
+    "//third_party/firebolt-cpp-client/include/common_types.h",
+    "//third_party/firebolt-cpp-client/include/device.h",
+    "//third_party/firebolt-cpp-client/include/discovery.h",
+    "//third_party/firebolt-cpp-client/include/display.h",
+    "//third_party/firebolt-cpp-client/include/firebolt.h",
+    "//third_party/firebolt-cpp-client/include/lifecycle.h",
+    "//third_party/firebolt-cpp-client/include/localization.h",
+    "//third_party/firebolt-cpp-client/include/metrics.h",
+    "//third_party/firebolt-cpp-client/include/network.h",
+    "//third_party/firebolt-cpp-client/include/presentation.h",
+    "//third_party/firebolt-cpp-client/include/stats.h",
+    "//third_party/firebolt-cpp-client/include/texttospeech.h",
+    "//third_party/firebolt-cpp-client/src/accessibility_impl.cpp",
+    "//third_party/firebolt-cpp-client/src/accessibility_impl.h",
+    "//third_party/firebolt-cpp-client/src/advertising_impl.cpp",
+    "//third_party/firebolt-cpp-client/src/advertising_impl.h",
+    "//third_party/firebolt-cpp-client/src/device_impl.cpp",
+    "//third_party/firebolt-cpp-client/src/device_impl.h",
+    "//third_party/firebolt-cpp-client/src/discovery_impl.cpp",
+    "//third_party/firebolt-cpp-client/src/discovery_impl.h",
+    "//third_party/firebolt-cpp-client/src/display_impl.cpp",
+    "//third_party/firebolt-cpp-client/src/display_impl.h",
+    "//third_party/firebolt-cpp-client/src/firebolt.cpp",
+    "//third_party/firebolt-cpp-client/src/lifecycle_impl.cpp",
+    "//third_party/firebolt-cpp-client/src/lifecycle_impl.h",
+    "//third_party/firebolt-cpp-client/src/localization_impl.cpp",
+    "//third_party/firebolt-cpp-client/src/localization_impl.h",
+    "//third_party/firebolt-cpp-client/src/metrics_impl.cpp",
+    "//third_party/firebolt-cpp-client/src/metrics_impl.h",
+    "//third_party/firebolt-cpp-client/src/network_impl.cpp",
+    "//third_party/firebolt-cpp-client/src/network_impl.h",
+    "//third_party/firebolt-cpp-client/src/presentation_impl.cpp",
+    "//third_party/firebolt-cpp-client/src/presentation_impl.h",
+    "//third_party/firebolt-cpp-client/src/stats_impl.cpp",
+    "//third_party/firebolt-cpp-client/src/stats_impl.h",
+    "//third_party/firebolt-cpp-client/src/texttospeech_impl.cpp",
+    "//third_party/firebolt-cpp-client/src/texttospeech_impl.h",
+    "//third_party/firebolt-cpp-client/src/json_types/device.h",
+    "//third_party/firebolt-cpp-client/src/json_types/advertising.h",
+    "//third_party/firebolt-cpp-client/src/json_types/lifecycle.h",
+    "//third_party/firebolt-cpp-client/src/json_types/display.h",
+    "//third_party/firebolt-cpp-client/src/json_types/common.h",
+    "//third_party/firebolt-cpp-client/src/json_types/accessibility.h",
+    "//third_party/firebolt-cpp-client/src/json_types/metrics.h",
+    "//third_party/firebolt-cpp-client/src/json_types/texttospeech.h",
+    "//third_party/firebolt-cpp-client/src/json_types/stats.h",
+  ]
+
+  deps = [
+    ":generate_firebolt_transport_config_header",
+    ":generate_firebolt_transport_version_header",
+    ":generate_firebolt_client_version_header",
+    ":generate_firebolt_transport_export_header",
+    ":generate_firebolt_client_export_header",
+  ]
+
+  public_configs = [
+    ":firebolt_client_src_config",
+  ]
+
+  configs += [
+    "//build/config/compiler:exceptions",
+  ]
+
+  configs -= [
+    "//build/config/compiler:no_exceptions",
+  ]
+}
+
+config("firebolt_client_from_system") {
+  libs = [
+    "FireboltClient",
+    "FireboltTransport",
+  ]
+}
+
+group("firebolt_client_group") {
+  if (use_system_firebolt_libs) {
+    public_configs = [ ":firebolt_client_from_system" ]
+  } else {
+    public_deps = [ ":firebolt_client" ]
+  }
+}

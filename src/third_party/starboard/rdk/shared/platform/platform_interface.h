@@ -94,11 +94,12 @@ public:
   // Speak given text.
   virtual std::optional<bool> speak(const std::string& text) = 0;
 
-  // Returns true if device has TTS service available.
+  // Check if TTS service is available.
   virtual std::optional<bool> is_available() = 0;
 
-  // Returns true if device has TTS enabled.
+  // Check if voice guidance is currently enabled.
   virtual std::optional<bool> is_enabled() = 0;
+
 };
 
 // Interface for querying accessibility settings.
@@ -111,6 +112,18 @@ public:
 
   // Get caption accessibility settings.
   virtual std::optional<bool> caption_settings(SbAccessibilityCaptionSettings& out) = 0;
+};
+
+// Interface for querying advertising settings.
+class IAdvertising {
+public:
+  virtual ~IAdvertising() = default;
+
+  // Return advertising identifier (IFA)
+  virtual std::optional<std::string> advertising_id() = 0;
+
+  // Return Limit Ad Tracking / opt-out
+  virtual std::optional<bool> limit_ad_tracking() = 0;
 };
 
 class PlatformInterface {
@@ -126,6 +139,7 @@ class PlatformInterface {
   virtual IDevice& device() = 0;
   virtual ITextToSpeech& text_to_speech() = 0;
   virtual IAccessibility& accessibility() = 0;
+  virtual IAdvertising& advertising() = 0;
 };
 
 inline IDevice& device() {
@@ -138,6 +152,10 @@ inline ITextToSpeech& text_to_speech() {
 
 inline IAccessibility& accessibility() {
   return PlatformInterface::get().accessibility();
+}
+
+inline IAdvertising& advertising() {
+  return PlatformInterface::get().advertising();
 }
 
 }  // namespace third_party::starboard::rdk::shared::platform

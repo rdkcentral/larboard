@@ -15,6 +15,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 #include "third_party/starboard/rdk/shared/platform/platform_interface.h"
+#include <iostream>
+
 
 #include <starboard/extension/accessibility.h>
 #include <starboard/common/media.h>
@@ -158,6 +160,18 @@ class TracePlatformInterface final : public PlatformInterface {
       TRACE_INFO() << "device.is_disconnected: " << ret;
       return ret;
     }
+
+    // std::optional<std::string> advertising_id() override {
+    //   auto ret = device_.advertising_id();
+    //   TRACE_INFO() << "device.advertising_id: " << ret;
+    //   return ret;
+    // }
+
+    // std::optional<bool> is_advertising_opt_out() override {
+    //   auto ret = device_.is_advertising_opt_out();
+    //   TRACE_INFO() << "device.is_advertising_opt_out: " << ret;
+    //   return ret;
+    // }
   };
 
   struct TraceTextToSpeech final : public ITextToSpeech {
@@ -207,10 +221,29 @@ class TracePlatformInterface final : public PlatformInterface {
     }
   };
 
+  struct TraceAdvertising final : public IAdvertising {
+    IAdvertising& advertising_;
+    TraceAdvertising(IAdvertising& advertising)
+      : advertising_(advertising) {
+    }
+    std::optional<std::string> advertising_id() override {
+      auto ret = advertising_.advertising_id();
+      TRACE_INFO() << "advertising.advertising_id: " << ret;
+      return ret;
+    }
+
+    std::optional<bool> limit_ad_tracking() override {
+      auto ret = advertising_.limit_ad_tracking();
+      TRACE_INFO() << "advertising.limit_ad_tracking: " << ret;
+      return ret;
+    }
+  };
+
   std::unique_ptr<PlatformInterface> api_;
   TraceDevice device_{api_->device()};
   TraceTextToSpeech text_to_speech_{api_->text_to_speech()};
   TraceAccessibility accessibility_{api_->accessibility()};
+  TraceAdvertising advertising_{api_->advertising()};
 
  public:
   TracePlatformInterface(std::unique_ptr<PlatformInterface>&& api) : api_(std::move(api)) {}
@@ -222,13 +255,14 @@ class TracePlatformInterface final : public PlatformInterface {
   IDevice& device() override { return device_; }
   ITextToSpeech& text_to_speech() override { return text_to_speech_; }
   IAccessibility& accessibility() override { return accessibility_; }
+  IAdvertising& advertising() override { return advertising_; }
 };
 #undef TRACE_INFO
 
 class CompositeInterface final : public PlatformInterface {
   struct CompositeDevice final : public IDevice {
     CompositeInterface& parent_;
-
+// The CompositeDevice queries all underlying devices and returns the first valid response for each query. This allows the CompositeInterface to support multiple underlying PlatformInterfaces and aggregate their responses.
     CompositeDevice(CompositeInterface &parent)
         : parent_(parent) {}
 
@@ -293,6 +327,18 @@ class CompositeInterface final : public PlatformInterface {
         return device.is_disconnected();
       });
     }
+// For advertising_id and is_advertising_opt_out, we want to return the first valid response across all devices, but we also want to log the value from each device for debugging purposes. So we will iterate through all devices, log their values, and return the first valid one.
+    // std::optional<std::string> advertising_id() override {
+    //   return parent_.forAnyDevice<std::string>([](IDevice& device) {
+    //     return device.advertising_id();
+    //   });
+    // }
+
+    // std::optional<bool> is_advertising_opt_out() override {
+    //   return parent_.forAnyDevice<bool>([](IDevice& device) {
+    //     return device.is_advertising_opt_out();
+    //   });
+    // }
   };
 
   struct CompositeTextToSpeech final : public ITextToSpeech {
@@ -345,6 +391,26 @@ class CompositeInterface final : public PlatformInterface {
     }
   };
 
+  struct CompositeAdvertising final : public IAdvertising {
+    CompositeInterface& parent_;
+
+    CompositeAdvertising(CompositeInterface &parent)
+        : parent_(parent) {}
+
+    std::optional<std::string> advertising_id() override {
+      return parent_.forAnyAdvertising<std::string>([](IAdvertising& advertising) {
+        return advertising.advertising_id();
+      });
+    }
+
+    std::optional<bool> limit_ad_tracking() override {
+      return parent_.forAnyAdvertising<bool>([](IAdvertising& advertising) {
+        return advertising.limit_ad_tracking();
+      });
+    }
+  };
+
+  // The CompositeInterface holds multiple underlying PlatformInterfaces and implements the PlatformInterface methods by querying each underlying interface in order and returning the first valid response. This allows the CompositeInterface to aggregate responses from multiple sources, which is useful in cases where different PlatformInterfaces may provide different pieces of information about the device, TTS, or accessibility settings.
   template<typename T>
   std::optional<T> forAnyDevice(std::function<std::optional<T>(IDevice&)>&& fn) {
     for (auto &i : interfaces_) {
@@ -370,6 +436,15 @@ class CompositeInterface final : public PlatformInterface {
     return { };
   }
 
+  template<typename T>
+  std::optional<T> forAnyAdvertising(std::function<std::optional<T>(IAdvertising&)>&& fn) {
+    for (auto &i : interfaces_) {
+      if (auto ret = fn(i->advertising()); ret.has_value())
+        return ret;
+    }
+    return { };
+  }
+
   void forEachInterface(std::function<void(PlatformInterface&)>&& fn) {
     for (auto &i : interfaces_) {
       fn(*i);
@@ -380,7 +455,7 @@ class CompositeInterface final : public PlatformInterface {
   CompositeDevice device_{ *this };
   CompositeTextToSpeech text_to_speech_{ *this };
   CompositeAccessibility accessibility_{ *this };
-
+  CompositeAdvertising advertising_{ *this }; 
 public:
   CompositeInterface(std::vector<std::unique_ptr<PlatformInterface>> &&interfaces)
     : interfaces_(std::move(interfaces)) {
@@ -415,38 +490,64 @@ public:
   IAccessibility& accessibility() override {
     return accessibility_;
   }
-};
+
+  IAdvertising& advertising() override {
+    return advertising_;
+  }
+}; 
+
 
 PlatformInterface& PlatformInterface::get() {
-  static std::unique_ptr<PlatformInterface> g_instance;
-  static std::once_flag flag;
-  std::call_once(flag, [] {
-    std::vector<std::unique_ptr<PlatformInterface>> interfaces;
+    static std::unique_ptr<PlatformInterface> g_instance;
+    static std::once_flag flag;
+
+    std::call_once(flag, [] {
+        std::vector<std::unique_ptr<PlatformInterface>> interfaces;
 
 #if defined(ENABLE_FIREBOLT_API) && ENABLE_FIREBOLT_API
-    if (FireboltInterface::is_available()) {
-      interfaces.emplace_back(std::make_unique<FireboltInterface>());
-    }
+        std::cout << "[FORCE_LOG] Checking if FireboltInterface is available..." << std::endl;
+        if (FireboltInterface::is_available()) {
+            std::cout << "[FORCE_LOG] FireboltInterface is available. Creating object..." << std::endl;
+            interfaces.emplace_back(std::make_unique<FireboltInterface>());
+            std::cout << "[FORCE_LOG] FireboltInterface object created at: "
+                      << interfaces.back().get() << std::endl;
+        } else {
+            std::cout << "[FORCE_LOG] FireboltInterface is NOT available!" << std::endl;
+        }
 #endif
 
 #if defined(ENABLE_RDKSERVICES_API) && ENABLE_RDKSERVICES_API
-    if (RDKServicesInterface::is_available()) {
-      interfaces.emplace_back(std::make_unique<RDKServicesInterface>());
-    }
+        std::cout << "[FORCE_LOG] Checking if RDKServicesInterface is available..." << std::endl;
+        if (RDKServicesInterface::is_available()) {
+            std::cout << "[FORCE_LOG] RDKServicesInterface is available. Creating object..." << std::endl;
+            interfaces.emplace_back(std::make_unique<RDKServicesInterface>());
+            std::cout << "[FORCE_LOG] RDKServicesInterface object created at: "
+                      << interfaces.back().get() << std::endl;
+        } else {
+            std::cout << "[FORCE_LOG] RDKServicesInterface is NOT available!" << std::endl;
+        }
 #endif
 
-    if (interfaces.size() == 1) {
-      g_instance = std::move(interfaces[0]);
-    }
-    else {
-      g_instance = std::make_unique<CompositeInterface>(std::move(interfaces));
-    }
+        std::cout << "[FORCE_LOG] Total interfaces created: " << interfaces.size() << std::endl;
+
+        if (interfaces.size() == 1) {
+            g_instance = std::move(interfaces[0]);
+            std::cout << "[FORCE_LOG] Single interface assigned to g_instance at: "
+                      << g_instance.get() << std::endl;
+        } else {
+            g_instance = std::make_unique<CompositeInterface>(std::move(interfaces));
+            std::cout << "[FORCE_LOG] CompositeInterface created at: "
+                      << g_instance.get() << std::endl;
+        }
 
 #if !defined(COBALT_BUILD_TYPE_GOLD)
-    g_instance = std::make_unique<TracePlatformInterface>(std::move(g_instance));
+        g_instance = std::make_unique<TracePlatformInterface>(std::move(g_instance));
+        std::cout << "[FORCE_LOG] TracePlatformInterface wrapped g_instance at: "
+                  << g_instance.get() << std::endl;
 #endif
-  });
-  return *g_instance;
-}
+    });
 
+    std::cout << "[FORCE_LOG] Returning g_instance at: " << g_instance.get() << std::endl;
+    return *g_instance;
+}
 }  // namespace third_party::starboard::rdk::shared::platform

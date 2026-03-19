@@ -62,6 +62,11 @@ private:
     std::optional<bool> display_settings(SbAccessibilityDisplaySettings& out) override;
     std::optional<bool> caption_settings(SbAccessibilityCaptionSettings& out) override;
   };
+
+  struct RDKAdvertising final : public IAdvertising {
+    std::optional<std::string> advertising_id() override { return {}; }
+    std::optional<bool> limit_ad_tracking() override { return {}; }
+  };
 public:
   RDKServicesInterface();
 
@@ -72,12 +77,14 @@ public:
   IDevice& device() override { return device_; }
   ITextToSpeech& text_to_speech() override { return text_to_speech_; }
   IAccessibility& accessibility() override { return accessibility_; }
+  IAdvertising& advertising() override { return advertising_; }
 
   static bool is_available();
 private:
   RDKDevice device_;
   RDKTextToSpeech text_to_speech_;
   RDKAccessibility accessibility_;
+  RDKAdvertising advertising_;
 };
 
 }  // namespace platform

@@ -33,6 +33,8 @@ namespace platform {
 
 class FireboltInterface final : public PlatformInterface {
 private:
+  struct FireboltLifecycle;
+
   struct FireboltDevice final : public IDevice {
     std::optional<Resolution> video_resolution() override;
     std::optional<float> diagonal_size_in_inches() override;
@@ -97,6 +99,9 @@ private:
 
 public:
   FireboltInterface();
+  ~FireboltInterface();
+
+  void completeInit() override;
 
   void teardown() override;
   void suspend() override;
@@ -109,7 +114,7 @@ public:
   static bool is_available();
 
 private:
-  void lazy_init();
+  bool lazy_init();
 
   std::mutex mutex_;
   std::condition_variable cv_;
@@ -117,6 +122,7 @@ private:
   FireboltDevice device_;
   FireboltTextToSpeech text_to_speech_;
   FireboltAccessibility accessibility_;
+  std::unique_ptr<FireboltLifecycle> lifecycle_;
 };
 
 }  // namespace platform

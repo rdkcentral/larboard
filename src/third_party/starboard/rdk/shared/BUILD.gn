@@ -439,7 +439,7 @@ copy("rdk_cobalt_keymap") {
 }
 
 group("loader_app_rdk_plugin") {
-  data_deps = [ ":loader_app($starboard_toolchain)" ]
+  data_deps = [":loader_app($starboard_toolchain)"]
 }
 
 if (sb_is_evergreen_compatible && current_toolchain == starboard_toolchain) {

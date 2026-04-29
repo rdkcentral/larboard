@@ -113,6 +113,18 @@ public:
   virtual std::optional<bool> caption_settings(SbAccessibilityCaptionSettings& out) = 0;
 };
 
+// Interface for querying advertising settings.
+class IAdvertising {
+public:
+  virtual ~IAdvertising() = default;
+
+  // Return advertising identifier (IFA)
+  virtual std::optional<std::string> advertising_id() = 0;
+
+  // Return Limit Ad Tracking / opt-out
+  virtual std::optional<bool> limit_ad_tracking() = 0;
+};
+
 class PlatformInterface {
  protected:
   PlatformInterface() = default;
@@ -126,6 +138,7 @@ class PlatformInterface {
   virtual IDevice& device() = 0;
   virtual ITextToSpeech& text_to_speech() = 0;
   virtual IAccessibility& accessibility() = 0;
+  virtual IAdvertising& advertising() = 0;
 };
 
 inline IDevice& device() {
@@ -138,6 +151,10 @@ inline ITextToSpeech& text_to_speech() {
 
 inline IAccessibility& accessibility() {
   return PlatformInterface::get().accessibility();
+}
+
+inline IAdvertising& advertising() {
+  return PlatformInterface::get().advertising();
 }
 
 }  // namespace third_party::starboard::rdk::shared::platform

@@ -95,6 +95,11 @@ private:
     std::optional<uint64_t> on_cc_settings_changed_id_;
   };
 
+  struct FireboltAdvertising final : public IAdvertising {
+    std::optional<std::string> advertising_id() override;
+    std::optional<bool> limit_ad_tracking() override;
+  };
+
 public:
   FireboltInterface();
 
@@ -105,6 +110,7 @@ public:
   IDevice& device() override;
   ITextToSpeech& text_to_speech() override;
   IAccessibility& accessibility() override;
+  IAdvertising& advertising() override;
 
   static bool is_available();
 
@@ -117,6 +123,7 @@ private:
   FireboltDevice device_;
   FireboltTextToSpeech text_to_speech_;
   FireboltAccessibility accessibility_;
+  FireboltAdvertising advertising_;
 };
 
 }  // namespace platform

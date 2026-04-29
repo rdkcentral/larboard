@@ -160,6 +160,37 @@ std::optional<bool> FireboltInterface::FireboltDevice::is_disconnected() {
   return {};
 }
 
+// FireboltAdvertising
+std::optional<std::string> FireboltInterface::FireboltAdvertising::advertising_id() {
+  auto &advertising = Firebolt::IFireboltAccessor::Instance().AdvertisingInterface();
+  auto result = advertising.advertisingId();
+  if (!result) {
+    SB_LOG(ERROR) << "advertising.advertisingId() failed, error code = " << result.error();
+    return {};
+  }
+
+  if (result->ifa.empty()) {
+    return {};
+  }
+
+  return result->ifa;
+}
+
+std::optional<bool> FireboltInterface::FireboltAdvertising::limit_ad_tracking() {
+  auto &advertising = Firebolt::IFireboltAccessor::Instance().AdvertisingInterface();
+  auto result = advertising.advertisingId();
+  if (!result) {
+    SB_LOG(ERROR) << "advertising.advertisingId() failed, error code = " << result.error();
+    return {};
+  }
+
+  if (result->lmt.empty()) {
+    return {};
+  }
+
+  return result->lmt == "1";
+}
+
 void FireboltInterface::FireboltDevice::init() {
   using namespace Firebolt::Device;
 
@@ -576,6 +607,11 @@ ITextToSpeech& FireboltInterface::text_to_speech() {
 IAccessibility& FireboltInterface::accessibility() {
   lazy_init();
   return accessibility_;
+}
+
+IAdvertising& FireboltInterface::advertising() {
+  lazy_init();
+  return advertising_;
 }
 
 void FireboltInterface::teardown() {

@@ -65,6 +65,7 @@ private:
 public:
   RDKServicesInterface();
 
+  void completeInit() override;
   void teardown() override;
   void suspend() override;
   void resume() override;

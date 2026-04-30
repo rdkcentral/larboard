@@ -215,6 +215,7 @@ class TracePlatformInterface final : public PlatformInterface {
  public:
   TracePlatformInterface(std::unique_ptr<PlatformInterface>&& api) : api_(std::move(api)) {}
 
+  void completeInit() override { api_->completeInit(); }
   void teardown() override { api_->teardown(); }
   void suspend() override { api_->suspend(); }
   void resume() override { api_->resume(); }
@@ -384,6 +385,12 @@ class CompositeInterface final : public PlatformInterface {
 public:
   CompositeInterface(std::vector<std::unique_ptr<PlatformInterface>> &&interfaces)
     : interfaces_(std::move(interfaces)) {
+  }
+
+  void completeInit() override {
+    forEachInterface([](auto& iface) {
+      iface.completeInit();
+    });
   }
 
   void teardown() override {

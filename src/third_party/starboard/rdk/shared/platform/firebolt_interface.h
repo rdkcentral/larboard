@@ -97,6 +97,12 @@ private:
 
   struct FireboltAdvertising final : public IAdvertising {
     std::optional<Ifa> advertising_id() override;
+    void clear_cache();
+
+  private:
+    std::mutex mutex_;
+    bool did_init_ { false };
+    std::optional<Ifa> cached_ifa_;
   };
 
 public:

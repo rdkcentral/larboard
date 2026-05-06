@@ -64,7 +64,7 @@ private:
   };
 
   struct RDKAdvertising final : public IAdvertising {
-    std::optional<Ifa> advertising_id() override { return {}; }
+    std::optional<Ifa> advertising_id() override;
   };
 public:
   RDKServicesInterface();

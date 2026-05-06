@@ -161,6 +161,13 @@ std::optional<bool> FireboltInterface::FireboltDevice::is_disconnected() {
 
 // FireboltAdvertising
 std::optional<Ifa> FireboltInterface::FireboltAdvertising::advertising_id() {
+  std::unique_lock<std::mutex> lock { mutex_ };
+  if (did_init_) {
+    return cached_ifa_;
+  }
+  did_init_ = true;
+  lock.unlock();
+
   auto &advertising = Firebolt::IFireboltAccessor::Instance().AdvertisingInterface();
   auto result = advertising.advertisingId();
   if (!result) {
@@ -168,7 +175,7 @@ std::optional<Ifa> FireboltInterface::FireboltAdvertising::advertising_id() {
     return {};
   }
 
-  if (result->ifa.empty()) {
+  if (result->ifa.empty()&& result->ifa_type.empty() && !result->lmt) {
     return {};
   }
 
@@ -176,7 +183,16 @@ std::optional<Ifa> FireboltInterface::FireboltAdvertising::advertising_id() {
                << " ifa_type=" << result->ifa_type
                << " lmt=" << result->lmt;
 
-  return Ifa{result->ifa, result->ifa_type, result->lmt};
+  const Ifa ifa{result->ifa, result->ifa_type, result->lmt};
+  lock.lock();
+  cached_ifa_ = ifa;
+  return cached_ifa_;
+}
+
+void FireboltInterface::FireboltAdvertising::clear_cache() {
+  std::unique_lock<std::mutex> lock { mutex_ };
+  did_init_ = false;
+  cached_ifa_.reset();
 }
 
 void FireboltInterface::FireboltDevice::init() {
@@ -595,11 +611,13 @@ IAdvertising& FireboltInterface::advertising() {
 }
 
 void FireboltInterface::teardown() {
+  advertising_.clear_cache();
   Firebolt::IFireboltAccessor::Instance().Disconnect();
 }
 
 void FireboltInterface::suspend() {
   std::unique_lock<std::mutex> lock { mutex_ };
+  advertising_.clear_cache();
   if (connected_.value_or(false)) {
     accessibility_.unsubscribe();
     text_to_speech_.unsubscribe();

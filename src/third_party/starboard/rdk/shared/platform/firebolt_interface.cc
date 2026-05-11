@@ -212,7 +212,7 @@ std::optional<Ifa> FireboltInterface::FireboltAdvertising::advertising_id() {
   if (did_init_) {
     return cached_ifa_;
   }
-
+  did_init_ = true;
   lock.unlock();
 
   auto &advertising = Firebolt::IFireboltAccessor::Instance().AdvertisingInterface();
@@ -224,7 +224,6 @@ std::optional<Ifa> FireboltInterface::FireboltAdvertising::advertising_id() {
     SB_LOG(ERROR) << "advertising.advertisingId() failed, error code = " << result.error();
     return {};
   }
-   did_init_ = true;
 
   cached_ifa_.emplace(Ifa{result->ifa, result->ifa_type, result->lmt});
   return cached_ifa_;

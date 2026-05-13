@@ -53,6 +53,12 @@ config("platform_configuration") {
       "//build/config/compiler:rtti",
     ]
 
+    if (!build_with_separate_cobalt_toolchain && !is_component_build) {
+      configs += [
+        "//build/config/gcc:rpath_for_built_shared_libraries",
+      ]
+    }
+
     libs = [
       "pthread",
     ]

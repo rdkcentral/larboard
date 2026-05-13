@@ -47,7 +47,7 @@ using namespace third_party::starboard::rdk::shared;
 
 namespace {
 
-const char kPlatformName[] = "Linux";
+const char kPlatformName[] = "RDK";
 
 bool CopyStringAndTestIfSuccess(char* out_value,
                                 size_t value_length,

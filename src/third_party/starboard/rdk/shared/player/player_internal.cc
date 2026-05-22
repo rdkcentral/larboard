@@ -1962,12 +1962,23 @@ PlayerImpl::~PlayerImpl() {
   GstBus* bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline_));
   gst_bus_set_sync_handler(bus, nullptr, nullptr, nullptr);
   gst_bus_set_flushing(bus, TRUE);
-  ChangePipelineState(GST_STATE_NULL);
-  gst_object_unref(bus);
   if (playback_thread_.joinable()) {
+    if (playback_thread_.get_id() != std::this_thread::get_id()) {
+      // Execute final transition on the worker loop thread to avoid
+      // cross-thread lock contention in sink state-change handlers.
+      InvokeOnWorkerThreadAndWait(new FunctionTask([this] {
+        ChangePipelineState(GST_STATE_NULL);
+      }, "DestroyChangePipelineStateNull"));
+    } else {
+      ChangePipelineState(GST_STATE_NULL);
+    }
+    gst_object_unref(bus);
     DispatchOnWorkerThread(new PlayerDestroyedTask(
       player_status_func_, player_, ticket_, context_, main_loop_));
     playback_thread_.join();
+  } else {
+    ChangePipelineState(GST_STATE_NULL);
+    gst_object_unref(bus);
   }
   if (audio_caps_) {
     gst_caps_unref(audio_caps_);

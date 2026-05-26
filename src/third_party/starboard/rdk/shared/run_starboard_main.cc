@@ -51,10 +51,7 @@
 #include "starboard/elf_loader/elf_loader_constants.h"
 #endif
 
-namespace third_party {
 namespace starboard {
-namespace rdk {
-namespace shared {
 
 static struct sigaction old_actions[2];
 
@@ -76,10 +73,7 @@ static void UninstallStopSignalHandlers() {
   ::sigaction(SIGTERM, &old_actions[1], nullptr);
 }
 
-}  // namespace shared
-}  // namespace rdk
 }  // namespace starboard
-}  // namespace third_party
 
 namespace {
 
@@ -107,9 +101,9 @@ int SbRunStarboardMain(int argc, char **argv, SbEventHandleCallback callback) {
   setrlimit(RLIMIT_STACK, &stack_size);
 
   starboard::InstallSuspendSignalHandlers();
-  third_party::starboard::rdk::shared::InstallStopSignalHandlers();
+  starboard::InstallStopSignalHandlers();
 
-  third_party::starboard::rdk::shared::media::EnsureGstInit();
+  starboard::EnsureGstInit();
 
   if (const char *env = std::getenv("COBALT_OVERRIDE_GST_DEBUG_LOG");
       env && g_str_equal(env, "1")) {
@@ -117,12 +111,12 @@ int SbRunStarboardMain(int argc, char **argv, SbEventHandleCallback callback) {
     gst_debug_add_log_function(debug_log_override, nullptr, nullptr);
   }
 
-  third_party::starboard::rdk::shared::Application application(callback);
+  starboard::ApplicationRdk application(callback);
   int result = application.Run(argc, argv);
 
   gst_deinit();
 
-  third_party::starboard::rdk::shared::UninstallStopSignalHandlers();
+  starboard::UninstallStopSignalHandlers();
   starboard::UninstallSuspendSignalHandlers();
 
   return result;

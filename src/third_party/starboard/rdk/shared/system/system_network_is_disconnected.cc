@@ -33,7 +33,7 @@
 #include "starboard/event.h"
 #include "third_party/starboard/rdk/shared/platform/platform_interface.h"
 
-using namespace third_party::starboard::rdk::shared;
+using namespace starboard;
 
 bool SbSystemNetworkIsDisconnected() {
   return platform::device().is_disconnected().value_or(false);

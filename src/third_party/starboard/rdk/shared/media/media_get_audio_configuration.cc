@@ -36,7 +36,7 @@
 
 #include "third_party/starboard/rdk/shared/platform/platform_interface.h"
 
-using namespace third_party::starboard::rdk::shared;
+using namespace starboard;
 
 bool SbMediaGetAudioConfiguration(
     int output_index,

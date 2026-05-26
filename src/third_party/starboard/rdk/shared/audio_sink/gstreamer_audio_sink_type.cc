@@ -57,11 +57,7 @@
 
 #include "third_party/starboard/rdk/shared/hang_detector.h"
 
-namespace third_party {
 namespace starboard {
-namespace rdk {
-namespace shared {
-namespace audio_sink {
 namespace {
 
 GST_DEBUG_CATEGORY(cobalt_gst_audio_sink_debug);
@@ -74,8 +70,6 @@ constexpr int kFramesPerRequest = 1024;
 // `kernel-source/common_drivers/drivers/media/avsync/msync.c
 // #define MAX_SESSION_NUM 4
 constexpr int MAX_ALLOWED_SESSION = 4;
-
-using ::starboard::GetBytesPerSample;
 
 class GStreamerAudioSink : public SbAudioSinkPrivate {
  public:
@@ -519,15 +513,6 @@ SbAudioSink GStreamerAudioSinkType::Create(
   return sink;
 }
 
-}  // namespace audio_sink
-}  // namespace shared
-}  // namespace rdk
-}  // namespace starboard
-}  // namespace third_party
-
-using third_party::starboard::rdk::shared::audio_sink::GStreamerAudioSinkType;
-using ::starboard::SbAudioSinkImpl;
-
 // static
 void SbAudioSinkImpl::PlatformInitialize() {
   auto* sink_type = GStreamerAudioSinkType::CreateInstance();
@@ -542,3 +527,5 @@ void SbAudioSinkImpl::PlatformTearDown() {
   GStreamerAudioSinkType::DestroyInstance(
       static_cast<GStreamerAudioSinkType*>(sink_type));
 }
+
+}  // namespace starboard

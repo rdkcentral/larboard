@@ -31,11 +31,15 @@
 #include "third_party/starboard/rdk/shared/system/system_properties_override.h"
 #include "third_party/starboard/rdk/shared/application_rdk.h"
 
-using namespace third_party::starboard::rdk::shared;
-using namespace third_party::starboard::rdk::shared::system;
-
 namespace
 {
+#if defined(ENABLE_RDKSERVICES_API) && ENABLE_RDKSERVICES_API
+using ::starboard::Accessibility;
+#endif
+using ::starboard::ApplicationRdk;
+using ::starboard::Semaphore;
+using ::starboard::system::AdvertisingId;
+using ::starboard::system::SystemProperties;
 
 struct APIContext
 {
@@ -46,7 +50,7 @@ struct APIContext
   void OnInitialize()
   {
     std::lock_guard lock(mutex_);
-    SB_CHECK(nullptr != Application::Get());
+    SB_CHECK(ApplicationRdk::Get());
     state_ = kRunning;
     condition_.notify_all();
   }
@@ -61,20 +65,20 @@ struct APIContext
   {
     std::unique_lock lock(mutex_);
     if (WaitForApp(lock) == kRunning) {
-      Application::Get()->Link(link);
+      ApplicationRdk::Get()->Link(link);
     }
   }
 
   void RequestFreeze() {
-    RequestAndWait(&Application::Freeze);
+    RequestAndWait(&ApplicationRdk::Freeze);
   }
 
   void RequestFocus() {
-    RequestAndWait(&Application::Focus);
+    RequestAndWait(&ApplicationRdk::Focus);
   }
 
   void RequestBlur() {
-    RequestAndWait(&Application::Blur);
+    RequestAndWait(&ApplicationRdk::Blur);
   }
 
   void RequestQuit()
@@ -83,7 +87,7 @@ struct APIContext
     stop_request_cb_ = nullptr;
     stop_request_cb_data_ = nullptr;
     if (state_ == kRunning)
-        Application::Get()->Stop(0);
+        ApplicationRdk::Get()->Stop(/*error_level=*/0);
   }
 
   void SetStopRequestHandler(SbRdkCallbackFunc cb, void* user_data)
@@ -138,7 +142,8 @@ struct APIContext
     if (should_invoke_default) {
       std::lock_guard lock(mutex_);
       if (state_ == kRunning) {
-        Application::Get()->Conceal(NULL, NULL);
+        ApplicationRdk::Get()->Conceal(
+            /*context=*/nullptr, /*callback=*/nullptr);
       }
     }
   }
@@ -186,14 +191,16 @@ private:
     return state_;
   }
 
-  void RequestAndWait(void (Application::*action)(void*, Application::EventHandledCallback)) {
+  void RequestAndWait(
+      void (ApplicationRdk::*action)(
+          void*, ApplicationRdk::EventHandledCallback)) {
     std::unique_lock lock(mutex_);
     if (WaitForApp(lock) == kRunning) {
-      starboard::Semaphore sem;
-      (Application::Get()->*action)(
+      Semaphore sem;
+      (ApplicationRdk::Get()->*action)(
         &sem,
         [](void* ctx) {
-          reinterpret_cast<starboard::Semaphore*>(ctx)->Put();
+          reinterpret_cast<Semaphore*>(ctx)->Put();
         });
       lock.unlock();
       sem.Take();
@@ -217,12 +224,7 @@ SB_ONCE_INITIALIZE_FUNCTION(APIContext, GetContext);
 
 }  // namespace
 
-namespace third_party {
 namespace starboard {
-namespace rdk {
-namespace shared {
-namespace libcobalt_api {
-
 void Initialize()
 {
   GetContext()->OnInitialize();
@@ -233,11 +235,7 @@ void Teardown()
   GetContext()->OnTeardown();
 }
 
-}  // namespace libcobalt_api
-}  // namespace shared
-}  // namespace rdk
 }  // namespace starboard
-}  // namespace third_party
 
 extern "C" {
 

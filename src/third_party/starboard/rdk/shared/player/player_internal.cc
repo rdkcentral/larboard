@@ -66,11 +66,7 @@
 #endif
 #include "third_party/starboard/rdk/shared/player/elements/gst_audio_clipping.h"
 
-namespace third_party {
 namespace starboard {
-namespace rdk {
-namespace shared {
-namespace player {
 
 static constexpr gint64 kCachedPositionRefreshIntervalMs = 50; // milliseconds
 static constexpr int kMaxNumberOfSamplesPerWrite = 10;
@@ -90,10 +86,6 @@ const GstSeekFlags kDefaultSeekFlags = static_cast<GstSeekFlags>(GST_SEEK_FLAG_F
 int Player::MaxNumberOfSamplesPerWrite() {
   return kMaxNumberOfSamplesPerWrite;
 }
-
-using third_party::starboard::rdk::shared::drm::CreateDecryptorElement;
-using third_party::starboard::rdk::shared::media::CodecToGstCaps;
-using ::starboard::shared::starboard::media::IsSDRVideo;
 
 // **************************** GST/GLIB Helpers **************************** //
 
@@ -841,7 +833,6 @@ static void AddColorMetadataToGstCaps(GstCaps* caps, const SbMediaColorMetadata&
     GST_DEBUG ("Setting \"colorimetry\" to %s", tmp);
     g_free (tmp);
   }
-
   GstVideoMasteringDisplayInfo mastering_display_info;
   gst_video_mastering_display_info_init (&mastering_display_info);
 
@@ -857,7 +848,7 @@ static void AddColorMetadataToGstCaps(GstCaps* caps, const SbMediaColorMetadata&
   mastering_display_info.min_display_mastering_luminance = (guint32)ceil(color_metadata.mastering_metadata.luminance_min);
 
   gchar *tmp =
-    gst_video_mastering_display_info_to_string(&mastering_display_info);
+      gst_video_mastering_display_info_to_string(&mastering_display_info);
   gst_caps_set_simple (caps, "mastering-display-info", G_TYPE_STRING, tmp, NULL);
   GST_DEBUG ("Setting \"mastering-display-info\" to %s", tmp);
   g_free (tmp);
@@ -885,7 +876,7 @@ static void AddVideoMimeToGstCaps(GstCaps* caps, const char* mime) {
     return;
   }
 
-  const ::starboard::shared::starboard::media::MimeType mime_type { mime };
+  const ::starboard::MimeType mime_type { mime };
   if (!mime_type.is_valid()) {
     GST_DEBUG("Invalid mime_type.");
     return;
@@ -934,7 +925,6 @@ static void AddVideoMimeToGstCaps(GstCaps* caps, const char* mime) {
 
 static void AddVideoInfoToGstCaps(const SbMediaVideoStreamInfo& info, GstCaps* caps) {
   AddColorMetadataToGstCaps(caps, info.color_metadata);
-
   gst_caps_set_simple (caps,
     "width", G_TYPE_INT, info.frame_width,
     "height", G_TYPE_INT, info.frame_height,
@@ -1023,6 +1013,7 @@ static GstElement* CreatePayloader() {
 
   return gst_element_factory_create(factory, nullptr);
 }
+
 
 static GstElement* CreateGstElement(const gchar* factory_name, const gchar* name_format, ...) {
   GstElement *result;
@@ -1908,13 +1899,12 @@ PlayerImpl::PlayerImpl(SbPlayer player,
   }
 
   if (audio_codec_ == kSbMediaAudioCodecPcm) {
-    GstElement* filter = elements::CreateAudioClippingElement(nullptr);
+    GstElement* filter = CreateAudioClippingElement(nullptr);
     g_object_set(pipeline_, "audio-filter", filter, nullptr);
   }
 
   if (drm_system_) {
 #if defined(HAS_OCDM)
-    using third_party::starboard::rdk::shared::drm::DrmSystemOcdm;
     reinterpret_cast<DrmSystemOcdm*>( drm_system_ )->AddRef();
 #endif
     GstContext* context = gst_context_new("cobalt-drm-system", FALSE);
@@ -1925,7 +1915,6 @@ PlayerImpl::PlayerImpl(SbPlayer player,
   }
 
   ChangePipelineState(GST_STATE_READY);
-
   g_main_context_pop_thread_default(main_loop_context_);
 
   if (gst_element_get_state(pipeline_, nullptr, nullptr, 0) == GST_STATE_CHANGE_FAILURE)
@@ -1986,7 +1975,6 @@ PlayerImpl::~PlayerImpl() {
   g_object_unref(pipeline_);
   if (drm_system_) {
 #if defined(HAS_OCDM)
-    using third_party::starboard::rdk::shared::drm::DrmSystemOcdm;
     reinterpret_cast<DrmSystemOcdm*>( drm_system_ )->Release();
 #endif
   }
@@ -3415,6 +3403,7 @@ void PlayerImpl::ConfigureLimitedVideo() {
     gst_structure_set(context_structure, "res-usage", G_TYPE_UINT, 0x0u, nullptr);
     gst_element_set_context(GST_ELEMENT(pipeline_), context);
     gst_context_unref(context);
+
   }
   // enforce no audio
   audio_codec_ = kSbMediaAudioCodecNone;
@@ -3593,22 +3582,16 @@ void PlayerImpl::AudioConfigurationChanged() {
 }  // namespace
 
 void ForceStop() {
-  using third_party::starboard::rdk::shared::player::GetPlayerRegistry;
   GetPlayerRegistry()->ForceStop();
 }
 
 void AudioConfigurationChanged() {
-  using third_party::starboard::rdk::shared::player::GetPlayerRegistry;
   GetPlayerRegistry()->AudioConfigurationChanged();
 }
 
-}  // namespace player
-}  // namespace shared
-}  // namespace rdk
 }  // namespace starboard
-}  // namespace third_party
 
-using third_party::starboard::rdk::shared::player::PlayerImpl;
+using ::starboard::PlayerImpl;
 
 SbPlayerPrivate::SbPlayerPrivate(
     SbWindow window,
@@ -3624,7 +3607,7 @@ SbPlayerPrivate::SbPlayerPrivate(
     void* context,
     SbPlayerOutputMode output_mode,
     SbDecodeTargetGraphicsContextProvider* provider) {
-  if ( third_party::starboard::rdk::shared::player::GetPlayerRegistry()->CanCreate(max_video_capabilities) ) {
+  if (starboard::GetPlayerRegistry()->CanCreate(max_video_capabilities)) {
     player_.reset(
       new PlayerImpl(this,
                      window,

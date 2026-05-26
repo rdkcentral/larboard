@@ -41,10 +41,6 @@
 
 #include <cstring>
 
-using ::starboard::shared::starboard::media::IsSDRVideo;
-using ::starboard::shared::starboard::media::MimeType;
-using namespace third_party::starboard::rdk::shared;
-
 namespace starboard {
 
 bool MediaIsVideoSupported(SbMediaVideoCodec video_codec,
@@ -101,8 +97,7 @@ bool MediaIsVideoSupported(SbMediaVideoCodec video_codec,
   }
 
   return bitrate <= kSbMediaMaxVideoBitrateInBitsPerSecond && fps <= 60 &&
-         third_party::starboard::rdk::shared::media::
-             GstRegistryHasElementForMediaType(video_codec);
+         GstRegistryHasElementForMediaType(video_codec);
 }
 
 }  // namespace starboard

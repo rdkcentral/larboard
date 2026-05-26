@@ -39,10 +39,7 @@
 using namespace std::chrono_literals;
 using namespace std::chrono;
 
-namespace third_party {
 namespace starboard {
-namespace rdk {
-namespace shared {
 
 namespace {
 
@@ -244,7 +241,4 @@ void HangMonitor::Reset() {
   tid_ = get_tid();
 }
 
-}  // namespace shared
-}  // namespace rdk
 }  // namespace starboard
-}  // namespace third_party

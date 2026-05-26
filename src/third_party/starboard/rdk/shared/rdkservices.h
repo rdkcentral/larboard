@@ -23,10 +23,7 @@
 
 #include <string>
 
-namespace third_party {
 namespace starboard {
-namespace rdk {
-namespace shared {
 
 class Accessibility {
 public:
@@ -92,9 +89,6 @@ private:
 };
 
 }  // namespace platform
-}  // namespace shared
-}  // namespace rdk
 }  // namespace starboard
-}  // namespace third_party
 
 #endif  // THIRD_PARTY_STARBOARD_RDK_SHARED_RDKSERVICES_H_

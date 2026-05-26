@@ -57,10 +57,7 @@ MODULE_NAME_DECLARATION(BUILD_REFERENCE);
 
 using namespace  WPEFramework;
 
-namespace third_party {
 namespace starboard {
-namespace rdk {
-namespace shared {
 
 namespace {
 
@@ -315,7 +312,7 @@ public:
     if (!notify_app)
       return;
 
-    if (auto* app = Application::Get(); app != nullptr) {
+    if (auto* app = ApplicationRdk::Get(); app != nullptr) {
       if (was_cc_enabled != caption_settings_.is_enabled)
         app->InjectAccessibilityCaptionSettingsChanged();
 
@@ -377,9 +374,9 @@ public:
        notify_on_change &= (caption_settings_.is_enabled != enabled);
        caption_settings_.is_enabled = enabled;
     }
-    if (notify_on_change && Application::Get()) {
+    if (notify_on_change && ApplicationRdk::Get()) {
       SB_LOG(INFO) << "Accessibility closed caption setting changed, enabled = " << enabled;
-      Application::Get()->InjectAccessibilityCaptionSettingsChanged();
+      ApplicationRdk::Get()->InjectAccessibilityCaptionSettingsChanged();
     }
   }
 
@@ -389,9 +386,9 @@ public:
       notify_on_change &= (display_settings_.is_high_contrast_text_enabled != enabled);
       display_settings_.is_high_contrast_text_enabled = enabled;
     }
-    if (notify_on_change && Application::Get()) {
+    if (notify_on_change && ApplicationRdk::Get()) {
       SB_LOG(INFO) << "Accessibility high contrast text setting changed, enabled = " << enabled;
-      Application::Get()->InjectAccessibilitySettingsChanged();
+      ApplicationRdk::Get()->InjectAccessibilitySettingsChanged();
     }
   }
 
@@ -401,9 +398,9 @@ public:
       notify_on_change &= (is_voice_guidance_enabled_ != enabled);
       is_voice_guidance_enabled_ = enabled;
     }
-    if (notify_on_change && Application::Get()) {
+    if (notify_on_change && ApplicationRdk::Get()) {
       SB_LOG(INFO) << "Accessibility voice guidance setting changed, enabled = " << enabled;
-      Application::Get()->InjectAccessibilityTextToSpeechSettingsChanged(enabled);
+      ApplicationRdk::Get()->InjectAccessibilityTextToSpeechSettingsChanged(enabled);
     }
   }
 
@@ -620,7 +617,7 @@ struct AuthServiceImpl {
     }
 
     // Try to read directly from file
-    ::starboard::ScopedFile file(kAuthServiceExperienceFile, O_RDONLY);
+    ScopedFile file(kAuthServiceExperienceFile, O_RDONLY);
     if ( file.IsValid() ) {
       const int kBufferSize = 128;
       char buffer[kBufferSize];
@@ -812,7 +809,6 @@ void DisplayInfoImpl::Refresh() {
 
   if (needs_refresh) {
     SbEventSchedule([](void* data) {
-      using ::starboard::MimeSupportabilityCache;
       MimeSupportabilityCache::GetInstance()->ClearCachedMimeSupportabilities();
       GetDisplayInfo()->ForceNeedsRefresh();
     }, nullptr, kSbTimeSecond);
@@ -830,10 +826,9 @@ void DisplayInfoImpl::OnUpdated(const Core::JSON::String&) {
   if (needs_refresh_.load() == false) {
     needs_refresh_.store(true);
     SbEventSchedule([](void* data) {
-      using ::starboard::MimeSupportabilityCache;
       // Clear mime cache until display info is updated
       MimeSupportabilityCache::GetInstance()->ClearCachedMimeSupportabilities();
-      Application::Get()->DisplayInfoChanged();
+      ApplicationRdk::Get()->DisplayInfoChanged();
     }, nullptr, 0);
   }
 }
@@ -962,9 +957,9 @@ private:
       if (is_connected_.load() != has_connected_interface) {
         is_connected_.store(has_connected_interface);
         if (has_connected_interface)
-          Application::Get()->InjectOsNetworkConnectedEvent();
+          ApplicationRdk::Get()->InjectOsNetworkConnectedEvent();
         else
-          Application::Get()->InjectOsNetworkDisconnectedEvent();
+          ApplicationRdk::Get()->InjectOsNetworkDisconnectedEvent();
       }
     }
 
@@ -1213,7 +1208,7 @@ void DeviceInfoImpl::OnBluetoothStatusChanged(const StatusChangedData& data) {
   // Interrupt player only if new wireless device got connected
   if (data.Connected.Value() && !hasBluetoothConnector()) {
     SbEventSchedule([](void*) {
-      player::AudioConfigurationChanged();
+      AudioConfigurationChanged();
     }, nullptr, 0);
   }
 }
@@ -1299,7 +1294,7 @@ void DeviceInfoImpl::Refresh() {
 
   SB_LOG(INFO) << "Updated audio configuration:";
   for (const auto& config : audio_configs) {
-    SB_LOG(INFO) << " connector: " << (uint32_t) config.connector << " (" << ::starboard::GetMediaAudioConnectorName(config.connector) << ")";
+    SB_LOG(INFO) << " connector: " << (uint32_t) config.connector << " (" << GetMediaAudioConnectorName(config.connector) << ")";
   }
 
   std::lock_guard lock(mutex_);
@@ -1708,7 +1703,4 @@ void RDKServicesInterface::resume() {
 }
 
 }  // namespace platform
-}  // namespace shared
-}  // namespace rdk
 }  // namespace starboard
-}  // namespace third_party

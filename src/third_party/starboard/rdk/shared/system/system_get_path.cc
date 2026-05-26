@@ -102,7 +102,6 @@ bool GetExecutableDirectory(char* out_path, int path_size) {
   return true;
 }
 
-
 // Checks if content directory is valid.
 bool IsValidContentDirectory(const char* path) {
   if (!path || path[0] == '\0') {
@@ -119,10 +118,7 @@ bool IsValidContentDirectory(const char* path) {
 
 } // namespace
 
-namespace third_party {
 namespace starboard {
-namespace rdk {
-namespace shared {
 namespace system {
 
 // Gets the path to the content directory.
@@ -158,10 +154,7 @@ bool GetContentDirectory(char* out_path, int path_size) {
 }
 
 }  // namespace system
-}  // namespace shared
-}  // namespace rdk
 }  // namespace starboard
-}  // namespace third_party
 
 namespace {
 
@@ -279,7 +272,7 @@ bool GetTemporaryDirectory(char* out_path, int path_size) {
 }  // namespace
 
 bool SbSystemGetPath(SbSystemPathId path_id, char* out_path, int path_size) {
-  using third_party::starboard::rdk::shared::system::GetContentDirectory;
+  using starboard::system::GetContentDirectory;
 
   if (!out_path || !path_size) {
     return false;

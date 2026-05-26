@@ -31,7 +31,7 @@
 #include "starboard/speech_synthesis.h"
 #include "third_party/starboard/rdk/shared/platform/platform_interface.h"
 
-using namespace third_party::starboard::rdk::shared;
+using namespace starboard;
 
 void SbSpeechSynthesisCancel() {
   platform::text_to_speech().cancel();

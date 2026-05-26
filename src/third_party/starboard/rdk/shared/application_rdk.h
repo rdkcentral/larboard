@@ -45,19 +45,15 @@
 #include <essos-app.h>
 #include <chrono>
 
-namespace third_party {
 namespace starboard {
-namespace rdk {
-namespace shared {
 
-class Application : public ::starboard::QueueApplication {
+class ApplicationRdk : public QueueApplication {
  public:
-  explicit Application(SbEventHandleCallback sb_event_handle_callback);
-  ~Application() override;
+  explicit ApplicationRdk(SbEventHandleCallback sb_event_handle_callback);
+  ~ApplicationRdk() override;
 
-  static third_party::starboard::rdk::shared::Application* Get() {
-    return static_cast<third_party::starboard::rdk::shared::Application*>(
-        ::starboard::Application::Get());
+  static ApplicationRdk* Get() {
+    return static_cast<ApplicationRdk*>(Application::Get());
   }
 
   SbWindow CreateSbWindow(const SbWindowOptions* options);
@@ -76,7 +72,7 @@ class Application : public ::starboard::QueueApplication {
   void InjectAccessibilityTextToSpeechSettingsChanged(bool enabled);
 
  protected:
-  // --- Application overrides ---
+  // --- ApplicationRdk overrides ---
   void Initialize() override;
   void Teardown() override;
   void Inject(Event* e) override;
@@ -126,9 +122,6 @@ class Application : public ::starboard::QueueApplication {
   std::unique_ptr<HangMonitor> hang_monitor_ { nullptr };
 };
 
-}  // namespace shared
-}  // namespace rdk
 }  // namespace starboard
-}  // namespace third_party
 
 #endif  // THIRD_PARTY_STARBOARD_RDK_SHARED_APPLICATION_RDK_H_

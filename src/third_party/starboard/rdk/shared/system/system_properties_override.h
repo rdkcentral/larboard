@@ -21,7 +21,7 @@
 
 #include <string>
 
-namespace third_party::starboard::rdk::shared::system {
+namespace starboard::system {
 
 class SystemProperties {
 public:

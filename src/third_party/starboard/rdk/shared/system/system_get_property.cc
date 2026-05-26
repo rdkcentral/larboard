@@ -45,8 +45,8 @@
 #include "third_party/starboard/rdk/shared/system/system_properties_override.h"
 #include "third_party/starboard/rdk/shared/log_override.h"
 
-using namespace third_party::starboard::rdk::shared;
-using namespace third_party::starboard::rdk::shared::system;
+using namespace starboard;
+using namespace starboard::system;
 
 namespace {
 
@@ -70,7 +70,6 @@ bool GetFriendlyName(char* out_value, int value_length) {
   return CopyStringAndTestIfSuccess(out_value, value_length,
                                     SB_PLATFORM_FRIENDLY_NAME);
 #endif  // defined(SB_PLATFORM_FRIENDLY_NAME)
-
   return false;
 }
 
@@ -83,7 +82,6 @@ bool GetModelYear(char* out_value, int value_length) {
   return CopyStringAndTestIfSuccess(out_value, value_length,
     std::to_string(SB_PLATFORM_MODEL_YEAR).c_str());
 #endif  // defined(SB_PLATFORM_MODEL_YEAR)
-
   return false;
 }
 
@@ -96,8 +94,7 @@ bool GetModelName(char* out_value, int value_length) {
     return CopyStringAndTestIfSuccess(out_value, value_length, env);
   }
 
-  return CopyStringAndTestIfSuccess(out_value, value_length,
-    SB_PLATFORM_MODEL_NAME);
+  return CopyStringAndTestIfSuccess(out_value, value_length, SB_PLATFORM_MODEL_NAME);
 }
 
 bool GetBrandName(char* out_value, int value_length) {
@@ -113,8 +110,7 @@ bool GetBrandName(char* out_value, int value_length) {
     return CopyStringAndTestIfSuccess(out_value, value_length, env);
   }
 
-  return CopyStringAndTestIfSuccess(out_value, value_length,
-    SB_PLATFORM_OPERATOR_NAME);
+  return CopyStringAndTestIfSuccess(out_value, value_length, SB_PLATFORM_OPERATOR_NAME);
 }
 
 bool GetManufacturerName(char* out_value, int value_length) {
@@ -163,7 +159,7 @@ bool GetCertificationScope(char* out_value, int value_length) {
   if ( cert_scope_file_name == nullptr )
     cert_scope_file_name = "/opt/drm/0681000006810001.bin";
 
-  ::starboard::ScopedFile file(cert_scope_file_name, O_RDONLY);
+  starboard::ScopedFile file(cert_scope_file_name, O_RDONLY);
   if ( !file.IsValid() ) {
     SB_LOG(INFO) << "Cannot open cert scope file '" << cert_scope_file_name << "'";
     return false;

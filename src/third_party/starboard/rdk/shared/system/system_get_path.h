@@ -32,18 +32,12 @@
 #ifndef THIRD_PARTY_STARBOARD_RDK_SHARED_SYSTEM_SYSTEM_GET_PATH_H_
 #define THIRD_PARTY_STARBOARD_RDK_SHARED_SYSTEM_SYSTEM_GET_PATH_H_
 
-namespace third_party {
 namespace starboard {
-namespace rdk {
-namespace shared {
 namespace system {
 
 bool GetContentDirectory(char* out_path, int path_size);
 
 }  // namespace system
-}  // namespace shared
-}  // namespace rdk
 }  // namespace starboard
-}  // namespace third_party
 
 #endif  // THIRD_PARTY_STARBOARD_RDK_SHARED_SYSTEM_SYSTEM_GET_PATH_H_

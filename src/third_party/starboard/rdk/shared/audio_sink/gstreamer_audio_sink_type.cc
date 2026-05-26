@@ -57,11 +57,7 @@
 
 #include "third_party/starboard/rdk/shared/hang_detector.h"
 
-namespace third_party {
 namespace starboard {
-namespace rdk {
-namespace shared {
-namespace audio_sink {
 namespace {
 
 GST_DEBUG_CATEGORY(cobalt_gst_audio_sink_debug);
@@ -519,13 +515,9 @@ SbAudioSink GStreamerAudioSinkType::Create(
   return sink;
 }
 
-}  // namespace audio_sink
-}  // namespace shared
-}  // namespace rdk
 }  // namespace starboard
-}  // namespace third_party
 
-using third_party::starboard::rdk::shared::audio_sink::GStreamerAudioSinkType;
+using starboard::GStreamerAudioSinkType;
 using ::starboard::SbAudioSinkImpl;
 
 // static

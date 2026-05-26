@@ -28,7 +28,7 @@ struct SbAccessibilityCaptionSettings;
 struct SbAccessibilityDisplaySettings;
 struct SbMediaAudioConfiguration;
 
-namespace third_party::starboard::rdk::shared::platform {
+namespace starboard::platform {
 
 struct HDRFormat {
   bool hdr10{false};
@@ -160,4 +160,4 @@ inline IAdvertising& advertising() {
   return PlatformInterface::get().advertising();
 }
 
-}  // namespace third_party::starboard::rdk::shared::platform
+}  // namespace starboard::platform

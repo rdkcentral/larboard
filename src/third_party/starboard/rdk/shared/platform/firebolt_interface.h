@@ -26,10 +26,7 @@
 #include <optional>
 #include <condition_variable>
 
-namespace third_party {
 namespace starboard {
-namespace rdk {
-namespace shared {
 namespace platform {
 
 class FireboltInterface final : public PlatformInterface {
@@ -133,7 +130,4 @@ private:
 };
 
 }  // namespace platform
-}  // namespace shared
-}  // namespace rdk
 }  // namespace starboard
-}  // namespace third_party

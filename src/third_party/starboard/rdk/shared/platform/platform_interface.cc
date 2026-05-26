@@ -34,7 +34,7 @@
 #include <functional>
 #include <cstring>
 
-namespace third_party::starboard::rdk::shared::platform {
+namespace starboard::platform {
 
 std::ostream& operator<<(std::ostream& out, const HDRFormat& v) {
   return out << "{\"hdr10\":" << v.hdr10
@@ -496,4 +496,4 @@ PlatformInterface& PlatformInterface::get() {
   return *g_instance;
 }
 
-}  // namespace third_party::starboard::rdk::shared::platform
+}  // namespace starboard::platform

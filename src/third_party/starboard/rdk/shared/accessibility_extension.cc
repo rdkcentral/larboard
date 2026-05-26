@@ -20,17 +20,13 @@
 #include "third_party/starboard/rdk/shared/accessibility_extension.h"
 #include "third_party/starboard/rdk/shared/platform/platform_interface.h"
 
-namespace third_party {
 namespace starboard {
-namespace rdk {
-namespace shared {
 
 namespace accessibility {
 
 bool GetTextToSpeechSettings(SbAccessibilityTextToSpeechSettings* out_setting) {
   if (!out_setting ||
-      !::starboard::common::MemoryIsZero(
-        out_setting, sizeof(SbAccessibilityTextToSpeechSettings))) {
+      !MemoryIsZero(out_setting, sizeof(SbAccessibilityTextToSpeechSettings))) {
     return false;
   }
   out_setting->has_text_to_speech_setting = true;
@@ -41,8 +37,7 @@ bool GetTextToSpeechSettings(SbAccessibilityTextToSpeechSettings* out_setting) {
 
 bool GetDisplaySettings(SbAccessibilityDisplaySettings* out_setting) {
   if (!out_setting ||
-      !::starboard::common::MemoryIsZero(
-        out_setting, sizeof(SbAccessibilityDisplaySettings))) {
+      !MemoryIsZero(out_setting, sizeof(SbAccessibilityDisplaySettings))) {
     return false;
   }
 
@@ -51,7 +46,7 @@ bool GetDisplaySettings(SbAccessibilityDisplaySettings* out_setting) {
 
 bool GetCaptionSettings(SbAccessibilityCaptionSettings* out_setting) {
   if (!out_setting ||
-      !::starboard::common::MemoryIsZero(
+      !::starboard::MemoryIsZero(
           out_setting, sizeof(SbAccessibilityCaptionSettings))) {
     return false;
   }
@@ -78,7 +73,4 @@ const void* GetAccessibilityApi() {
   return &kAccessibilityAPI;
 }
 
-}  // namespace shared
-}  // namespace rdk
 }  // namespace starboard
-}  // namespace third_party

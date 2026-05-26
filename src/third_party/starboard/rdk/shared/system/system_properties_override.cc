@@ -26,7 +26,7 @@
 
 using namespace  WPEFramework;
 
-namespace third_party::starboard::rdk::shared::system {
+namespace starboard::system {
 
 namespace {
 

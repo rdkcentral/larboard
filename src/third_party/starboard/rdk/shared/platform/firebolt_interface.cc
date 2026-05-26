@@ -31,12 +31,9 @@
 #include <cstring>
 
 using namespace std::chrono_literals;
-using starboard::shared::starboard::media::MimeSupportabilityCache;
+using starboard::MimeSupportabilityCache;
 
-namespace third_party {
 namespace starboard {
-namespace rdk {
-namespace shared {
 namespace platform {
 
 namespace {
@@ -347,8 +344,8 @@ void FireboltInterface::FireboltTextToSpeech::set_is_enabled(bool enabled) {
       should_notify_app = true;
     }
   }
-  if (should_notify_app && Application::Get()) {
-    Application::Get()->InjectAccessibilityTextToSpeechSettingsChanged();
+  if (should_notify_app && ApplicationRdk::Get()) {
+    ApplicationRdk::Get()->InjectAccessibilityTextToSpeechSettingsChanged();
   }
 }
 
@@ -419,8 +416,8 @@ void FireboltInterface::FireboltAccessibility::set_high_contrast_ui(bool enabled
       should_notify_app = true;
     }
   }
-  if (should_notify_app && Application::Get()) {
-    Application::Get()->InjectAccessibilitySettingsChanged();
+  if (should_notify_app && ApplicationRdk::Get()) {
+    ApplicationRdk::Get()->InjectAccessibilitySettingsChanged();
   }
 }
 
@@ -433,8 +430,8 @@ void FireboltInterface::FireboltAccessibility::set_cc_enabled(bool enabled) {
       should_notify_app = true;
     }
   }
-  if (should_notify_app && Application::Get()) {
-    Application::Get()->InjectAccessibilityCaptionSettingsChanged();
+  if (should_notify_app && ApplicationRdk::Get()) {
+    ApplicationRdk::Get()->InjectAccessibilityCaptionSettingsChanged();
   }
 }
 
@@ -655,7 +652,4 @@ void FireboltInterface::resume() {
 }
 
 }  // namespace platform
-}  // namespace shared
-}  // namespace rdk
 }  // namespace starboard
-}  // namespace third_party

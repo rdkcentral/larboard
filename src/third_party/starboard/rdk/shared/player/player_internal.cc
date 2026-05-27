@@ -1427,7 +1427,7 @@ class PlayerImpl : public Player {
   void Seek(int64_t seek_to_timestamp, int ticket) override;
   bool SetRate(double rate) override;
   void GetInfo(SbPlayerInfo* info) override;
-  void SetBounds(int zindex, int x, int y, int w, int h) override;
+  void SetBounds(int zindex, const ::starboard::Rect& rect) override;
 
   GstElement* GetPipeline() const { return pipeline_;  }
   bool IsValid() const { return playback_thread_.joinable(); }
@@ -1506,17 +1506,6 @@ class PlayerImpl : public Player {
     GstSample* sample_;
     uint64_t serial_;
     GstClockTime timestamp_;
-  };
-
-  struct PendingBounds {
-    PendingBounds() : x{0}, y{0}, w{0}, h{0} {}
-    PendingBounds(int ix, int iy, int iw, int ih)
-        : x{ix}, y{iy}, w{iw}, h{ih} {}
-    bool IsEmpty() { return w == 0 && h == 0; }
-    int x;
-    int y;
-    int w;
-    int h;
   };
 
   using PendingSamples = std::deque<PendingSample>;
@@ -1698,7 +1687,7 @@ class PlayerImpl : public Player {
   PendingSamples pending_samples_;
   mutable GstClockTime cached_position_ns_{GST_CLOCK_TIME_NONE};
   gint64 cached_position_expiration_time_ {0};
-  PendingBounds pending_bounds_;
+  ::starboard::Rect pending_bounds_;
   SbMediaColorMetadata color_metadata_{};
   bool force_stop_ { false };
   uint64_t samples_serial_[kMediaNumber] { 0 };
@@ -2071,7 +2060,7 @@ gboolean PlayerImpl::HandleBusMessage(GstBus* bus, GstMessage* message) {
           bool is_rate_pending = false;
           double rate = 0.;
           GstClockTime pending_seek_pos = GST_CLOCK_TIME_NONE;
-          PendingBounds bounds;
+          ::starboard::Rect bounds;
 
           {
             std::lock_guard lock(mutex_);
@@ -2096,7 +2085,7 @@ gboolean PlayerImpl::HandleBusMessage(GstBus* bus, GstMessage* message) {
           }
 
           if (video_codec_ != kSbMediaVideoCodecNone && !bounds.IsEmpty()) {
-            SetBounds(0, bounds.x, bounds.y, bounds.w, bounds.h);
+            SetBounds(0, bounds);
           }
 
           if (is_rate_pending && GST_STATE(pipeline_) == GST_STATE_PLAYING) {
@@ -2981,22 +2970,22 @@ void PlayerImpl::GetInfo(SbPlayerInfo* out_player_info) {
     out_player_info->corrupted_video_frames);
 }
 
-void PlayerImpl::SetBounds(int zindex, int x, int y, int w, int h) {
-  GST_TRACE_OBJECT(pipeline_, "Set Bounds: %d %d %d %d %d", zindex, x, y, w, h);
+void PlayerImpl::SetBounds(int zindex, const ::starboard::Rect& rect) {
+  GST_TRACE_OBJECT(pipeline_, "Set Bounds: %d %d %d %d %d", zindex, rect.x, rect.y, rect.size.width, rect.size.height);
   GstElement* vid_sink = nullptr;
   g_object_get(pipeline_, "video-sink", &vid_sink, nullptr);
   if (!vid_sink) {
     std::lock_guard lock(mutex_);
-    pending_bounds_ = PendingBounds{x, y, w, h};
+    pending_bounds_ = rect;
     return;
   }
   if (g_object_class_find_property(G_OBJECT_GET_CLASS(vid_sink), "rectangle")) {
-    gchar* rect = g_strdup_printf("%d,%d,%d,%d", x, y, w, h);
-    g_object_set(vid_sink, "rectangle", rect, nullptr);
-    g_free(rect);
+    gchar* rect_str = g_strdup_printf("%d,%d,%d,%d", rect.x, rect.y, rect.size.width, rect.size.height);
+    g_object_set(vid_sink, "rectangle", rect_str, nullptr);
+    g_free(rect_str);
   }
   else {
-    gst_video_overlay_set_render_rectangle(GST_VIDEO_OVERLAY(pipeline_), x, y, w, h);
+    gst_video_overlay_set_render_rectangle(GST_VIDEO_OVERLAY(pipeline_), rect.x, rect.y, rect.size.width, rect.size.height);
   }
   gst_object_unref(GST_OBJECT(vid_sink));
 }

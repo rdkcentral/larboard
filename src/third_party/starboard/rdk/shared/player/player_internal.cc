@@ -44,6 +44,8 @@
 #include <limits>
 #include <condition_variable>
 #include <mutex>
+#include <unistd.h>
+
 #include <optional>
 
 #include "starboard/common/once.h"
@@ -1974,7 +1976,7 @@ gboolean PlayerImpl::BusMessageCallback(GstBus* bus,
 }
 
 gboolean PlayerImpl::HandleBusMessage(GstBus* bus, GstMessage* message) {
-  GST_TRACE("%d", SbThreadGetId());
+  GST_TRACE("%d", gettid());
   GST_LOG_OBJECT(pipeline_, "Got GST message '%s' from '%s'", GST_MESSAGE_TYPE_NAME(message), GST_MESSAGE_SRC_NAME(message));
 
   switch (GST_MESSAGE_TYPE(message)) {
@@ -2164,7 +2166,7 @@ gboolean PlayerImpl::HandleBusMessage(GstBus* bus, GstMessage* message) {
 void* PlayerImpl::ThreadEntryPoint(void* context) {
   setpriority(PRIO_PROCESS, 0, ::starboard::SbPriorityToNice(kSbThreadPriorityRealTime));
   SB_DCHECK(context);
-  GST_TRACE("%d", SbThreadGetId());
+  GST_TRACE("%d", gettid());
 
   PlayerImpl* self = reinterpret_cast<PlayerImpl*>(context);
   self->state_ = State::kInitial;
@@ -2187,7 +2189,7 @@ guint PlayerImpl::DispatchOnWorkerThread(Task* task) const {
   g_source_set_callback(src,
     [](gpointer userData) -> gboolean {
       auto* task = static_cast<Task*>(userData);
-      GST_TRACE("%d", SbThreadGetId());
+      GST_TRACE("%d", gettid());
       task->PrintInfo();
       task->Do();
       return G_SOURCE_REMOVE;
@@ -2218,7 +2220,7 @@ void PlayerImpl::InvokeOnWorkerThreadAndWait(Task* task) {
     G_PRIORITY_HIGH,
     [](gpointer data) -> gboolean {
       auto* ctx = static_cast<InvokeContext*>(data);
-      GST_TRACE("%d", SbThreadGetId());
+      GST_TRACE("%d", gettid());
       ctx->task->PrintInfo();
       ctx->task->Do();
       ctx->mutex.lock();

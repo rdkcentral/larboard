@@ -31,10 +31,10 @@
 //
 #include "starboard/system.h"
 #include "starboard/event.h"
-#include "third_party/starboard/rdk/shared/rdkservices.h"
+#include "third_party/starboard/rdk/shared/platform/platform_interface.h"
 
-using third_party::starboard::rdk::shared::NetworkInfo;
+using namespace third_party::starboard::rdk::shared;
 
 bool SbSystemNetworkIsDisconnected() {
-  return NetworkInfo::IsDisconnected();
+  return platform::device().is_disconnected().value_or(false);
 }

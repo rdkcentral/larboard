@@ -18,7 +18,7 @@
 #include "starboard/common/memory.h"
 
 #include "third_party/starboard/rdk/shared/accessibility_extension.h"
-#include "third_party/starboard/rdk/shared/rdkservices.h"
+#include "third_party/starboard/rdk/shared/platform/platform_interface.h"
 
 namespace third_party {
 namespace starboard {
@@ -35,7 +35,7 @@ bool GetTextToSpeechSettings(SbAccessibilityTextToSpeechSettings* out_setting) {
   }
   out_setting->has_text_to_speech_setting = true;
   out_setting->is_text_to_speech_enabled =
-      third_party::starboard::rdk::shared::TextToSpeech::IsEnabled();
+    platform::text_to_speech().is_enabled().value_or(false);
   return true;
 }
 
@@ -46,17 +46,17 @@ bool GetDisplaySettings(SbAccessibilityDisplaySettings* out_setting) {
     return false;
   }
 
-  return third_party::starboard::rdk::shared::Accessibility::GetDisplaySettings(out_setting);
+  return platform::accessibility().display_settings(*out_setting).value_or(false);
 }
 
-bool GetCaptionSettings(SbAccessibilityCaptionSettings* caption_settings) {
-  if (!caption_settings ||
+bool GetCaptionSettings(SbAccessibilityCaptionSettings* out_setting) {
+  if (!out_setting ||
       !::starboard::common::MemoryIsZero(
-          caption_settings, sizeof(SbAccessibilityCaptionSettings))) {
+          out_setting, sizeof(SbAccessibilityCaptionSettings))) {
     return false;
   }
 
-  return third_party::starboard::rdk::shared::Accessibility::GetCaptionSettings(caption_settings);
+  return platform::accessibility().caption_settings(*out_setting).value_or(false);
 }
 
 bool SetCaptionsEnabled(bool enabled) {

@@ -132,7 +132,7 @@ class DrmSystemOcdm : public SbDrmSystemPrivate, public ::starboard::RefCountedT
   SbEventId event_id_;
   ::starboard::Mutex mutex_;
 
-  std::vector<uint8_t> metrics_;
+  std::string metrics_;
 };
 
 }  // namespace drm

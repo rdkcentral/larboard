@@ -39,6 +39,7 @@
 #include "third_party/starboard/rdk/shared/window/window_internal.h"
 #include "third_party/starboard/rdk/shared/log_override.h"
 #include "third_party/starboard/rdk/shared/time_constants.h"
+#include "third_party/starboard/rdk/shared/platform/platform_interface.h"
 
 #include <fcntl.h>
 #include <poll.h>
@@ -152,7 +153,7 @@ void Application::Initialize() {
 void Application::Teardown() {
   SbAudioSinkPrivate::TearDown();
   libcobalt_api::Teardown();
-  TeardownJSONRPCLink();
+  platform::PlatformInterface::get().teardown();
 
   close(ess_timer_fd_);
   close(wakeup_fd_);
@@ -271,8 +272,8 @@ void Application::Inject(Event* e) {
 void Application::OnSuspend() {
   SbSpeechSynthesisCancel();
   DestroyNativeWindow();
-  TeardownJSONRPCLink();
   setTimerInterval(ess_timer_fd_, 1s);
+  platform::PlatformInterface::get().suspend();
 }
 
 void Application::OnResume() {
@@ -281,6 +282,7 @@ void Application::OnResume() {
 
   setTimerInterval(ess_timer_fd_, kEssRunLoopPeriod);
   MaterializeNativeWindow();
+  platform::PlatformInterface::get().resume();
 }
 
 void Application::OnTerminated() {

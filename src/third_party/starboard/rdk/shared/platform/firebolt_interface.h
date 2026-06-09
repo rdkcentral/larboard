@@ -21,6 +21,7 @@
 #include "third_party/starboard/rdk/shared/platform/platform_interface.h"
 
 #include <string>
+#include <chrono>
 #include <mutex>
 #include <optional>
 #include <condition_variable>
@@ -102,6 +103,7 @@ private:
     std::mutex mutex_;
     bool did_init_ { false };
     std::optional<Ifa> cached_ifa_;
+    std::optional<std::chrono::steady_clock::time_point> last_query_tp_;
   };
 
 public:

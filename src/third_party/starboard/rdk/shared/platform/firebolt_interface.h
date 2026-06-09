@@ -103,7 +103,7 @@ private:
     std::mutex mutex_;
     bool did_init_ { false };
     std::optional<Ifa> cached_ifa_;
-    std::optional<std::chrono::steady_clock::time_point> last_query_tp_;
+    std::chrono::steady_clock::time_point cache_expiration_tp_ {};
   };
 
 public:

@@ -209,12 +209,11 @@ void FireboltInterface::FireboltDevice::unsubscribe() {
 
 // FireboltAdvertising
 std::optional<Ifa> FireboltInterface::FireboltAdvertising::advertising_id() {
-  static constexpr auto kAdvertisingCacheTtl = std::chrono::seconds(1);
+  static constexpr auto kAdvertisingCacheTTL = std::chrono::seconds(1);
 
   std::unique_lock<std::mutex> lock { mutex_ };
   const auto now = std::chrono::steady_clock::now();
-  if (did_init_ && last_query_tp_.has_value() &&
-      (now - *last_query_tp_) < kAdvertisingCacheTtl) {
+  if (did_init_ && now < cache_expiration_tp_) {
     return cached_ifa_;
   }
 
@@ -226,7 +225,7 @@ std::optional<Ifa> FireboltInterface::FireboltAdvertising::advertising_id() {
   lock.lock();
 
   did_init_ = true;
-  last_query_tp_ = now;
+  cache_expiration_tp_ = std::chrono::steady_clock::now() + kAdvertisingCacheTTL;
 
   if (!result) {
     SB_LOG(ERROR) << "advertising.advertisingId() failed, error code = " << result.error();

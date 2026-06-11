@@ -292,13 +292,14 @@ static_library("starboard_platform") {
     "//starboard/shared/stub/image_is_decode_supported.cc",
     "//starboard/shared/stub/log_raw_dump_stack.cc",
     "//starboard/shared/stub/media_set_audio_write_duration.cc",
-    "//starboard/shared/stub/microphone_close.cc",
-    "//starboard/shared/stub/microphone_create.cc",
-    "//starboard/shared/stub/microphone_destroy.cc",
-    "//starboard/shared/stub/microphone_get_available.cc",
-    "//starboard/shared/stub/microphone_is_sample_rate_supported.cc",
-    "//starboard/shared/stub/microphone_open.cc",
-    "//starboard/shared/stub/microphone_read.cc",
+    "//starboard/shared/starboard/microphone/microphone_close.cc",
+    "//starboard/shared/starboard/microphone/microphone_create.cc",
+    "//starboard/shared/starboard/microphone/microphone_destroy.cc",
+    "//starboard/shared/starboard/microphone/microphone_get_available.cc",
+    "//starboard/shared/starboard/microphone/microphone_internal.h",
+    "//starboard/shared/starboard/microphone/microphone_is_sample_rate_supported.cc",
+    "//starboard/shared/starboard/microphone/microphone_open.cc",
+    "//starboard/shared/starboard/microphone/microphone_read.cc",
     "//starboard/shared/stub/system_get_device_type.cc",
     "//starboard/shared/stub/system_hide_splash_screen.cc",
     "//starboard/shared/stub/system_raise_platform_error.cc",
@@ -358,6 +359,8 @@ static_library("starboard_platform") {
     "media/media_is_output_protected.cc",
     "media/media_is_supported.cc",
     "media/media_is_transfer_characteristics_supported.cc",
+    "microphone/local_aows_server.cc",
+    "microphone/microphone_impl.cc",
     "media/media_is_video_supported.cc",
     "platform/platform_interface.cc",
     "platform/platform_interface.h",
@@ -509,6 +512,7 @@ static_library("starboard_platform") {
   ]
 
   deps = [
+    "//base",
     "//third_party/libevent",
   ]
 

@@ -100,6 +100,7 @@ int SbRunStarboardMain(int argc, char **argv, SbEventHandleCallback callback) {
   stack_size.rlim_cur = 2 * 1024 * 1024;
   setrlimit(RLIMIT_STACK, &stack_size);
 
+  starboard::InstallCrashSignalHandlers();
   starboard::InstallSuspendSignalHandlers();
   starboard::InstallStopSignalHandlers();
 
@@ -118,6 +119,7 @@ int SbRunStarboardMain(int argc, char **argv, SbEventHandleCallback callback) {
 
   starboard::UninstallStopSignalHandlers();
   starboard::UninstallSuspendSignalHandlers();
+  starboard::UninstallCrashSignalHandlers();
 
   return result;
 }

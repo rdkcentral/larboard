@@ -28,14 +28,14 @@
 #include "starboard/configuration_constants.h"
 #include "starboard/common/log.h"
 #include "starboard/common/string.h"
-#if SB_IS(EVERGREEN_COMPATIBLE)
+#if BUILDFLAG(IS_STARBOARD)
 #include "starboard/elf_loader/evergreen_config.h"
 #endif
 #include "starboard/shared/starboard/get_home_directory.h"
 
 namespace {
 
-#if SB_IS(EVERGREEN_COMPATIBLE)
+#if BUILDFLAG(IS_STARBOARD)
 // May override the content path if there is EvergreenConfig published.
 // The override allows for switching to different content paths based
 // on the Evergreen binary executed.
@@ -81,7 +81,7 @@ bool GetContentDirectory(char* out_path, int path_size)
         return (::starboard::strlcpy<char>(out_path, contentPath.c_str(), path_size) < path_size);
       }
     }
-#if !SB_IS(EVERGREEN_COMPATIBLE)
+#if !BUILDFLAG(IS_STARBOARD)
     // Don't return false and let EvergreenConfig override the path
     return false;
 #endif
@@ -272,7 +272,7 @@ bool SbSystemGetPath(SbSystemPathId path_id, char* out_path, int path_size) {
       if (!GetContentDirectory(path, kPathSize)){
         return false;
       }
-#if SB_IS(EVERGREEN_COMPATIBLE)
+#if BUILDFLAG(IS_STARBOARD)
       if (!GetEvergreenContentPathOverride(path, kPathSize)) {
         return false;
       }
@@ -315,7 +315,7 @@ bool SbSystemGetPath(SbSystemPathId path_id, char* out_path, int path_size) {
 
     case kSbSystemPathFontConfigurationDirectory:
     case kSbSystemPathFontDirectory:
-#if SB_IS(EVERGREEN_COMPATIBLE)
+#if BUILDFLAG(IS_STARBOARD)
       if (!GetContentDirectory(path, kPathSize)) {
         return false;
       }

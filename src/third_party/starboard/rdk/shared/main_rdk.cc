@@ -40,7 +40,7 @@
 
 #include "third_party/starboard/rdk/shared/application_rdk.h"
 
-#if SB_IS(EVERGREEN_COMPATIBLE)
+#if BUILDFLAG(IS_STARBOARD)
 #include "starboard/common/command_line.h"
 #include "starboard/common/paths.h"
 #include "starboard/crashpad_wrapper/wrapper.h"
@@ -89,7 +89,7 @@ extern "C" SB_EXPORT_PLATFORM int main(int argc, char** argv) {
   starboard::shared::signal::InstallSuspendSignalHandlers();
   third_party::starboard::rdk::shared::InstallStopSignalHandlers();
 
-#if SB_IS(EVERGREEN_COMPATIBLE)
+#if BUILDFLAG(IS_STARBOARD)
   auto command_line = starboard::CommandLine(argc, argv);
   auto evergreen_content_path =
     command_line.GetSwitchValue(starboard::elf_loader::kEvergreenContent);

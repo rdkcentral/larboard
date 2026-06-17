@@ -44,7 +44,7 @@
 #include "third_party/starboard/rdk/shared/media/gst_media_utils.h"
 #include <cstdio>
 
-#if SB_IS(EVERGREEN_COMPATIBLE)
+#if BUILDFLAG(IS_STARBOARD)
 #include "starboard/common/command_line.h"
 #include "starboard/common/paths.h"
 #include "starboard/crashpad_wrapper/wrapper.h"

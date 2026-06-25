@@ -120,6 +120,7 @@ class PlatformInterface {
   static PlatformInterface& get();
 
   virtual ~PlatformInterface() = default;
+  virtual void completeInit() = 0;
   virtual void teardown() = 0;
   virtual void suspend() = 0;
   virtual void resume() = 0;

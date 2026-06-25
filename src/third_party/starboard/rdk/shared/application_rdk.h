@@ -71,8 +71,8 @@ class Application : public ::starboard::shared::starboard::QueueApplication {
   int GetWindowHeight() const { return window_height_; }
   void DisplayInfoChanged();
 
-  bool IsStartImmediate() override { return !HasPreloadSwitch(); }
-  bool IsPreloadImmediate() override { return HasPreloadSwitch(); }
+  bool IsStartImmediate() override { return false; }
+  bool IsPreloadImmediate() override { return true; }
 
   void InjectAccessibilitySettingsChanged();
   void InjectAccessibilityCaptionSettingsChanged();

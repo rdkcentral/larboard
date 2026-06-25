@@ -148,6 +148,7 @@ void Application::Initialize() {
   KeySystemSupportabilityCache::GetInstance()->SetCacheEnabled(true);
 
   ScheduleMemoryUsageCheck(kSbTimeSecond);
+  platform::PlatformInterface::get().completeInit();
 }
 
 void Application::Teardown() {

@@ -66,7 +66,169 @@ std::ostream& operator<<(std::ostream& out, const Firebolt::Error& e) {
   return out << to_string(e) << '(' << static_cast<int32_t>(e) << ')';
 }
 
+std::ostream& operator<<(std::ostream& out, const Firebolt::Lifecycle::LifecycleState& state) {
+  const auto to_string = [](const Firebolt::Lifecycle::LifecycleState& state) {
+    switch(state) {
+#define CASE(x) case Firebolt::Lifecycle::LifecycleState::x: return #x
+      CASE(INITIALIZING);
+      CASE(ACTIVE);
+      CASE(PAUSED);
+      CASE(SUSPENDED);
+      CASE(HIBERNATED);
+      CASE(TERMINATING);
+#undef CASE
+      default:
+        return "UNKNOWN";
+    }
+  };
+
+  return out << to_string(state) << '(' << static_cast<int32_t>(state) << ')';
+}
+
 } // namespace
+
+class FireboltInterface::FireboltLifecycle {
+    std::mutex mutex_;
+    using LifecycleState = Firebolt::Lifecycle::LifecycleState;
+    using StateChange = Firebolt::Lifecycle::StateChange;
+    LifecycleState current_state_ = LifecycleState::INITIALIZING;
+    bool is_focused_{};
+
+    class RequestMonitor {
+        std::string request_;
+
+      public:
+        RequestMonitor(std::string request) : request_(std::move(request)) {
+          SB_LOG(INFO) << "Requested: " << request_;
+        }
+
+        static void handle(void *ctx) {
+          auto thiz = static_cast<RequestMonitor*>(ctx);
+          SB_LOG(INFO) << "Completed: " << thiz->request_;
+          delete thiz;
+        }
+    };
+
+    enum class Transition {
+      START,
+      START_SUSPEND,
+      ACTIVE,
+      SUSPEND,
+      DESTROY,
+      PAUSE,
+      RESUME,
+      HIBERNATE,
+      RESTORE,
+      INVALID,
+    };
+
+    static constexpr Transition toTransition(LifecycleState oldState, LifecycleState newState) {
+      if (oldState == LifecycleState::INITIALIZING && newState == LifecycleState::PAUSED) return Transition::START;
+      if (oldState == LifecycleState::INITIALIZING && newState == LifecycleState::SUSPENDED) return Transition::START_SUSPEND;
+      if (oldState == LifecycleState::PAUSED && newState == LifecycleState::ACTIVE) return Transition::ACTIVE;
+      if (oldState == LifecycleState::PAUSED && newState == LifecycleState::SUSPENDED) return Transition::SUSPEND;
+      if (oldState == LifecycleState::PAUSED && newState == LifecycleState::TERMINATING) return Transition::DESTROY;
+      if (oldState == LifecycleState::ACTIVE && newState == LifecycleState::PAUSED) return Transition::PAUSE;
+      if (oldState == LifecycleState::ACTIVE && newState == LifecycleState::TERMINATING) return Transition::DESTROY;
+      if (oldState == LifecycleState::SUSPENDED && newState == LifecycleState::PAUSED) return Transition::RESUME;
+      if (oldState == LifecycleState::SUSPENDED && newState == LifecycleState::HIBERNATED) return Transition::HIBERNATE;
+      if (oldState == LifecycleState::SUSPENDED && newState == LifecycleState::TERMINATING) return Transition::DESTROY;
+      if (oldState == LifecycleState::HIBERNATED && newState == LifecycleState::SUSPENDED) return Transition::RESTORE;
+
+      return Transition::INVALID;
+    }
+
+    static void applyStateChange(const StateChange& change, bool focused) {
+      switch (toTransition(change.oldState, change.newState)) {
+        case Transition::START:
+          Application::Get()->Reveal(new RequestMonitor("Reveal()"), &RequestMonitor::handle);
+          break;
+        case Transition::START_SUSPEND:
+          Application::Get()->Freeze(new RequestMonitor("Freeze()"), &RequestMonitor::handle);
+          break;
+        case Transition::ACTIVE:
+          if (focused) {
+            Application::Get()->Focus(new RequestMonitor("Focus()"), &RequestMonitor::handle);
+          }
+          break;
+        case Transition::SUSPEND:
+          Application::Get()->Freeze(new RequestMonitor("Freeze()"), &RequestMonitor::handle);
+          break;
+        case Transition::PAUSE:
+          if (focused) {
+            Application::Get()->Blur(new RequestMonitor("Blur()"), &RequestMonitor::handle);
+          }
+          break;
+        case Transition::RESUME:
+          Application::Get()->Reveal(new RequestMonitor("Reveal()"), &RequestMonitor::handle);
+          break;
+        case Transition::HIBERNATE:
+        case Transition::RESTORE:
+          // nothig to do for hibernate and restore
+          break;
+        case Transition::DESTROY:
+          SB_LOG(INFO) << "Triggered: Stop()";
+          Application::Get()->Stop(0);
+          break;
+        case Transition::INVALID:
+          SB_LOG(ERROR) << "Wrong state change from: " << change.oldState << " to: " << change.newState;
+          break;
+      }
+    }
+
+    static void lifecycleStateChanged(
+      const std::vector<StateChange>& changes, bool focused) {
+
+      for (auto& change : changes) {
+        SB_LOG(INFO) << "state change from: " << change.oldState << " to: " << change.newState;
+        applyStateChange(change, focused);
+      }
+    }
+
+    static void focusedChanged(bool focused, LifecycleState state) {
+      if (state == LifecycleState::ACTIVE) {
+        if (focused) {
+          Application::Get()->Focus(new RequestMonitor("Focus()"), &RequestMonitor::handle);
+        } else {
+          Application::Get()->Blur(new RequestMonitor("Blur()"), &RequestMonitor::handle);
+        }
+      }
+    }
+
+  public:
+    void init() {
+      using namespace Firebolt;
+
+      auto &presentation = IFireboltAccessor::Instance().PresentationInterface();
+
+      Result<SubscriptionId> result = presentation.subscribeOnFocusedChanged([this](const bool focused) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (is_focused_ != focused) {
+          is_focused_ = focused;
+          SB_LOG(INFO) << "lifecycle focus change, focused = " << (is_focused_ ? "true" : "false");
+          focusedChanged(focused, current_state_);
+        }
+      });
+
+      if (!result) {
+        SB_LOG(ERROR) << "presentation.subscribeOnFocusedChanged failed, error code = " << result.error();
+      }
+
+      auto &lifecycle = IFireboltAccessor::Instance().LifecycleInterface();
+
+      result = lifecycle.subscribeOnStateChanged([this](const std::vector<Lifecycle::StateChange>& changes) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (changes.empty() == false) {
+          lifecycleStateChanged(changes, is_focused_);
+          current_state_ = changes.back().newState;
+        }
+      });
+
+      if (!result) {
+        SB_LOG(ERROR) << "lifecycle.subscribeOnStateChanged failed, error code = " << result.error();
+      }
+    }
+};
 
 // FireboltDevice
 std::optional<Resolution> FireboltInterface::FireboltDevice::video_resolution() {
@@ -512,17 +674,21 @@ void FireboltInterface::FireboltAccessibility::lazy_init(std::unique_lock<std::m
   is_cc_enabled_ = cc_enabled;
 }
 
-FireboltInterface::FireboltInterface() = default;
+FireboltInterface::FireboltInterface() : lifecycle_(std::make_unique<FireboltLifecycle>()) {
+}
+
+FireboltInterface::~FireboltInterface() {
+}
 
 // static
 bool FireboltInterface::is_available() {
   return !!getenv("FIREBOLT_ENDPOINT");
 }
 
-void FireboltInterface::lazy_init() {
+bool FireboltInterface::lazy_init() {
   std::unique_lock<std::mutex> lock { mutex_ };
   if (connected_.has_value())
-    return;
+    return *connected_;
 
   const auto kConnectionTimeout = 3s;
   const char* kFireboltEndpoint = getenv("FIREBOLT_ENDPOINT");
@@ -530,7 +696,7 @@ void FireboltInterface::lazy_init() {
   SB_DCHECK(kFireboltEndpoint && kFireboltEndpoint[0] != '\0');
   if (!kFireboltEndpoint || kFireboltEndpoint[0] == '\0') {
     connected_ = false;
-    return;
+    return *connected_;
   }
 
   const bool kEnableLegacyRPCv1 = ([]()->bool {
@@ -600,6 +766,8 @@ void FireboltInterface::lazy_init() {
                  << " init took: " << std::chrono::duration_cast<std::chrono::milliseconds>(init_completed_tp - connected_tp).count() << " ms,"
                  << " total: " << std::chrono::duration_cast<std::chrono::milliseconds>(init_completed_tp - start_tp).count() << " ms.";
   }
+
+  return *connected_;
 }
 
 IDevice& FireboltInterface::device() {
@@ -622,11 +790,20 @@ IAdvertising& FireboltInterface::advertising() {
   return advertising_;
 }
 
+void FireboltInterface::completeInit() {
+  if (lazy_init()) {
+    lifecycle_->init();
+  }
+}
+
 void FireboltInterface::teardown() {
+  SB_LOG(INFO) << "teardown()";
+  Firebolt::IFireboltAccessor::Instance().LifecycleInterface().close(Firebolt::Lifecycle::CloseType::DEACTIVATE);
   Firebolt::IFireboltAccessor::Instance().Disconnect();
 }
 
 void FireboltInterface::suspend() {
+  SB_LOG(INFO) << "suspend()";
   std::unique_lock<std::mutex> lock { mutex_ };
   if (connected_.value_or(false)) {
     accessibility_.unsubscribe();
@@ -636,7 +813,7 @@ void FireboltInterface::suspend() {
 }
 
 void FireboltInterface::resume() {
-  // no-op
+  SB_LOG(INFO) << "resume()";
 }
 
 }  // namespace platform

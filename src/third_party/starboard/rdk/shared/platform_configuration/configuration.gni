@@ -31,6 +31,8 @@
 import("//starboard/build/config/base_configuration.gni")
 
 cobalt_font_package = "limited"
+cobalt_font_package_override_named_fcc_fonts = 2
+cobalt_font_package_override_named_serif = 3
 final_executable_type = "shared_library"
 starboard_level_final_executable_type = "shared_library"
 

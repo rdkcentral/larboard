@@ -512,7 +512,26 @@ void FireboltInterface::FireboltAccessibility::lazy_init(std::unique_lock<std::m
   is_cc_enabled_ = cc_enabled;
 }
 
-FireboltInterface::FireboltInterface() = default;
+FireboltInterface::FireboltInterface() {
+// This is a workaround to resolve App focus issue. This will be modified with
+// proper firebolt lifecycle implementation
+#if defined(ENABLE_FIREBOLT_LIFECYCLE) && ENABLE_FIREBOLT_LIFECYCLE
+  using namespace Firebolt;
+  lazy_init();
+
+  auto &lifecycle = IFireboltAccessor::Instance().LifecycleInterface();
+
+  Result<SubscriptionId> result = lifecycle.subscribeOnStateChanged([this](const std::vector<Lifecycle::StateChange>& changes) {
+  });
+
+  if (!result) {
+     SB_LOG(ERROR) << "lifecycle.subscribeOnStateChanged failed, error code = " << result.error();
+  }
+#endif
+}
+
+FireboltInterface::~FireboltInterface() {
+}
 
 // static
 bool FireboltInterface::is_available() {

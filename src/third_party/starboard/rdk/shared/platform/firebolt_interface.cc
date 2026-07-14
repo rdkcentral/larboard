@@ -521,8 +521,7 @@ FireboltInterface::FireboltInterface() {
 
   auto &lifecycle = IFireboltAccessor::Instance().LifecycleInterface();
 
-  Result<SubscriptionId> result = lifecycle.subscribeOnStateChanged([this](const std::vector<Lifecycle::StateChange>& changes) {
-  });
+  Result<SubscriptionId> result = lifecycle.subscribeOnStateChanged([](const std::vector<Lifecycle::StateChange>&) { });
 
   if (!result) {
      SB_LOG(ERROR) << "lifecycle.subscribeOnStateChanged failed, error code = " << result.error();

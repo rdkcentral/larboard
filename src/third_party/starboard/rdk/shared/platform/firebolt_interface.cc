@@ -530,9 +530,6 @@ FireboltInterface::FireboltInterface() {
 #endif
 }
 
-FireboltInterface::~FireboltInterface() {
-}
-
 // static
 bool FireboltInterface::is_available() {
   return !!getenv("FIREBOLT_ENDPOINT");

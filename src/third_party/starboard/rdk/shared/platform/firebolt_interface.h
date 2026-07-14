@@ -108,7 +108,6 @@ private:
 
 public:
   FireboltInterface();
-  ~FireboltInterface();
 
   void teardown() override;
   void suspend() override;

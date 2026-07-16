@@ -265,12 +265,6 @@ bool SbSystemGetProperty(SbSystemPropertyId property_id,
     case kSbSystemPropertyCertificationScope:
       return GetCertificationScope(out_value, value_length);
 
-    case kSbSystemPropertyAdvertisingId:
-      return GetAdvertisingId(out_value, value_length);
-
-    case kSbSystemPropertyLimitAdTracking:
-      return GetLimitAdTracking(out_value, value_length);
-
     case kSbSystemPropertyDeviceType:
       return GetDeviceType(out_value, value_length);
 

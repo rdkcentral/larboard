@@ -190,6 +190,9 @@ bool GetCertificationScope(char* out_value, int value_length) {
 }
 
 bool GetLimitAdTracking(char* out_value, int value_length) {
+  if (SystemProperties::IsIfaDisabled())
+    return false;
+
   if (std::string prop; AdvertisingId::GetLmtAdTracking(prop)) {
     return CopyStringAndTestIfSuccess(out_value, value_length, prop.c_str());
   }
@@ -202,6 +205,9 @@ bool GetLimitAdTracking(char* out_value, int value_length) {
 }
 
 bool GetAdvertisingId(char* out_value, int value_length) {
+  if (SystemProperties::IsIfaDisabled())
+    return false;
+
   if (std::string prop; AdvertisingId::GetIfa(prop)) {
     return CopyStringAndTestIfSuccess(out_value, value_length, prop.c_str());
   }

@@ -42,6 +42,7 @@ struct SystemPropertiesImpl {
       Add(_T("integratorname"), &IntegratorName);
       Add(_T("friendlyname"), &FriendlyName);
       Add(_T("devicetype"), &DeviceType);
+      Add(_T("disableifa"), &DisableIFA);
     }
     SystemPropertiesData(const SystemPropertiesData&) = delete;
     SystemPropertiesData& operator=(const SystemPropertiesData&) = delete;
@@ -54,6 +55,7 @@ struct SystemPropertiesImpl {
     Core::JSON::String IntegratorName;
     Core::JSON::String FriendlyName;
     Core::JSON::String DeviceType;
+    Core::JSON::Boolean DisableIFA;
   };
 
   void SetSettings(const std::string& json) {
@@ -142,6 +144,11 @@ struct SystemPropertiesImpl {
       return true;
     }
     return false;
+  }
+
+  bool IsIfaDisabled() const {
+    ::starboard::ScopedLock lock(mutex_);
+    return props_.DisableIFA.IsSet() && props_.DisableIFA.Value();
   }
 
 private:
@@ -257,6 +264,10 @@ bool SystemProperties::GetFriendlyName(std::string &out) {
 
 bool SystemProperties::GetDeviceType(std::string &out) {
   return GetSystemProperties()->GetDeviceType(out);
+}
+
+bool SystemProperties::IsIfaDisabled() {
+  return GetSystemProperties()->IsIfaDisabled();
 }
 
 void AdvertisingId::SetSettings(const std::string& json) {

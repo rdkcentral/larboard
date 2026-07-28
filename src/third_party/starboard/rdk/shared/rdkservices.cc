@@ -68,7 +68,7 @@ namespace {
 const uint32_t kDefaultTimeoutMs = 100;
 const char kDisplayInfoCallsign[] = "DisplayInfo.1";
 const char kPlayerInfoCallsign[] = "PlayerInfo.1";
-const char kNetworkCallsign[] = "org.rdk.Network.1";
+const char kNetworkCallsign[] = "org.rdk.NetworkManager.1";
 const char kTTSCallsign[] = "org.rdk.TextToSpeech.1";
 const char kAuthServiceCallsign[] = "org.rdk.AuthService.1";
 const char kUserSetingsCallsign[] = "org.rdk.UserSettings.1";
@@ -856,22 +856,34 @@ private:
     }
     InterfaceInfo(const InterfaceInfo& other)
       : Core::JSON::Container()
+      , InterfaceType(other.InterfaceType)
       , InterfaceName(other.InterfaceName)
       , IsConnected(other.IsConnected)  {
       Init();
     }
     InterfaceInfo& operator=(const InterfaceInfo& rhs) {
+      InterfaceType = rhs.InterfaceType;
       InterfaceName = rhs.InterfaceName;
       IsConnected = rhs.IsConnected;
       return *this;
     }
+    Core::JSON::String  InterfaceType;
     Core::JSON::String  InterfaceName;
     Core::JSON::Boolean IsConnected;
   private:
     void Init() {
-      Add(_T("interface"), &InterfaceName);
+      Add(_T("type"), &InterfaceType);
+      Add(_T("name"), &InterfaceName);
       Add(_T("connected"), &IsConnected);
     }
+  };
+
+  struct PrimaryInterfaceInfo : public Core::JSON::Container {
+    PrimaryInterfaceInfo()
+      : Core::JSON::Container() {
+      Add(_T("interface"), &InterfaceName);
+    }
+    Core::JSON::String InterfaceName;
   };
 
   struct InterfacesInfo : public Core::JSON::Container {
@@ -907,11 +919,11 @@ private:
       bool old_val = did_subscribe_.exchange(true);
       if (old_val == false) {
         rc = network_link_.Subscribe<Core::JSON::String>(
-          kDefaultTimeoutMs, "onConnectionStatusChanged",
-          &NetworkInfoImpl::OnConnectionStatusChanged, this);
+          kDefaultTimeoutMs, "onInterfaceStateChange",
+          &NetworkInfoImpl::OnInterfaceStateChange, this);
         if (Core::ERROR_NONE != rc && Core::ERROR_DUPLICATE_KEY != rc) {
           SB_LOG(ERROR) << "Failed to subscribe to '" << kNetworkCallsign
-                        << ".onConnectionStatusChanged' event, rc = " << rc
+                        << ".onInterfaceStateChange' event, rc = " << rc
                         << " ( " << Core::ErrorToString(rc) << " )";
           did_subscribe_.store(false);
         }
@@ -919,15 +931,15 @@ private:
     }
 
     InterfacesInfo info;
-    rc = network_link_.Get(kDefaultTimeoutMs, "getInterfaces", info);
+    rc = network_link_.Get(kDefaultTimeoutMs, "GetAvailableInterfaces", info);
     if (Core::ERROR_UNAVAILABLE == rc || kPriviligedRequestErrorCode == rc) {
-      SB_LOG(ERROR) << "'" << kNetworkCallsign << ".getInterfaces' failed, rc = " << rc
+      SB_LOG(ERROR) << "'" << kNetworkCallsign << ".GetAvailableInterfaces' failed, rc = " << rc
                     << " ( " << Core::ErrorToString(rc) << " )";
       needs_refresh_.store(false);
       return;
     }
     else if (Core::ERROR_NONE != rc) {
-      SB_LOG(ERROR) << "'" << kNetworkCallsign << ".getInterfaces' failed, rc = " << rc
+      SB_LOG(ERROR) << "'" << kNetworkCallsign << ".GetAvailableInterfaces' failed, rc = " << rc
                     << " ( " << Core::ErrorToString(rc) << " ). Trying again in 5 seconds.";
       ScheduleRefresh(5 * kSbTimeSecond);
     }
@@ -957,20 +969,30 @@ private:
       }
     }
 
-    InterfaceInfo default_interface;
-    rc = network_link_.Get(kDefaultTimeoutMs, "getDefaultInterface", default_interface);
+    PrimaryInterfaceInfo default_interface;
+    rc = network_link_.Get(kDefaultTimeoutMs, "GetPrimaryInterface", default_interface);
     if (Core::ERROR_NONE == rc) {
-      std::string connection_type = default_interface.InterfaceName.Value();
-      SB_LOG(INFO) << "Default connection type: " << connection_type;
-      is_connection_type_wireless_.store(0 == connection_type.compare("WIFI"));
+      std::string primary_name = default_interface.InterfaceName.Value();
+      SB_LOG(INFO) << "Primary interface: " << primary_name;
+      bool is_wireless = false;
+      auto iface_index(info.Interfaces.Elements());
+      while (iface_index.Next()) {
+        const auto& iface = iface_index.Current();
+        if (iface.InterfaceName.Value() == primary_name) {
+          is_wireless = (iface.InterfaceType.Value() == "WIFI");
+          SB_LOG(INFO) << "Primary interface type: " << iface.InterfaceType.Value();
+          break;
+        }
+      }
+      is_connection_type_wireless_.store(is_wireless);
     }
     else {
-      SB_LOG(INFO) << "Failed to get default interface, rc = " << rc
+      SB_LOG(INFO) << "Failed to get primary interface, rc = " << rc
                    << " ( " << Core::ErrorToString(rc) << " )";
     }
   }
 
-  void OnConnectionStatusChanged(const Core::JSON::String&) {
+  void OnInterfaceStateChange(const Core::JSON::String&) {
     ScheduleRefresh(100 * kSbTimeMillisecond);
   }
 
@@ -987,7 +1009,7 @@ public:
 
   void Teardown() {
     if (did_subscribe_.load()) {
-      network_link_.Unsubscribe(kDefaultTimeoutMs, "onConnectionStatusChanged");
+      network_link_.Unsubscribe(kDefaultTimeoutMs, "onInterfaceStateChange");
       did_subscribe_.store(false);
     }
     network_link_.Teardown();

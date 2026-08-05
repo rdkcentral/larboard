@@ -117,7 +117,7 @@ graph TD
   - `rdk_enable_securityagent=true` — Enables authenticated Thunder JSON-RPC connections via `securityagent`.
   - `rdk_enable_wpecryptography=true` — Enables WPEFramework Cryptography for platform-accelerated operations.
   - `rdk_enable_rdkservices_api=true` — Enables device, display, TTS, and network service queries (default enabled).
-  - `rdk_enable_firebolt_api` — Firebolt RPC integration; when enabled, requires `firebolt-cpp-client` and `firebolt-cpp-transport`.
+  - `rdk_enable_firebolt_api=true` — Firebolt RPC integration; when enabled, requires `firebolt-cpp-client` and `firebolt-cpp-transport`.
   - `sb_is_evergreen_compatible=true` — Always set; enables Evergreen loader mode.
   - `PLUGIN_COBALT_EVEGREEN_LITE` — CMake option to pass `--evergreen_lite` to `StarboardMain`.
 - **Configuration Files**: `/etc/WPEFramework/config.json` — parsed at runtime to set the `THUNDER_ACCESS` endpoint for JSON-RPC connections to peer plugins.
@@ -391,7 +391,7 @@ sequenceDiagram
 | `autosuspenddelay` | number  | `30`                          | Seconds after which the engine is automatically suspended when started in preload mode                                                                                                                         |
 | `gstdebug`         | string  | `gstplayer:4,2`               | GStreamer debug category and level string appended to the `GST_DEBUG` environment variable                                                                                                                     |
 | `closurepolicy`    | string  | `quit`                        | Action on window close request from the engine: `suspend` or `quit`                                                                                                                                            |
-| `contentdir`       | string  | `/usr/share/content/data:...` | Colon-separated list of paths searched for Cobalt content assets, set as `COBALT_CONTENT_DIR`                                                                                                                  |
+| `contentdir`       | string  | `/usr/share/content/data:/media/apps/libcobalt/usr/share/content/data:/tmp/libcobalt/usr/share/content/data` | Colon-separated list of paths searched for Cobalt content assets, set as `COBALT_CONTENT_DIR`                                                                                                                  |
 | `fireboltendpoint` | string  | —                             | Firebolt RPC endpoint URL including session ID query parameter, set as `FIREBOLT_ENDPOINT`                                                                                                                     |
 | `systemproperties` | object  | —                             | Device identity properties (modelname, brandname, modelyear, chipsetmodelnumber, firmwareversion, integratorname, friendlyname, devicetype) forwarded to Cobalt via `SbRdkSetSetting("systemproperties", ...)` |
 | `advertisingid`    | object  | —                             | Advertising identifier fields (ifa, ifa_type, lmt) forwarded to Cobalt via `SbRdkSetSetting("advertisingid", ...)`                                                                                             |

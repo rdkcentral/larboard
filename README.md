@@ -1,6 +1,6 @@
-# Cobalt
+# Larboard (Cobalt integration layer)
 
-The Cobalt component (hosted in the `larboard` repository) is the RDK integration layer for the Cobalt web browser engine. It does not include the Cobalt engine itself; the engine is supplied as an external runtime binary (`libloader_app.so`) via the Evergreen loader model. The `larboard` repository provides the WPEFramework/Thunder plugin wrapper and the Starboard RDK platform adaptation layer that the engine depends on, for running Cobalt/YouTube applications in RDK devices.
+Larboard is the RDK integration layer for the Cobalt web browser engine, providing the WPEFramework/Thunder plugin wrapper and the Starboard RDK platform adaptation layer that the engine relies on to run YouTube and Cobalt-based applications on RDK devices. The Cobalt engine itself is supplied as an external runtime binary (`libloader_app.so`) via the Evergreen loader model.
 
 The component is organized into two coupled parts. The first is a Thunder plugin front-end (`libWPEFrameworkCobalt.so`) that manages the plugin lifecycle, exposes JSON-RPC and REST interfaces, and monitors the app process for crashes. The second is a platform implementation (`libWPEFrameworkCobaltImpl.so`) that hosts the Cobalt engine via the Starboard API, managing the engine thread, lifecycle state machine, and connections to the GStreamer media pipeline, Essos windowing system, and OpenCDM DRM.
 

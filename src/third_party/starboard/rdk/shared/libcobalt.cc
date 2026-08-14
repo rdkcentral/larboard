@@ -18,13 +18,11 @@
 #include "third_party/starboard/rdk/shared/libcobalt.h"
 
 #include <cstring>
+#include <condition_variable>
+#include <mutex>
 
-#include "starboard/common/condition_variable.h"
-#include "starboard/common/mutex.h"
 #include "starboard/common/semaphore.h"
 #include "starboard/common/once.h"
-#include "starboard/memory.h"
-#include "starboard/string.h"
 
 #if defined(ENABLE_RDKSERVICES_API) && ENABLE_RDKSERVICES_API
 #include "third_party/starboard/rdk/shared/rdkservices.h"
@@ -43,27 +41,26 @@ struct APIContext
 {
   APIContext()
     : mutex_()
-    , condition_(mutex_)
   { }
 
   void OnInitialize()
   {
-    starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     SB_CHECK(nullptr != Application::Get());
     state_ = kRunning;
-    condition_.Broadcast();
+    condition_.notify_all();
   }
 
   void OnTeardown()
   {
-    starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     state_ = kStopped;
   }
 
   void SendLink(const char* link)
   {
-    starboard::ScopedLock lock(mutex_);
-    if (WaitForApp() == kRunning) {
+    std::unique_lock lock(mutex_);
+    if (WaitForApp(lock) == kRunning) {
       Application::Get()->Link(link);
     }
   }
@@ -82,7 +79,7 @@ struct APIContext
 
   void RequestQuit()
   {
-    starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     stop_request_cb_ = nullptr;
     stop_request_cb_data_ = nullptr;
     if (state_ == kRunning)
@@ -91,7 +88,7 @@ struct APIContext
 
   void SetStopRequestHandler(SbRdkCallbackFunc cb, void* user_data)
   {
-    starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     stop_request_cb_ = cb;
     stop_request_cb_data_ = user_data;
   }
@@ -102,10 +99,10 @@ struct APIContext
     void* user_data;
     int should_invoke_default = 1;
 
-    mutex_.Acquire();
+    std::unique_lock lock(mutex_);
     cb = stop_request_cb_;
     user_data = stop_request_cb_data_;
-    mutex_.Release();
+    lock.unlock();
 
     if (cb) {
       should_invoke_default = cb(user_data);
@@ -118,7 +115,7 @@ struct APIContext
 
   void SetConcealRequestHandler(SbRdkCallbackFunc cb, void* user_data)
   {
-    starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     conceal_request_cb_ = cb;
     conceal_request_cb_data_ = user_data;
   }
@@ -129,17 +126,17 @@ struct APIContext
     void* user_data;
     int should_invoke_default = 1;
 
-    mutex_.Acquire();
+    std::unique_lock lock(mutex_);
     cb = conceal_request_cb_;
     user_data = conceal_request_cb_data_;
-    mutex_.Release();
+    lock.unlock();
 
     if (cb) {
       should_invoke_default = cb(user_data);
     }
 
     if (should_invoke_default) {
-      starboard::ScopedLock lock(mutex_);
+      std::lock_guard lock(mutex_);
       if (state_ == kRunning) {
         Application::Get()->Conceal(NULL, NULL);
       }
@@ -179,36 +176,36 @@ private:
     kStopped
   };
 
-  State WaitForApp()
+  State WaitForApp(std::unique_lock<std::mutex>& lock)
   {
-    mutex_.DCheckAcquired();
+    SB_DCHECK(lock.owns_lock());
 
     while ( state_ == kUninitialized )
-      condition_.Wait();
+      condition_.wait(lock);
 
     return state_;
   }
 
   void RequestAndWait(void (Application::*action)(void*, Application::EventHandledCallback)) {
-    mutex_.Acquire();
-    if (WaitForApp() == kRunning) {
+    std::unique_lock lock(mutex_);
+    if (WaitForApp(lock) == kRunning) {
       starboard::Semaphore sem;
       (Application::Get()->*action)(
         &sem,
         [](void* ctx) {
           reinterpret_cast<starboard::Semaphore*>(ctx)->Put();
         });
-      mutex_.Release();
+      lock.unlock();
       sem.Take();
     }
     else {
-      mutex_.Release();
+      lock.unlock();
     }
   }
 
   State state_ { kUninitialized };
-  starboard::Mutex mutex_;
-  starboard::ConditionVariable condition_;
+  std::mutex mutex_;
+  std::condition_variable condition_;
   SbRdkCallbackFunc stop_request_cb_ { nullptr };
   void* stop_request_cb_data_ { nullptr };
   SbRdkCallbackFunc conceal_request_cb_ { nullptr };

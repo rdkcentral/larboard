@@ -45,8 +45,8 @@
 #include <sys/time.h>
 #include <chrono>
 #include <thread>
+#include <mutex>
 
-#include "starboard/common/mutex.h"
 #include "starboard/configuration.h"
 #include "starboard/file.h"
 #include "starboard/media.h"
@@ -124,7 +124,7 @@ class GStreamerAudioSink : public SbAudioSinkPrivate {
   int frame_buffers_size_in_frames_{0};
   std::thread audio_loop_thread_;
   void* context_{nullptr};
-  ::starboard::Mutex mutex_;
+  std::mutex mutex_;
   GstElement* pipeline_{nullptr};
   GstElement* appsrc_{nullptr};
   GstElement* queue_{nullptr};
@@ -251,9 +251,9 @@ GStreamerAudioSink::~GStreamerAudioSink() {
   g_source_attach(timeout_src, main_loop_context_);
   g_source_unref(timeout_src);
 
-  mutex_.Acquire();
+  std::unique_lock lock(mutex_);
   destroying_ = true;
-  mutex_.Release();
+  lock.unlock();
 
   // this will wake up apprsc if it is waiting for data
   gst_app_src_set_max_bytes(GST_APP_SRC(appsrc_), 1);
@@ -369,7 +369,7 @@ void GStreamerAudioSink::AppSrcNeedData(GstAppSrc* src,
   while (/*!is_eos_reached &&*/ !sink->enough_data_) {
     bool destroying = false;
     {
-      ::starboard::ScopedLock lock(sink->mutex_);
+      std::lock_guard lock(sink->mutex_);
       destroying = sink->destroying_;
     }
 

@@ -884,13 +884,13 @@ static void AddVideoMimeToGstCaps(GstCaps* caps, const char* mime) {
     return;
   }
 
-  const ::starboard::shared::starboard::media::MimeType mime_type { mime };
-  if (!mime_type.is_valid()) {
+  auto mime_type = ::starboard::MimeType::Create(mime);
+  if (!mime_type.has_value()) {
     GST_DEBUG("Invalid mime_type.");
     return;
   }
 
-  const auto& codecs = mime_type.GetCodecs();
+  const auto& codecs = mime_type->GetCodecs();
   if (codecs.size() != 1) {
     GST_DEBUG("Incorrect codecs size.");
     return;

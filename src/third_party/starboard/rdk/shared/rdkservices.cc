@@ -315,13 +315,6 @@ public:
     if (!notify_app)
       return;
 
-    if (auto* app = ApplicationRdk::Get(); app != nullptr) {
-      if (was_cc_enabled != caption_settings_.is_enabled)
-        app->InjectAccessibilityCaptionSettingsChanged();
-
-      if (was_highcontrast_enabled != display_settings_.is_high_contrast_text_enabled)
-        app->InjectAccessibilitySettingsChanged();
-    }
   }
 
   bool GetSettings(std::string& out_json) {
@@ -377,10 +370,6 @@ public:
        notify_on_change &= (caption_settings_.is_enabled != enabled);
        caption_settings_.is_enabled = enabled;
     }
-    if (notify_on_change && ApplicationRdk::Get()) {
-      SB_LOG(INFO) << "Accessibility closed caption setting changed, enabled = " << enabled;
-      ApplicationRdk::Get()->InjectAccessibilityCaptionSettingsChanged();
-    }
   }
 
   void SetHighContrastEnabled(bool enabled, bool notify_on_change = true) {
@@ -388,10 +377,6 @@ public:
       std::lock_guard lock(mutex_);
       notify_on_change &= (display_settings_.is_high_contrast_text_enabled != enabled);
       display_settings_.is_high_contrast_text_enabled = enabled;
-    }
-    if (notify_on_change && ApplicationRdk::Get()) {
-      SB_LOG(INFO) << "Accessibility high contrast text setting changed, enabled = " << enabled;
-      ApplicationRdk::Get()->InjectAccessibilitySettingsChanged();
     }
   }
 

@@ -15,12 +15,13 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <mutex>
+
 #include "third_party/starboard/rdk/shared/system/system_properties_override.h"
 
 #include <core/JSON.h>
 
 #include "starboard/common/once.h"
-#include "starboard/common/mutex.h"
 
 #include "third_party/starboard/rdk/shared/log_override.h"
 
@@ -59,7 +60,7 @@ struct SystemPropertiesImpl {
   };
 
   void SetSettings(const std::string& json) {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     Core::OptionalType<Core::JSON::Error> error;
     if ( !props_.FromString(json, error) ) {
       props_.Clear();
@@ -70,12 +71,12 @@ struct SystemPropertiesImpl {
   }
 
   bool GetSettings(std::string& out_json) const {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     return props_.ToString(out_json);
   }
 
   bool GetModelName(std::string &out) const {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     if (props_.ModelName.IsSet() && !props_.ModelName.Value().empty()) {
       out = props_.ModelName.Value();
       return true;
@@ -84,7 +85,7 @@ struct SystemPropertiesImpl {
   }
 
   bool GetBrandName(std::string &out) const {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     if (props_.BrandName.IsSet() && !props_.BrandName.Value().empty()) {
       out = props_.BrandName.Value();
       return true;
@@ -93,7 +94,7 @@ struct SystemPropertiesImpl {
   }
 
   bool GetModelYear(std::string &out) const {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     if (props_.ModelYear.IsSet() && !props_.ModelYear.Value().empty()) {
       out = props_.ModelYear.Value();
       return true;
@@ -102,7 +103,7 @@ struct SystemPropertiesImpl {
   }
 
   bool GetChipset(std::string &out) const {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     if (props_.ChipsetModelNumber.IsSet() && !props_.ChipsetModelNumber.Value().empty()) {
       out = props_.ChipsetModelNumber.Value();
       return true;
@@ -111,7 +112,7 @@ struct SystemPropertiesImpl {
   }
 
   bool GetFirmwareVersion(std::string &out) const {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     if (props_.FirmwareVersion.IsSet() && !props_.FirmwareVersion.Value().empty()) {
       out = props_.FirmwareVersion.Value();
       return true;
@@ -120,7 +121,7 @@ struct SystemPropertiesImpl {
   }
 
   bool GetIntegratorName(std::string &out) const {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     if (props_.IntegratorName.IsSet() && !props_.IntegratorName.Value().empty()) {
       out = props_.IntegratorName.Value();
       return true;
@@ -129,7 +130,7 @@ struct SystemPropertiesImpl {
   }
 
   bool GetFriendlyName(std::string &out) const {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     if (props_.FriendlyName.IsSet() && !props_.FriendlyName.Value().empty()) {
       out = props_.FriendlyName.Value();
       return true;
@@ -138,7 +139,7 @@ struct SystemPropertiesImpl {
   }
 
   bool GetDeviceType(std::string &out) const {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     if (props_.DeviceType.IsSet() && !props_.DeviceType.Value().empty()) {
       out = props_.DeviceType.Value();
       return true;
@@ -147,12 +148,12 @@ struct SystemPropertiesImpl {
   }
 
   bool IsIfaDisabled() const {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     return props_.DisableIFA.IsSet() && props_.DisableIFA.Value();
   }
 
 private:
-  ::starboard::Mutex mutex_;
+  mutable std::mutex mutex_;
   SystemPropertiesData props_;
 };
 
@@ -175,7 +176,7 @@ struct AdvertisingIdImpl {
   };
 
   void SetSettings(const std::string& json) {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     Core::OptionalType<Core::JSON::Error> error;
     if ( !props_.FromString(json, error) ) {
       props_.Clear();
@@ -186,12 +187,12 @@ struct AdvertisingIdImpl {
   }
 
   bool GetSettings(std::string& out_json) const {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     return props_.ToString(out_json);
   }
 
   bool GetIfa(std::string &out) const {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     if (props_.Ifa.IsSet() && !props_.Ifa.Value().empty()) {
       out = props_.Ifa.Value();
       return true;
@@ -200,7 +201,7 @@ struct AdvertisingIdImpl {
   }
 
   bool GetIfaType(std::string &out) const {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     if (props_.IfaType.IsSet() && !props_.IfaType.Value().empty()) {
       out = props_.IfaType.Value();
       return true;
@@ -209,7 +210,7 @@ struct AdvertisingIdImpl {
   }
 
   bool GetLmtAdTracking(std::string &out) const {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     if (props_.Lmt.IsSet() && !props_.Lmt.Value().empty()) {
       out = props_.Lmt.Value();
       return true;
@@ -218,7 +219,7 @@ struct AdvertisingIdImpl {
   }
 
 private:
-  ::starboard::Mutex mutex_;
+  mutable std::mutex mutex_;
   AdvertisingData props_;
 };
 

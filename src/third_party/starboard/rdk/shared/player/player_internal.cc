@@ -2215,6 +2215,13 @@ guint PlayerImpl::DispatchOnWorkerThread(Task* task) const {
 }
 
 void PlayerImpl::InvokeOnWorkerThreadAndWait(Task* task) {
+  if (g_main_context_is_owner(main_loop_context_)) {
+    task->PrintInfo();
+    task->Do();
+    delete task;
+    return;
+  }
+
   struct InvokeContext {
     std::mutex mutex;
     std::condition_variable cv;
@@ -2233,19 +2240,19 @@ void PlayerImpl::InvokeOnWorkerThreadAndWait(Task* task) {
       GST_TRACE("%d", gettid());
       ctx->task->PrintInfo();
       ctx->task->Do();
-      ctx->mutex.lock();
-      ctx->done = true;
-      ctx->cv.notify_one();
-      ctx->mutex.unlock();
+      {
+        std::lock_guard lock(ctx->mutex);
+        ctx->done = true;
+        ctx->cv.notify_one();
+      }
       return G_SOURCE_REMOVE;
     },
     &ctx,
     nullptr);
 
   // Wait for completion
-  std::unique_lock lock(ctx.mutex);
-  while (!ctx.done)
-      ctx.cv.wait(lock);
+  std::unique_lock<std::mutex> lock(ctx.mutex);
+  ctx.cv.wait(lock, [&ctx] { return ctx.done; } );
 
   delete task;
 }

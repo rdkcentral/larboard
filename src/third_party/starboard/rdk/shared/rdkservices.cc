@@ -979,10 +979,6 @@ private:
   }
 
 public:
-  void Initialize() {
-    Refresh();
-  }
-
   bool IsDisconnected() {
     Refresh();
     return !is_connected_.load();
@@ -1577,10 +1573,6 @@ void Accessibility::SetSettings(const std::string& json, bool notify_app) {
 
 bool Accessibility::GetSettings(std::string& out_json) {
   return GetAccessibility()->GetSettings(out_json);
-}
-
-void NetworkInfo::Initialize() {
-  GetNetworkInfo()->Initialize();
 }
 
 namespace platform {

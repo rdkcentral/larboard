@@ -38,7 +38,6 @@
 #include "starboard/shared/starboard/media/mime_supportability_cache.h"
 #include "third_party/starboard/rdk/shared/window/window_internal.h"
 #include "third_party/starboard/rdk/shared/log_override.h"
-#include "third_party/starboard/rdk/shared/rdkservices.h"
 #include "third_party/starboard/rdk/shared/time_constants.h"
 #include "third_party/starboard/rdk/shared/platform/platform_interface.h"
 
@@ -147,7 +146,6 @@ void ApplicationRdk::Initialize() {
   KeySystemSupportabilityCache::GetInstance()->SetCacheEnabled(true);
 
   ScheduleMemoryUsageCheck(kSbTimeSecond);
-  NetworkInfo::Initialize();
 }
 
 void ApplicationRdk::Teardown() {

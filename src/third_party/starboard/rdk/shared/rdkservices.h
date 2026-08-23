@@ -31,11 +31,6 @@ public:
   static bool GetSettings(std::string& out_json);
 };
 
-class NetworkInfo {
-public:
-  static void Initialize();
-};
-
 namespace platform {
 
 class RDKServicesInterface final : public PlatformInterface {

@@ -22,8 +22,6 @@
 #include <cstring>
 #include <gst/gst.h>
 
-#include "starboard/memory.h"
-#include "starboard/common/mutex.h"
 #include "starboard/shared/starboard/thread_checker.h"
 
 #include <websocket/URL.h>
@@ -159,8 +157,8 @@ class Session {
   const SbDrmSessionUpdatedFunc session_updated_callback_;
   const SbDrmSessionKeyStatusesChangedFunc key_statuses_changed_callback_;
   const SbDrmSessionClosedFunc session_closed_callback_;
-  ::starboard::Mutex mutex_;
-  ::starboard::Mutex close_mutex_;
+  std::mutex mutex_;
+  std::mutex close_mutex_;
   std::string last_challenge_;
   std::string last_challenge_url_;
   std::string id_;
@@ -192,10 +190,10 @@ Session::~Session() {
 void Session::Close() {
   SB_DCHECK(thread_checker_.CalledOnValidThread());
   if (session_) {
-    ::starboard::ScopedLock lock(close_mutex_);
+    std::lock_guard lock(close_mutex_);
     ScopedOcdmSession tmp;
     {
-      ::starboard::ScopedLock lock(mutex_);
+      std::lock_guard lock(mutex_);
       tmp = std::move (session_);
       SB_CHECK( session_ == nullptr );
     }
@@ -209,7 +207,7 @@ void Session::Close() {
     SB_LOG(WARNING) << "Closing ivalid session ?";
 
   {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     ticket_ = kSbDrmTicketInvalid;
     operation_ = Operation::kNone;
     id_.clear();
@@ -223,7 +221,7 @@ void Session::GenerateChallenge(const std::string& type,
   SB_DCHECK(thread_checker_.CalledOnValidThread());
   SB_LOG(INFO) << "Generating challenge";
   {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     ticket_ = ticket;
     operation_ = Operation::kGenrateChallenge;
     all_keys_updated_ = false;
@@ -247,7 +245,7 @@ void Session::GenerateChallenge(const std::string& type,
   std::string url;
   std::string id;
   {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     id_ = opencdm_session_id(session_.get());
     id = id_;
     challenge.swap(last_challenge_);
@@ -264,7 +262,7 @@ void Session::DispatchPendingKeyUpdates() {
   bool all_keys_updated = false;
   std::vector<SbDrmKeyId> pending_key_updates;
   {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     pending_key_updates.swap(pending_key_updates_);
     all_keys_updated = all_keys_updated_;
   }
@@ -287,7 +285,7 @@ void Session::Update(const void* key, int key_size, int ticket) {
   auto id = Id();
   SB_DCHECK(!id.empty());
   {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     SB_LOG(INFO) << "Updating session " << id;
     ticket_ = ticket;
     operation_ = Operation::kUpdate;
@@ -308,7 +306,7 @@ int Session::Decrypt(
   _GstBuffer* key,
   _GstCaps* caps) {
 
-  ::starboard::ScopedLock lock(close_mutex_);
+  std::lock_guard lock(close_mutex_);
   OpenCDMSession* session = session_.get();
   if (!session)
     return ERROR_INVALID_SESSION;
@@ -343,7 +341,7 @@ void Session::OnProcessChallenge(OpenCDMSession* ocdm_session,
   std::string id;
   int ticket;
   {
-    ::starboard::ScopedLock lock(session->mutex_);
+    std::lock_guard lock(session->mutex_);
     id = session->Id();
     if (id.empty()) {
       session->last_challenge_url_ = url;
@@ -402,7 +400,7 @@ void Session::OnKeyUpdated(struct OpenCDMSession* /*ocdm_session*/,
   Session* session = static_cast<Session*>(user_data);
   std::string id;
   {
-    ::starboard::ScopedLock lock(session->mutex_);
+    std::lock_guard lock(session->mutex_);
     id = session->Id();
   }
 
@@ -411,7 +409,7 @@ void Session::OnKeyUpdated(struct OpenCDMSession* /*ocdm_session*/,
   memcpy(drm_key_id.identifier, key_id, drm_key_id.identifier_size);
 
   if (id.empty()) {
-    ::starboard::ScopedLock lock(session->mutex_);
+    std::lock_guard lock(session->mutex_);
     if (SbDrmTicketIsValid(session->ticket_)) {
       session->pending_key_updates_.push_back(std::move(drm_key_id));
     } else {
@@ -437,7 +435,7 @@ void Session::OnAllKeysUpdated(const struct OpenCDMSession* /*ocdm_session*/,
   int ticket;
   std::string id;
   {
-    ::starboard::ScopedLock lock(session->mutex_);
+    std::lock_guard lock(session->mutex_);
     id = session->Id();
     session->all_keys_updated_ = true;
     if (id.empty()) {
@@ -483,7 +481,7 @@ void Session::OnError(struct OpenCDMSession* /*ocdm_session*/,
   std::string id;
   Operation operation;
   {
-    ::starboard::ScopedLock lock(session->mutex_);
+    std::lock_guard lock(session->mutex_);
     operation = session->operation_;
     session->operation_ = Operation::kNone;
     ticket = session->ticket_;
@@ -564,7 +562,7 @@ DrmSystemOcdm::~DrmSystemOcdm() {
 void DrmSystemOcdm::Invalidate() {
   OpenCDMSystem* ocdm_system = nullptr;
   {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     if (event_id_ != kSbEventIdInvalid)
       SbEventCancel(event_id_);
     ocdm_system = std::exchange(ocdm_system_, nullptr);
@@ -593,9 +591,9 @@ void DrmSystemOcdm::GenerateSessionUpdateRequest(
   session->GenerateChallenge(type, initialization_data,
                              initialization_data_size, ticket);
   Session *session_ptr = session.get();
-  mutex_.Acquire();
+  std::unique_lock lock(mutex_);
   sessions_.push_back(std::move(session));
-  mutex_.Release();
+  lock.unlock();
   session_ptr->DispatchPendingKeyUpdates();
 }
 
@@ -637,8 +635,8 @@ SbDrmSystemPrivate::DecryptStatus DrmSystemOcdm::Decrypt(InputBuffer* buffer) {
   return kFailure;
 }
 
-Session* DrmSystemOcdm::GetSessionById(const std::string& id) const {
-  ::starboard::ScopedLock lock(mutex_);
+Session* DrmSystemOcdm::GetSessionById(const std::string& id) {
+  std::lock_guard lock(mutex_);
   auto iter = std::find_if(
       sessions_.begin(), sessions_.end(),
       [&id](const std::unique_ptr<Session>& s) { return id == s->Id(); });
@@ -650,12 +648,12 @@ Session* DrmSystemOcdm::GetSessionById(const std::string& id) const {
 }
 
 void DrmSystemOcdm::AddObserver(DrmSystemOcdm::Observer* obs) {
-  ::starboard::ScopedLock lock(mutex_);
+  std::lock_guard lock(mutex_);
   observers_.push_back(obs);
 }
 
 void DrmSystemOcdm::RemoveObserver(DrmSystemOcdm::Observer* obs) {
-  ::starboard::ScopedLock lock(mutex_);
+  std::lock_guard lock(mutex_);
   auto found = std::find(observers_.begin(), observers_.end(), obs);
   SB_DCHECK(found != observers_.end());
   observers_.erase(found);
@@ -664,7 +662,7 @@ void DrmSystemOcdm::RemoveObserver(DrmSystemOcdm::Observer* obs) {
 void DrmSystemOcdm::OnKeyUpdated(const std::string& session_id,
                                  SbDrmKeyId&& key_id,
                                  SbDrmKeyStatus status) {
-  ::starboard::ScopedLock lock(mutex_);
+  std::lock_guard lock(mutex_);
   auto session_key = session_keys_.find(session_id);
   KeyWithStatus key_with_status;
   key_with_status.key = key_id;
@@ -688,7 +686,7 @@ void DrmSystemOcdm::OnKeyUpdated(const std::string& session_id,
 }
 
 void DrmSystemOcdm::OnAllKeysUpdated() {
-  ::starboard::ScopedLock lock(mutex_);
+  std::lock_guard lock(mutex_);
   cached_ready_keys_.clear();
   if (event_id_ != kSbEventIdInvalid)
     SbEventCancel(event_id_);
@@ -714,8 +712,8 @@ std::set<std::string> DrmSystemOcdm::GetReadyKeysUnlocked() const {
   return cached_ready_keys_;
 }
 
-std::set<std::string> DrmSystemOcdm::GetReadyKeys() const {
-  ::starboard::ScopedLock lock(mutex_);
+std::set<std::string> DrmSystemOcdm::GetReadyKeys() {
+  std::lock_guard lock(mutex_);
   return GetReadyKeysUnlocked();
 }
 
@@ -727,7 +725,7 @@ DrmSystemOcdm::KeysWithStatus DrmSystemOcdm::GetSessionKeys(
 }
 
 void DrmSystemOcdm::AnnounceKeys() {
-  ::starboard::ScopedLock lock(mutex_);
+  std::lock_guard lock(mutex_);
   auto ready_keys = GetReadyKeysUnlocked();
   for (auto* observer : observers_) {
     for (auto& key : ready_keys) {

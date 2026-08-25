@@ -24,13 +24,13 @@
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/syscall.h>
+#include <condition_variable>
+#include <mutex>
 #include <thread>
 #include <chrono>
 
 #include "starboard/common/once.h"
 #include "starboard/thread.h"
-#include "starboard/common/condition_variable.h"
-#include "starboard/common/mutex.h"
 
 #include "third_party/starboard/rdk/shared/log_override.h"
 
@@ -119,11 +119,11 @@ struct HangDetector
 
   ~HangDetector() {
     if (thread_.joinable()) {
-      mutex_.Acquire();
+      std::unique_lock lock(mutex_);
       running_ = false;
       monitors_.clear();
-      condition_.Broadcast();
-      mutex_.Release();
+      condition_.notify_all();
+      lock.unlock();
       thread_.join();
     }
   }
@@ -136,11 +136,11 @@ struct HangDetector
       // don't hog the cpu in case timed condition fails
       usleep( 1000 );
 
-      ::starboard::ScopedLock lock(mutex_);
+      std::unique_lock lock(mutex_);
       if ( running_ == false )
         return;
 
-      if ( condition_.WaitTimed( duration_cast<microseconds>(check_interval_).count() ) )
+      if ( condition_.wait_for( lock, std::chrono::microseconds(duration_cast<microseconds>(check_interval_).count()) ) == std::cv_status::no_timeout )
         continue;
 
       auto now = steady_clock::now();
@@ -160,9 +160,9 @@ struct HangDetector
             continue;
           }
 
-          mutex_.Release();
+          mutex_.unlock();
           kill_action( pid, tid, name );
-          mutex_.Acquire();
+          mutex_.lock();
 
           running_ = false;
           SB_CHECK(false);
@@ -173,12 +173,12 @@ struct HangDetector
   }
 
   void AddMonitor(HangMonitor *m) {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     monitors_.push_back(m);
   }
 
   void RemoveMonitor(HangMonitor *m) {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     monitors_.erase(std::remove(monitors_.begin(), monitors_.end(), m), monitors_.end());
   }
 
@@ -186,7 +186,7 @@ struct HangDetector
     return check_interval_;
   }
 
-  ::starboard::Mutex& Lock() {
+  std::mutex& Lock() {
     return mutex_;
   }
 
@@ -197,8 +197,8 @@ private:
   bool running_ { true };
   std::vector<HangMonitor*> monitors_;
 
-  ::starboard::Mutex mutex_;
-  ::starboard::ConditionVariable condition_ { mutex_ };
+  std::mutex mutex_;
+  std::condition_variable condition_;
 };
 
 SB_ONCE_INITIALIZE_FUNCTION(HangDetector, GetHangDetector);
@@ -236,7 +236,7 @@ int HangMonitor::IncExpirationCount() {
 
 void HangMonitor::Reset() {
   auto &hang_detector = *GetHangDetector();
-  ::starboard::ScopedLock lock(hang_detector.Lock());
+  std::lock_guard lock(hang_detector.Lock());
   expiration_time_ = steady_clock::now() + hang_detector.GetCheckInterval();
   expiration_count_ = 0;
   tid_ = get_tid();

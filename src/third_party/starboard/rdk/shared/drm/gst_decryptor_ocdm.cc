@@ -19,8 +19,8 @@
 #if defined(HAS_OCDM)
 #include "third_party/starboard/rdk/shared/drm/drm_system_ocdm.h"
 
-#include "starboard/common/mutex.h"
-#include "starboard/common/condition_variable.h"
+#include <condition_variable>
+#include <mutex>
 
 #include <gst/gst.h>
 #include <gst/base/gstbasetransform.h>
@@ -108,9 +108,9 @@ struct _CobaltOcdmDecryptorPrivate : public DrmSystemOcdm::Observer {
     }
 #endif
 
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     if (awaiting_key_info_)
-      condition_.Signal();
+      condition_.notify_one();
   }
 
   GstFlowReturn Decrypt(
@@ -180,7 +180,7 @@ struct _CobaltOcdmDecryptorPrivate : public DrmSystemOcdm::Observer {
           GST_DEBUG_OBJECT(self, "Got buffer protected with key %s", md5sum);
           g_free(md5sum);
         }
-        ::starboard::ScopedLock lock(mutex_);
+        std::unique_lock lock(mutex_);
         current_session_id_.clear();
         if (current_key_id_) {
           gst_buffer_unref(current_key_id_);
@@ -196,7 +196,7 @@ struct _CobaltOcdmDecryptorPrivate : public DrmSystemOcdm::Observer {
           }
           GST_DEBUG_OBJECT(self, "Session id is empty, waiting");
           awaiting_key_info_ = &map_info;
-          condition_.Wait();
+          condition_.wait(lock);
           awaiting_key_info_ = nullptr;
         }
         if (debug_level >= GST_LEVEL_DEBUG) {
@@ -305,15 +305,15 @@ struct _CobaltOcdmDecryptorPrivate : public DrmSystemOcdm::Observer {
   }
 
   void SetIsFlushing(bool is_flushing) {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     is_flushing_ = is_flushing;
-    condition_.Signal();
+    condition_.notify_one();
   }
 
   void SetActive(bool is_active) {
-    ::starboard::ScopedLock lock(mutex_);
+    std::lock_guard lock(mutex_);
     is_active_ = is_active;
-    condition_.Signal();
+    condition_.notify_one();
   }
 
   void SetCachedCaps(GstCaps* caps) {
@@ -332,8 +332,8 @@ struct _CobaltOcdmDecryptorPrivate : public DrmSystemOcdm::Observer {
   bool IsVideo() const { return is_video_; }
 
 private:
-  ::starboard::Mutex mutex_;
-  ::starboard::ConditionVariable condition_ { mutex_ };
+  std::mutex mutex_;
+  std::condition_variable condition_;
 
   GstCaps*    cached_caps_ { nullptr };
   GstMapInfo* awaiting_key_info_ { nullptr };

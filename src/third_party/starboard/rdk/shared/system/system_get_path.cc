@@ -28,7 +28,6 @@
 #include "starboard/configuration_constants.h"
 #include "starboard/common/log.h"
 #include "starboard/common/string.h"
-#include "starboard/directory.h"
 #if SB_IS(EVERGREEN_COMPATIBLE)
 #include "starboard/elf_loader/evergreen_config.h"
 #endif
@@ -192,6 +191,37 @@ bool GetExecutableDirectory(char* out_path, int path_size) {
   return true;
 }
 
+// Gets path to the files directory, using the home directory.
+bool GetFilesDirectory(char* out_path, int path_size) {
+
+  const char* files_path = std::getenv("COBALT_FILES_DIR");
+  if (files_path) {
+    if (starboard::strlcat<char>(out_path, files_path, path_size) < path_size) {
+      struct stat info;
+      return mkdir(out_path, 0700) == 0 ||
+         (stat(out_path, &info) == 0 && S_ISDIR(info.st_mode));
+    }
+    else
+      SB_LOG(ERROR) << "GetFilesDirectory: out_path exceeds max file path size";
+  }
+
+  std::vector<char> home_path(kSbFileMaxPath + 1);
+  if (!starboard::shared::starboard::GetHomeDirectory(home_path.data(),
+                                                      kSbFileMaxPath)) {
+    return false;
+  }
+
+  int result = snprintf(out_path, path_size, "%s/.cobalt_files", home_path.data());
+  if (result < 0 || result >= path_size) {
+    out_path[0] = '\0';
+    return false;
+  }
+  SB_LOG(INFO) << "SbSysGetPath: FilesDirectoy = " << std::string(out_path);
+  struct stat info;
+  return mkdir(out_path, 0700) == 0 ||
+         (stat(out_path, &info) == 0 && S_ISDIR(info.st_mode));
+}
+
 // Gets only the name portion of the current executable.
 bool GetExecutableName(char* out_path, int path_size) {
   std::vector<char> path(kSbFileMaxPath, 0);
@@ -305,6 +335,13 @@ bool SbSystemGetPath(SbSystemPathId path_id, char* out_path, int path_size) {
           return false;
       }
       break;
+
+    case kSbSystemPathFilesDirectory: {
+      if (!GetFilesDirectory(path, kPathSize)) {
+        return false;
+      }
+      break;
+    }
 
     default:
       SB_NOTIMPLEMENTED() << "SbSystemGetPath not implemented for " << path_id;

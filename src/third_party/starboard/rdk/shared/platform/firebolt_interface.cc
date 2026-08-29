@@ -31,7 +31,7 @@
 #include <cstring>
 
 using namespace std::chrono_literals;
-using starboard::shared::starboard::media::MimeSupportabilityCache;
+using ::starboard::MimeSupportabilityCache;
 
 namespace third_party {
 namespace starboard {

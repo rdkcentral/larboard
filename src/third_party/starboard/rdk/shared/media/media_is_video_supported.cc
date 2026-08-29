@@ -41,8 +41,8 @@
 
 #include <cstring>
 
-using ::starboard::shared::starboard::media::IsSDRVideo;
-using ::starboard::shared::starboard::media::MimeType;
+using ::starboard::IsSDRVideo;
+using ::starboard::MimeType;
 using namespace third_party::starboard::rdk::shared;
 
 namespace starboard {

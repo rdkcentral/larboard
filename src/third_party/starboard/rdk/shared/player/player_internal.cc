@@ -92,7 +92,7 @@ int Player::MaxNumberOfSamplesPerWrite() {
 
 using third_party::starboard::rdk::shared::drm::CreateDecryptorElement;
 using third_party::starboard::rdk::shared::media::CodecToGstCaps;
-using ::starboard::shared::starboard::media::IsSDRVideo;
+using ::starboard::IsSDRVideo;
 
 // **************************** GST/GLIB Helpers **************************** //
 
@@ -2188,7 +2188,7 @@ gboolean PlayerImpl::HandleBusMessage(GstBus* bus, GstMessage* message) {
 
 // static
 void* PlayerImpl::ThreadEntryPoint(void* context) {
-  setpriority(PRIO_PROCESS, 0, ThreadPriorityToNiceValue(ThreadPriority::kRealTime));
+  setpriority(PRIO_PROCESS, 0, ::starboard::ThreadPriorityToNiceValue(::starboard::ThreadPriority::kRealTime));
   SB_DCHECK(context);
   GST_TRACE("%d", gettid());
 

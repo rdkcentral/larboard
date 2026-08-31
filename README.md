@@ -110,7 +110,7 @@ graph TD
 #### Platform and Integration Requirements
 
 - **Build Dependencies**: `essos`, `gstreamer1.0`, `gstreamer1.0-plugins-base`, `wpeframework`, `entservices-apis`, `wpeframework-clientlibraries`, `openssl`, `gn-native`, `ninja-native`, `bison-native`, `ccache-native`.
-- **Runtime Dependencies**: `gstreamer1.0-plugins-base-app`, `gstreamer1.0-plugins-base-playback`, `libloader_app.so` (Cobalt Evergreen engine linked by `CobaltImplementation`).
+- **Runtime Dependencies**: `gstreamer1.0-plugins-base-app`, `gstreamer1.0-plugins-base-playback`, `libloader_app.so` (Evergreen loader library providing `StarboardMain` and `SbRdk*` entry points; linked by `CobaltImplementation`).
 - **Plugin Dependencies**: `Platform`, `Graphics`, and `Internet` Thunder plugins must be active before the Cobalt plugin initializes, as configured via the `precondition` field in `Cobalt.conf.in`.
 - **Optional Build Features**:
   - `rdk_enable_ocdm=true` — OpenCDM DRM support, required for protected content playback.
@@ -270,7 +270,7 @@ The Cobalt plugin communicates northbound with Thunder and applications, and sou
 | Target Component / Layer        | Interaction Purpose                                                                                  | Key APIs / Topics                                                                                                       |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | **Application**                 |                                                                                                      |                                                                                                                         |
-| `libloader_app.so`              | Cobalt engine entry point and lifecycle control                                                      | `StarboardMain()`, `SbRdkSuspend()`, `SbRdkResume()`, `SbRdkHandleDeepLink()`, `SbRdkSetSetting()`, `SbRdkGetSetting()` |
+| `libloader_app.so`              | Evergreen loader providing `StarboardMain` and `SbRdk*` entry points for engine lifecycle control    | `StarboardMain()`, `SbRdkSuspend()`, `SbRdkResume()`, `SbRdkHandleDeepLink()`, `SbRdkSetSetting()`, `SbRdkGetSetting()` |
 | **Middleware**                  |                                                                                                      |                                                                                                                         |
 | `DisplayInfo.1`                 | Query display resolution and HDR format for Starboard media capability reporting                     | `DisplayInfo.1` display resolution and HDR properties methods                                                           |
 | `PlayerInfo.1`                  | Query audio output configuration for Starboard audio capability reporting                            | `PlayerInfo.1` audio output methods                                                                                     |
@@ -344,19 +344,19 @@ sequenceDiagram
 
 ### Major APIs Integration
 
-| Starboard API                     | Purpose                                                                                                             | Implementation File                       |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| `StarboardMain()`                 | Cobalt engine entry point; drives the application event loop until exit                                             | `main_rdk.cc`, `CobaltImplementation.cpp` |
-| `SbRdkHandleDeepLink()`           | Delivers a deep link URL to the running Cobalt application                                                          | `CobaltImplementation.cpp`                |
-| `SbRdkSuspend()`                  | Requests the Cobalt engine to enter suspended state                                                                 | `CobaltImplementation.cpp`                |
-| `SbRdkResume()`                   | Requests the Cobalt engine to exit suspended state                                                                  | `CobaltImplementation.cpp`                |
-| `SbRdkPause()`                    | Requests the Cobalt engine to enter background (non-rendering) state                                                | `CobaltImplementation.cpp`                |
-| `SbRdkUnpause()`                  | Requests the Cobalt engine to exit background state                                                                 | `CobaltImplementation.cpp`                |
-| `SbRdkQuit()`                     | Requests the Cobalt engine to exit cleanly                                                                          | `CobaltImplementation.cpp`                |
-| `SbRdkSetSetting()`               | Passes a JSON-encoded value for a named key into the Cobalt engine (accessibility, advertisingid, systemproperties) | `CobaltImplementation.cpp`                |
-| `SbRdkGetSetting()`               | Retrieves a JSON-encoded value for a named key from the Cobalt engine                                               | `CobaltImplementation.cpp`                |
-| `SbRdkSetCobaltExitStrategy()`    | Configures whether a window close request results in a suspend or quit                                              | `CobaltImplementation.cpp`                |
-| `SbRdkSetConcealRequestHandler()` | Registers a callback invoked when the Cobalt engine requests concealment                                            | `CobaltImplementation.cpp`                |
+| Starboard API                     | Purpose                                                                                                             | Implementation File                                                                                                    |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `StarboardMain()`                 | Cobalt engine entry point; drives the application event loop until exit                                             | `CobaltImplementation.cpp` (invokes `StarboardMain`); `main_rdk.cc` (platform `main` wrapper via `SbRunStarboardMain`) |
+| `SbRdkHandleDeepLink()`           | Delivers a deep link URL to the running Cobalt application                                                          | `CobaltImplementation.cpp`                                                                                             |
+| `SbRdkSuspend()`                  | Requests the Cobalt engine to enter suspended state                                                                 | `CobaltImplementation.cpp`                                                                                             |
+| `SbRdkResume()`                   | Requests the Cobalt engine to exit suspended state                                                                  | `CobaltImplementation.cpp`                                                                                             |
+| `SbRdkPause()`                    | Requests the Cobalt engine to enter background (non-rendering) state                                                | `CobaltImplementation.cpp`                                                                                             |
+| `SbRdkUnpause()`                  | Requests the Cobalt engine to exit background state                                                                 | `CobaltImplementation.cpp`                                                                                             |
+| `SbRdkQuit()`                     | Requests the Cobalt engine to exit cleanly                                                                          | `CobaltImplementation.cpp`                                                                                             |
+| `SbRdkSetSetting()`               | Passes a JSON-encoded value for a named key into the Cobalt engine (accessibility, advertisingid, systemproperties) | `CobaltImplementation.cpp`                                                                                             |
+| `SbRdkGetSetting()`               | Retrieves a JSON-encoded value for a named key from the Cobalt engine                                               | `CobaltImplementation.cpp`                                                                                             |
+| `SbRdkSetCobaltExitStrategy()`    | Configures whether a window close request results in a suspend or quit                                              | `CobaltImplementation.cpp`                                                                                             |
+| `SbRdkSetConcealRequestHandler()` | Registers a callback invoked when the Cobalt engine requests concealment                                            | `CobaltImplementation.cpp`                                                                                             |
 
 ### Key Implementation Logic
 

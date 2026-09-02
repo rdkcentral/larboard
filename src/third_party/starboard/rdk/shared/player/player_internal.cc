@@ -75,10 +75,7 @@ static const char kDidReceiveFirstSegmentMsgName[] = "did-receive-first-segment"
 static const char kDidReachBufferingTargetMsgName[] = "did-reach-buffering-target";
 static const char kDecryptToHostFieldName[] = "decrypt-to-host";
 
-// Amount of audio/video to buffer in the streaming thread
-// before switching to the presenting state after a seek
-const GstClockTime kAudioBufferDurationNs = 100 * GST_MSECOND;
-const GstClockTime kVideoBufferDurationNs = 160 * GST_MSECOND;
+const int kSrcQueueMaxSizeBuffers = 10;
 
 const GstSeekFlags kDefaultSeekFlags = static_cast<GstSeekFlags>(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE);
 
@@ -450,7 +447,7 @@ void gst_cobalt_src_setup_and_add_app_src(SbMediaType media_type,
                                           gboolean inject_decryptor,
                                           gboolean inject_payloader) {
   const uint32_t kAudioMaxBytes = 256 * 1024;
-  const uint32_t kVideoMaxBytes = 8 * 1024 * 1024;
+  const uint32_t kVideoMaxBytes = 16 * 1024 * 1024;
 
   uint32_t max_bytes = (media_type == kSbMediaTypeVideo) ? kVideoMaxBytes : kAudioMaxBytes;
 
@@ -499,11 +496,17 @@ void gst_cobalt_src_setup_and_add_app_src(SbMediaType media_type,
   }
 
   if (!isRialtoEnabled()) {
-    GstElement* queue = gst_element_factory_make("queue", nullptr);
+    const uint32_t kAudioQueueMaxSizeBytes = 128 * 1024;
+    const uint32_t kVideoQueueMaxSizeBytes = 2 * 1024 * 1024;
+    uint32_t max_size = (media_type == kSbMediaTypeVideo)
+      ? kVideoQueueMaxSizeBytes : kAudioQueueMaxSizeBytes;
+    const char* queue_name = (media_type == kSbMediaTypeVideo)
+      ? "vsrc-queue" : "asrc-queue";
+    GstElement* queue = gst_element_factory_make("queue", queue_name);
     g_object_set (
       G_OBJECT (queue),
-      "max-size-buffers", 60,
-      "max-size-bytes", 0,
+      "max-size-buffers", kSrcQueueMaxSizeBuffers,
+      "max-size-bytes", max_size,
       "max-size-time", (gint64) 0,
       "silent", TRUE,
       nullptr);
@@ -993,6 +996,67 @@ static void PrintPositionPerSink(GstElement* element, GstDebugLevel level)
     }
   }
   gst_iterator_free (iter);
+}
+
+static void PrintCurrentLevels(GstElement* element, GstDebugLevel level)
+{
+#ifndef GST_DISABLE_GST_DEBUG
+  if (gst_debug_category_get_threshold(GST_CAT_DEFAULT) < level)
+    return;
+
+  g_return_if_fail (element != NULL);
+  g_return_if_fail (GST_IS_BIN (element));
+
+  auto print_fn = [](const GValue *vitem, gpointer data) {
+    GstDebugLevel level = (GstDebugLevel)GPOINTER_TO_INT(data);
+    GstObject *item = GST_OBJECT(g_value_get_object (vitem));
+    if (GST_IS_BIN (item)) {
+      PrintCurrentLevels(GST_ELEMENT(item), level);
+    }
+    else if (GST_IS_APP_SRC (item)) {
+      guint current_level_bytes = gst_app_src_get_current_level_bytes(GST_APP_SRC(item));
+      GST_CAT_LEVEL_LOG (GST_CAT_DEFAULT, level, item,
+                         "levels: bytes=%u kb",
+                         current_level_bytes / 1024u);
+    }
+    else if (!g_strcmp0 (G_OBJECT_TYPE_NAME(G_OBJECT(item)), "GstQueue")) {
+      guint current_level_buffers = 0;
+      guint current_level_bytes = 0;
+      guint64 current_level_time = 0;
+      g_object_get(
+        G_OBJECT(item),
+        "current-level-buffers", &current_level_buffers,
+        "current-level-bytes", &current_level_bytes,
+        "current-level-time", &current_level_time,
+        nullptr);
+     GST_CAT_LEVEL_LOG (GST_CAT_DEFAULT, level, item,
+                        "levels: buffers=%u, bytes=%u kb, time=%" GST_TIME_FORMAT "",
+                        current_level_buffers,
+                        current_level_bytes / 1024u,
+                        GST_TIME_ARGS(current_level_time));
+    }
+    else if (GST_IS_BASE_SINK(item)) {
+      if (g_str_has_prefix(GST_ELEMENT_NAME(item), "westerossink") &&
+          g_object_class_find_property(G_OBJECT_GET_CLASS(item), "queued-frames")) {
+        guint queued_frames = 0;
+        g_object_get(
+          G_OBJECT(item),
+          "queued-frames", &queued_frames,
+          nullptr);
+        GST_CAT_LEVEL_LOG (GST_CAT_DEFAULT, level, item,
+                           "levels: queued-frames=%u",
+                           queued_frames);
+      }
+    }
+  };
+
+  GstBin *bin = GST_BIN_CAST (element);
+  GstIterator *iter = gst_bin_iterate_elements (bin);
+  while (gst_iterator_foreach (iter, print_fn, GINT_TO_POINTER(level)) == GST_ITERATOR_RESYNC) {
+    gst_iterator_resync (iter);
+  }
+  gst_iterator_free (iter);
+#endif
 }
 
 static GstCaps *ConvertToCencCaps(GstCaps *caps) {
@@ -1837,6 +1901,8 @@ PlayerImpl::PlayerImpl(SbPlayer player,
       gst_element_state_get_name(pending),
       gst_element_state_change_return_get_name(result),
       GST_TIME_ARGS(position));
+    PrintPositionPerSink(player.pipeline_, GST_LEVEL_DEBUG);
+    PrintCurrentLevels(player.pipeline_, GST_LEVEL_DEBUG);
     player.hang_monitor_.Reset();
     return G_SOURCE_CONTINUE;
   }, this, nullptr);
@@ -3102,6 +3168,7 @@ void PlayerImpl::CheckBuffering(GstClockTime position) {
       buf_target_min_ts_ = position + kTargetBufferDurationNs;
     }
     PrintPositionPerSink(pipeline_, GST_LEVEL_INFO);
+    PrintCurrentLevels(pipeline_, GST_LEVEL_INFO);
     GST_INFO_OBJECT(pipeline_, "Pause for buffering. Pos: %" GST_TIME_FORMAT
                 ", min ts:%" GST_TIME_FORMAT, GST_TIME_ARGS(position), GST_TIME_ARGS(min_ts));
     ChangePipelineState(GST_STATE_PAUSED);
@@ -3422,12 +3489,14 @@ void PlayerImpl::AddBufferingProbe(GstClockTime target, int ticket) {
   struct BufferingProbeData {
     GstClockTime target_time;
     int ticket;
+    int buf_count;
   };
 
   auto add_probe = [](GstElement* element, GstClockTime target, int ticket, GstPadProbeCallback callback) -> gulong {
     BufferingProbeData* data = reinterpret_cast<BufferingProbeData*>(g_malloc0(sizeof (BufferingProbeData)));
     data->target_time = target;
     data->ticket = ticket;
+    data->buf_count = 0;
 
     GstPad* pad = gst_element_get_static_pad(element, "src");
     GstPadProbeType probe_type = static_cast<GstPadProbeType>(GST_PAD_PROBE_TYPE_BUFFER |
@@ -3468,9 +3537,12 @@ void PlayerImpl::AddBufferingProbe(GstClockTime target, int ticket) {
     GstClockTime pts = GST_BUFFER_TIMESTAMP(buffer);
     GstClockTime duration = GST_CLOCK_TIME_IS_VALID(GST_BUFFER_DURATION(buffer)) ? GST_BUFFER_DURATION(buffer) : 0;
     GST_TRACE_OBJECT(
-      pad, "Testing buffer: %" GST_PTR_FORMAT " for target time: %" GST_TIME_FORMAT " with ticket: %d",
-      buffer, GST_TIME_ARGS(data->target_time), data->ticket);
-    if ( (pts + duration) >= data->target_time ) {
+      pad, "Testing buffer: %" GST_PTR_FORMAT " for target time: %" GST_TIME_FORMAT " with ticket: %d, count: %d",
+      buffer, GST_TIME_ARGS(data->target_time), data->ticket, data->buf_count);
+    if ( data->buf_count || (pts + duration) >= data->target_time ) {
+      ++data->buf_count;
+    }
+    if ( data->buf_count >= kSrcQueueMaxSizeBuffers ) {
       GstObject* parent = gst_pad_get_parent(pad);
       g_return_val_if_fail(parent != nullptr, GST_PAD_PROBE_REMOVE);
       GST_DEBUG_OBJECT(
@@ -3489,14 +3561,14 @@ void PlayerImpl::AddBufferingProbe(GstClockTime target, int ticket) {
   buffering_state_ = 0;
 
   if (audio_appsrc_ && audio_codec_ != kSbMediaAudioCodecNone) {
-    if (add_probe(audio_appsrc_, target + kAudioBufferDurationNs, ticket, buffering_probe_callback) != 0u)
+    if (add_probe(audio_appsrc_, target, ticket, buffering_probe_callback) != 0u)
       buffering_state_ |= static_cast<int>(MediaType::kAudio);
     else
       GST_WARNING_OBJECT(audio_appsrc_, "Could not add buffering probe!");
   }
 
   if (video_appsrc_ && video_codec_ != kSbMediaVideoCodecNone) {
-    if (add_probe(video_appsrc_, target + kVideoBufferDurationNs, ticket, buffering_probe_callback) != 0u)
+    if (add_probe(video_appsrc_, target, ticket, buffering_probe_callback) != 0u)
       buffering_state_ |= static_cast<int>(MediaType::kVideo);
     else
       GST_WARNING_OBJECT(video_appsrc_, "Could not add buffering probe!");

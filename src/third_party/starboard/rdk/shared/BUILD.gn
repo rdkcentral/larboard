@@ -31,9 +31,8 @@
 import("//build/config/linux/pkg_config.gni")
 
 declare_args() {
-  rdk_enable_securityagent = true
+  rdk_enable_securityagent = false
   rdk_enable_ocdm = true
-  rdk_enable_rfc_api = false
   rdk_enable_firebolt_api = false
   rdk_enable_firebolt_lifecycle = false
   rdk_enable_rdkservices_api = true
@@ -187,7 +186,7 @@ static_library("starboard_platform") {
     "//starboard/shared/stub/microphone_read.cc",
     "//starboard/shared/stub/system_hide_splash_screen.cc",
     "//starboard/shared/stub/system_raise_platform_error.cc",
-    "//starboard/shared/stub/system_symbolize.cc",
+    "//starboard/shared/linux/system_symbolize.cc",
 
     # RDK implementation
     "accessibility_extension.cc",
@@ -276,17 +275,12 @@ static_library("starboard_platform") {
     "window/window_get_platform_handle.cc",
     "window/window_get_size.cc",
     "window/window_internal.cc",
+    "main_rdk.cc",
   ]
 
   if (final_executable_type == "shared_library" && !build_with_separate_cobalt_toolchain) {
     sources += [
       "//starboard/shared/starboard/shared_main_adapter.cc"
-    ]
-  }
-
-  if (!sb_is_modular) {
-    sources += [
-      "main_rdk.cc",
     ]
   }
 
@@ -354,8 +348,6 @@ static_library("starboard_platform") {
   public_deps = [
     "//starboard:starboard_headers_only",
     "//starboard/common",
-    "//starboard/crashpad_wrapper:wrapper_stub",
-    "//starboard/linux/shared:starboard_base_symbolize",
     "//starboard/shared/starboard/media:media_util",
     "//third_party/modp_b64",
   ]
@@ -368,7 +360,6 @@ static_library("starboard_platform") {
 if (sb_is_modular && !sb_is_evergreen) {
   static_library("starboard_platform_with_main") {
     check_includes = false
-    sources = [ "main_rdk.cc" ]
     configs += [ "//starboard/build/config:starboard_implementation" ]
     public_deps = [ ":starboard_platform" ]
   }

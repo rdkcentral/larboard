@@ -37,7 +37,7 @@ config("platform_configuration") {
   defines = []
   cflags_cc = []
 
-  if (!build_with_separate_cobalt_toolchain) {
+  if (current_toolchain == starboard_toolchain) {
     ldflags += [
       "-Wl,--version-script," + rebase_path("exported-symbols.map", root_build_dir),
     ]
@@ -54,7 +54,10 @@ config("platform_configuration") {
     ]
 
     if (current_toolchain == starboard_toolchain) {
-      configs += [ "//starboard/build/config:starboard" ]
+      configs += [
+        "//starboard/build/config:starboard",
+        "//build/config/gcc:rpath_for_built_shared_libraries",
+      ]
     }
 
     libs = [

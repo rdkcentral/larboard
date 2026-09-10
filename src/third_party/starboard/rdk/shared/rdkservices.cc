@@ -260,9 +260,6 @@ public:
 
     std::lock_guard lock(mutex_);
 
-    bool was_cc_enabled = caption_settings_.is_enabled;
-    bool was_highcontrast_enabled = display_settings_.is_high_contrast_text_enabled;
-
     memset(&display_settings_, 0, sizeof(display_settings_));
     memset(&caption_settings_, 0, sizeof(caption_settings_));
 

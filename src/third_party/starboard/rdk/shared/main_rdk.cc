@@ -78,7 +78,7 @@ static void UninstallStopSignalHandlers() {
 }  // namespace starboard
 }  // namespace third_party
 
-extern "C" SB_EXPORT_PLATFORM int main(int argc, char** argv) {
+extern "C" SB_EXPORT_PLATFORM int StarboardMain(int argc, char** argv) {
   tzset();
 
   rlimit stack_size;

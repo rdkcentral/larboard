@@ -278,14 +278,6 @@ static_library("starboard_platform") {
     "window/window_internal.cc",
   ]
 
-  if (starboard_target_platform == "rdk-rpi") {
-    sources -= [
-      "//starboard/shared/gles/system_gles2.cc",
-    ]
-    sources += [
-    ]
-  }
-
   if (final_executable_type == "shared_library" && !build_with_separate_cobalt_toolchain) {
     sources += [
       "//starboard/shared/starboard/shared_main_adapter.cc"
@@ -313,16 +305,6 @@ static_library("starboard_platform") {
     ":gstreamer",
     ":wpeframework",
   ]
-
-  if (rdk_enable_rfc_api) {
-    libs += [
-      "rfcapi",
-    ]
-    cflags += [
-      "-I=/usr/include/wdmp-c",
-    ]
-    defines = [ "HAS_RFC_API=1" ]
-  }
 
   if (rdk_enable_securityagent) {
     configs += [ ":securityagent" ]

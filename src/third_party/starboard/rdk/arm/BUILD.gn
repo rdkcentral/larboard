@@ -38,9 +38,7 @@ static_library("starboard_platform") {
   ]
 
   sources = [
-    "atomic_public.h",
     "configuration_constants.cc",
-    "thread_types_public.h",
   ]
 }
 

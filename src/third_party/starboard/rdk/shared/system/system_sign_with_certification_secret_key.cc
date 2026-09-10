@@ -39,9 +39,6 @@
 
 #if defined(HAS_WPECRYPTOGRAPHY)
 #include <cryptography/cryptography.h>
-#if defined(HAS_RFC_API)
-#include <rfcapi.h>
-#endif
 #endif
 
 namespace {
@@ -78,19 +75,6 @@ bool SbSystemSignWithCertificationSecretKey(const uint8_t* message,
   if ( env != nullptr ) {
     key_name = env;
     SB_LOG(INFO) << "Using ENV set key name: '" << key_name << "'";
-  } else {
-#if defined(HAS_RFC_API)
-    const char kRFCParamName[] = "Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.Feature.Cobalt.AuthCertKeyName";
-    char *callerId = strdup("Cobalt");
-    RFC_ParamData_t param;
-    memset(&param, 0, sizeof (param));
-    WDMP_STATUS status = getRFCParameter(callerId, kRFCParamName, &param);
-    if ( status == WDMP_SUCCESS && param.type == WDMP_STRING ) {
-      key_name = param.value;
-      SB_LOG(INFO) << "Using RFC provided key name: '" << key_name << "'";
-    }
-    free(callerId);
-#endif
   }
 
   if ( key_name.empty() ) {

@@ -117,7 +117,7 @@
 #undef SB_HAS_QUIRK_NO_GMTIME_R
 
 // --- Compiler Configuration ------------------------------------------------
-
+#if SB_API_VERSION < 16
 // The platform's annotation for forcing a C function to be inlined.
 #define SB_C_FORCE_INLINE __inline__ __attribute__((always_inline))
 
@@ -272,6 +272,8 @@
 // Whether this platform has and should use an growable heap (e.g. with sbrk())
 // to map physical memory to the virtual address space.
 #define SB_HAS_VIRTUAL_REGIONS 0
+
+#endif  // SB_API_VERSION < 16
 
 // Specifies the alignment for IO Buffers, in bytes. Some low-level network APIs
 // may require buffers to have a specific alignment, and this is the place to

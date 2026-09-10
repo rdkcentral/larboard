@@ -41,3 +41,11 @@ static_library("starboard_platform") {
     "configuration_constants.cc",
   ]
 }
+
+if (sb_is_modular) {
+  static_library("starboard_platform_with_main") {
+    check_includes = false
+    configs += [ "//starboard/build/config:starboard_implementation" ]
+    public_deps = [ ":starboard_platform" ]
+  }
+}

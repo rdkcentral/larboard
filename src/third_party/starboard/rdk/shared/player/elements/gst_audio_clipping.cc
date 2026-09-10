@@ -109,7 +109,7 @@ static GstFlowReturn cobalt_audio_clipping_transform_ip(GstBaseTransform* base, 
     discard_front = gst_util_uint64_scale(cmeta->start, rate, GST_SECOND);
     discard_back  = gst_util_uint64_scale(cmeta->end, rate, GST_SECOND);
   } else if (cmeta->format == GST_FORMAT_DEFAULT) {
-    GST_LOG_OBJECT (filter, "clipping start %llu end %llu", cmeta->start, cmeta->end);
+    GST_LOG_OBJECT (filter, "clipping start %" G_GUINT64_FORMAT " end %" G_GUINT64_FORMAT, cmeta->start, cmeta->end);
     discard_front = cmeta->start;
     discard_back = cmeta->end;
   } else {

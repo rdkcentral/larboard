@@ -28,8 +28,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-target_platform = "rdk-arm64"
-target_os = "linux"
+import("//cobalt/build/configs/evergreen_common.gn")
+
+target_sysroot = getenv("PKG_CONFIG_SYSROOT_DIR")
 target_cpu = "arm64"
-is_clang = false
-using_old_compiler = true
+target_os = "linux"
+starboard_target_platform = "rdk-arm64"
+arm_control_flow_integrity = "none"

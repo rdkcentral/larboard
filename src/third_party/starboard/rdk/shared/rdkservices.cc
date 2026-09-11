@@ -317,14 +317,6 @@ public:
 
     if (!notify_app)
       return;
-
-    if (auto* app = Application::Get(); app != nullptr) {
-      if (was_cc_enabled != caption_settings_.is_enabled)
-        app->InjectAccessibilityCaptionSettingsChanged();
-
-      if (was_highcontrast_enabled != display_settings_.is_high_contrast_text_enabled)
-        app->InjectAccessibilitySettingsChanged();
-    }
   }
 
   bool GetSettings(std::string& out_json) {
@@ -380,10 +372,6 @@ public:
        notify_on_change &= (caption_settings_.is_enabled != enabled);
        caption_settings_.is_enabled = enabled;
     }
-    if (notify_on_change && Application::Get()) {
-      SB_LOG(INFO) << "Accessibility closed caption setting changed, enabled = " << enabled;
-      Application::Get()->InjectAccessibilityCaptionSettingsChanged();
-    }
   }
 
   void SetHighContrastEnabled(bool enabled, bool notify_on_change = true) {
@@ -391,10 +379,6 @@ public:
       std::lock_guard lock(mutex_);
       notify_on_change &= (display_settings_.is_high_contrast_text_enabled != enabled);
       display_settings_.is_high_contrast_text_enabled = enabled;
-    }
-    if (notify_on_change && Application::Get()) {
-      SB_LOG(INFO) << "Accessibility high contrast text setting changed, enabled = " << enabled;
-      Application::Get()->InjectAccessibilitySettingsChanged();
     }
   }
 
@@ -406,7 +390,7 @@ public:
     }
     if (notify_on_change && Application::Get()) {
       SB_LOG(INFO) << "Accessibility voice guidance setting changed, enabled = " << enabled;
-      Application::Get()->InjectAccessibilityTextToSpeechSettingsChanged();
+      Application::Get()->InjectAccessibilityTextToSpeechSettingsChanged(enabled);
     }
   }
 
@@ -815,7 +799,7 @@ void DisplayInfoImpl::Refresh() {
 
   if (needs_refresh) {
     SbEventSchedule([](void* data) {
-      using ::starboard::shared::starboard::media::MimeSupportabilityCache;
+      using ::starboard::MimeSupportabilityCache;
       MimeSupportabilityCache::GetInstance()->ClearCachedMimeSupportabilities();
       GetDisplayInfo()->ForceNeedsRefresh();
     }, nullptr, kSbTimeSecond);
@@ -833,7 +817,7 @@ void DisplayInfoImpl::OnUpdated(const Core::JSON::String&) {
   if (needs_refresh_.load() == false) {
     needs_refresh_.store(true);
     SbEventSchedule([](void* data) {
-      using ::starboard::shared::starboard::media::MimeSupportabilityCache;
+      using ::starboard::MimeSupportabilityCache;
       // Clear mime cache until display info is updated
       MimeSupportabilityCache::GetInstance()->ClearCachedMimeSupportabilities();
       Application::Get()->DisplayInfoChanged();

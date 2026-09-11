@@ -102,6 +102,8 @@ static void setTimerInterval(int fd, microseconds time) {
   }
 }
 
+using ::starboard::SbAudioSinkImpl;
+
 Application::Application(SbEventHandleCallback sb_event_handle_callback)
   : QueueApplication(sb_event_handle_callback)
   , input_handler_(new EssInput)
@@ -140,10 +142,10 @@ void Application::Initialize() {
   }
 #endif
 
-  SbAudioSinkPrivate::Initialize();
+  SbAudioSinkImpl::Initialize();
   libcobalt_api::Initialize();
-  using ::starboard::shared::starboard::media::KeySystemSupportabilityCache;
-  using ::starboard::shared::starboard::media::MimeSupportabilityCache;
+  using ::starboard::KeySystemSupportabilityCache;
+  using ::starboard::MimeSupportabilityCache;
   MimeSupportabilityCache::GetInstance()->SetCacheEnabled(true);
   KeySystemSupportabilityCache::GetInstance()->SetCacheEnabled(true);
 
@@ -151,7 +153,7 @@ void Application::Initialize() {
 }
 
 void Application::Teardown() {
-  SbAudioSinkPrivate::TearDown();
+  SbAudioSinkImpl::TearDown();
   libcobalt_api::Teardown();
   platform::PlatformInterface::get().teardown();
 
@@ -166,7 +168,7 @@ bool Application::MayHaveSystemEvents() {
   return true;
 }
 
-::starboard::shared::starboard::Application::Event*
+::starboard::Application::Event*
 Application::PollNextSystemEvent() {
   auto now = steady_clock::now();
   if ((now - ess_loop_last_ts_) > kEssRunLoopPeriod) {
@@ -176,7 +178,7 @@ Application::PollNextSystemEvent() {
   return NULL;
 }
 
-::starboard::shared::starboard::Application::Event*
+::starboard::Application::Event*
 Application::WaitForSystemEventWithTimeout(int64_t time) {
   struct timespec timeout;
   struct pollfd fds[3];
@@ -408,7 +410,7 @@ void Application::ReleaseMemory() {
 void Application::ScheduleMemoryUsageCheck(int64_t delay) {
   SbEventSchedule([](void* data) {
     int64_t back_off_timeout = Application::Get()->CheckMemoryUsage();
-    if (back_off_timeout && back_off_timeout != kSbTimeMax)
+    if (back_off_timeout && back_off_timeout != std::numeric_limits<int64_t>::max())
       Application::Get()->ScheduleMemoryUsageCheck(back_off_timeout);
   }, nullptr, delay);
 }
@@ -427,7 +429,7 @@ int64_t Application::CheckMemoryUsage() {
   })();
 
   if (!kCPUMemoryPressureLimit)
-    return kSbTimeMax;
+    return std::numeric_limits<int64_t>::max();
 
   int64_t usage_in_bytes = SbSystemGetUsedCPUMemory();
   if (kCPUMemoryPressureLimit < usage_in_bytes) {
@@ -441,16 +443,11 @@ int64_t Application::CheckMemoryUsage() {
   return kSbTimeSecond;
 }
 
-void Application::InjectAccessibilitySettingsChanged() {
-  Inject(new Event(kSbEventTypeAccessibilitySettingsChanged, NULL, NULL));
-}
-
-void Application::InjectAccessibilityCaptionSettingsChanged() {
-  Inject(new Event(kSbEventTypeAccessibilityCaptionSettingsChanged, NULL, NULL));
-}
-
-void Application::InjectAccessibilityTextToSpeechSettingsChanged() {
-  Inject(new Event(kSbEventTypeAccessibilityTextToSpeechSettingsChanged, NULL, NULL));
+void Application::InjectAccessibilityTextToSpeechSettingsChanged(bool enabled) {
+  bool* enabled_data = new bool(enabled);
+  Inject(new Event(kSbEventTypeAccessibilityTextToSpeechSettingsChanged,
+                   enabled_data,
+                   &Application::DeleteDestructor<bool>));
 }
 
 }  // namespace shared

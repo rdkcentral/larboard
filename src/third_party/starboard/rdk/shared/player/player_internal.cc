@@ -42,13 +42,16 @@
 #include <thread>
 #include <utility>
 #include <chrono>
+#include <limits>
 #include <condition_variable>
 #include <mutex>
+#include <unistd.h>
 #include <optional>
 
 #include "starboard/common/once.h"
+#include <sys/resource.h>
+#include "starboard/common/thread.h"
 #include "starboard/common/media.h"
-#include "starboard/thread.h"
 #include "starboard/common/time.h"
 #include "starboard/drm.h"
 #include "starboard/common/log.h"
@@ -86,7 +89,7 @@ int Player::MaxNumberOfSamplesPerWrite() {
 
 using third_party::starboard::rdk::shared::drm::CreateDecryptorElement;
 using third_party::starboard::rdk::shared::media::CodecToGstCaps;
-using ::starboard::shared::starboard::media::IsSDRVideo;
+using ::starboard::IsSDRVideo;
 
 // **************************** GST/GLIB Helpers **************************** //
 
@@ -884,13 +887,13 @@ static void AddVideoMimeToGstCaps(GstCaps* caps, const char* mime) {
     return;
   }
 
-  const ::starboard::shared::starboard::media::MimeType mime_type { mime };
-  if (!mime_type.is_valid()) {
+  auto mime_type = ::starboard::MimeType::Create(mime);
+  if (!mime_type.has_value()) {
     GST_DEBUG("Invalid mime_type.");
     return;
   }
 
-  const auto& codecs = mime_type.GetCodecs();
+  const auto& codecs = mime_type->GetCodecs();
   if (codecs.size() != 1) {
     GST_DEBUG("Incorrect codecs size.");
     return;
@@ -1187,12 +1190,12 @@ static GstBuffer* CreateGstBuffer(const SbPlayerSampleInfo& sample_info,
     guint64 start_clip = 0, end_clip = 0;
 
     if (info.discarded_duration_from_front > 0) {
-      start_clip = (info.discarded_duration_from_front == kSbInt64Max)
+      start_clip = (info.discarded_duration_from_front == std::numeric_limits<int64_t>::max())
         ? kMaxGstClockTime : static_cast<guint64>(info.discarded_duration_from_front * GST_USECOND);
     }
 
     if (info.discarded_duration_from_back > 0) {
-      end_clip = (info.discarded_duration_from_back == kSbInt64Max)
+      end_clip = (info.discarded_duration_from_back == std::numeric_limits<int64_t>::max())
         ? kMaxGstClockTime : static_cast<guint64>(info.discarded_duration_from_back * GST_USECOND);
     }
 
@@ -1633,7 +1636,7 @@ class PlayerImpl : public Player {
       PlayerImpl *self, GstPad*, GstCaps*,
        GValueArray * factories, GstElement*);
 
-  bool ChangePipelineState(GstState state) const;
+  bool ChangePipelineState(GstState state);
   guint DispatchOnWorkerThread(Task* task) const;
   void InvokeOnWorkerThreadAndWait(Task* task);
   GstClockTime GetPosition() const;
@@ -2086,7 +2089,7 @@ gboolean PlayerImpl::BusMessageCallback(GstBus* bus,
 }
 
 gboolean PlayerImpl::HandleBusMessage(GstBus* bus, GstMessage* message) {
-  GST_TRACE("%d", SbThreadGetId());
+  GST_TRACE("%d", gettid());
   GST_LOG_OBJECT(pipeline_, "Got GST message '%s' from '%s'", GST_MESSAGE_TYPE_NAME(message), GST_MESSAGE_SRC_NAME(message));
 
   switch (GST_MESSAGE_TYPE(message)) {
@@ -2274,11 +2277,9 @@ gboolean PlayerImpl::HandleBusMessage(GstBus* bus, GstMessage* message) {
 
 // static
 void* PlayerImpl::ThreadEntryPoint(void* context) {
-#if SB_API_VERSION >= 16
-  SbThreadSetPriority(kSbThreadPriorityRealTime);
-#endif
+  setpriority(PRIO_PROCESS, 0, ::starboard::ThreadPriorityToNiceValue(::starboard::ThreadPriority::kRealTime));
   SB_DCHECK(context);
-  GST_TRACE("%d", SbThreadGetId());
+  GST_TRACE("%d", gettid());
 
   PlayerImpl* self = reinterpret_cast<PlayerImpl*>(context);
   self->state_ = State::kInitial;
@@ -2301,7 +2302,7 @@ guint PlayerImpl::DispatchOnWorkerThread(Task* task) const {
   g_source_set_callback(src,
     [](gpointer userData) -> gboolean {
       auto* task = static_cast<Task*>(userData);
-      GST_TRACE("%d", SbThreadGetId());
+      GST_TRACE("%d", gettid());
       task->PrintInfo();
       task->Do();
       return G_SOURCE_REMOVE;
@@ -2332,7 +2333,7 @@ void PlayerImpl::InvokeOnWorkerThreadAndWait(Task* task) {
     G_PRIORITY_HIGH,
     [](gpointer data) -> gboolean {
       auto* ctx = static_cast<InvokeContext*>(data);
-      GST_TRACE("%d", SbThreadGetId());
+      GST_TRACE("%d", gettid());
       ctx->task->PrintInfo();
       ctx->task->Do();
       ctx->mutex.lock();
@@ -3099,7 +3100,7 @@ void PlayerImpl::SetBounds(int zindex, int x, int y, int w, int h) {
   gst_object_unref(GST_OBJECT(vid_sink));
 }
 
-bool PlayerImpl::ChangePipelineState(GstState state) const {
+bool PlayerImpl::ChangePipelineState(GstState state) {
   if (force_stop_ && state > GST_STATE_READY) {
     GST_INFO_OBJECT(pipeline_, "Ignore state change due to forced stop");
     return false;

@@ -163,7 +163,7 @@ SbEglDisplay SbEglGetDisplay(SbEglNativeDisplayType display_id) {
     SB_LOG(INFO) << "eglGetPlatformDisplayEXT is not available or failed. Fallback to eglGetDisplay.";
   }
   else {
-    SbEglDisplay result = gEglGetPlatformDisplayEXT(EGL_PLATFORM_WAYLAND_EXT, reinterpret_cast<EGLNativeDisplayType>(display_type), nullptr);
+    SbEglDisplay result = gEglGetPlatformDisplayEXT(EGL_PLATFORM_WAYLAND_EXT, reinterpret_cast<void*>(display_type), nullptr);
     if (result == EGL_NO_DISPLAY) {
       SB_LOG(ERROR) << "eglGetPlatformDisplayEXT returned EGL_NO_DISPLAY. Fallback to eglGetDisplay.";
       gEglGetPlatformDisplayEXT = nullptr;

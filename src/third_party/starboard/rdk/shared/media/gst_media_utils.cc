@@ -232,8 +232,6 @@ void EnsureGstInit() {
 }
 
 bool GstRegistryHasElementForMediaType(SbMediaVideoCodec codec) {
-  if (kSbMediaVideoCodecVp9 == codec && !kSbHasMediaWebmVp9Support)
-    return false;
   return GstRegistryHasElementForCodec(codec);
 }
 

@@ -22,7 +22,6 @@
 
 #undef SB_LOG_IS_ON
 #define SB_LOG_IS_ON(severity) \
-    ((::starboard::logging::SB_LOG_##severity) >=   \
-     ::starboard::logging::SB_LOG_INFO)
+    ((::starboard::SB_LOG_##severity) >= ::starboard::SB_LOG_INFO)
 
 #endif  // THIRD_PARTY_STARBOARD_RDK_SHARED_LOG_OVERRIDE_H_

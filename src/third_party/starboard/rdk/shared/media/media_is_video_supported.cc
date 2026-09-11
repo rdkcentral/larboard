@@ -41,11 +41,13 @@
 
 #include <cstring>
 
-using ::starboard::shared::starboard::media::IsSDRVideo;
-using ::starboard::shared::starboard::media::MimeType;
+using ::starboard::IsSDRVideo;
+using ::starboard::MimeType;
 using namespace third_party::starboard::rdk::shared;
 
-SB_EXPORT bool SbMediaIsVideoSupported(SbMediaVideoCodec video_codec,
+namespace starboard {
+
+SB_EXPORT bool MediaIsVideoSupported(SbMediaVideoCodec video_codec,
                                        const MimeType* content_type,
                                        int /*profile*/,
                                        int /*level*/,
@@ -102,3 +104,5 @@ SB_EXPORT bool SbMediaIsVideoSupported(SbMediaVideoCodec video_codec,
          third_party::starboard::rdk::shared::media::
              GstRegistryHasElementForMediaType(video_codec);
 }
+
+}  // namespace starboard

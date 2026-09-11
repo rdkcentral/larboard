@@ -37,7 +37,6 @@
 #include "starboard/shared/internal_only.h"
 #include "starboard/shared/starboard/application.h"
 #include "starboard/shared/starboard/queue_application.h"
-#include "starboard/types.h"
 
 #include "third_party/starboard/rdk/shared/ess_input.h"
 #include "third_party/starboard/rdk/shared/hang_detector.h"
@@ -51,14 +50,14 @@ namespace starboard {
 namespace rdk {
 namespace shared {
 
-class Application : public ::starboard::shared::starboard::QueueApplication {
+class Application : public ::starboard::QueueApplication {
  public:
   explicit Application(SbEventHandleCallback sb_event_handle_callback);
   ~Application() override;
 
   static third_party::starboard::rdk::shared::Application* Get() {
     return static_cast<third_party::starboard::rdk::shared::Application*>(
-        ::starboard::shared::starboard::Application::Get());
+        ::starboard::Application::Get());
   }
 
   SbWindow CreateSbWindow(const SbWindowOptions* options);
@@ -74,9 +73,7 @@ class Application : public ::starboard::shared::starboard::QueueApplication {
   bool IsStartImmediate() override { return !HasPreloadSwitch(); }
   bool IsPreloadImmediate() override { return HasPreloadSwitch(); }
 
-  void InjectAccessibilitySettingsChanged();
-  void InjectAccessibilityCaptionSettingsChanged();
-  void InjectAccessibilityTextToSpeechSettingsChanged();
+  void InjectAccessibilityTextToSpeechSettingsChanged(bool enabled);
 
  protected:
   // --- Application overrides ---

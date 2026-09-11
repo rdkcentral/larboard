@@ -952,20 +952,20 @@ static void AddVideoInfoToGstCaps(const SbMediaVideoStreamInfo& info, GstCaps* c
   }
 }
 
-static void PrintPositionPerSink(GstElement* element, GstDebugLevel level)
+static void PrintPositionPerSrcAndSink(GstElement* element, GstDebugLevel level)
 {
 #ifndef GST_DISABLE_GST_DEBUG
   if (gst_debug_category_get_threshold(GST_CAT_DEFAULT) < level)
     return;
 #endif
 
-  auto fold_func = [](const GValue *vitem, GValue*, gpointer data) -> gboolean {
+  auto print_fn = [](const GValue *vitem, gpointer data) {
     GstDebugLevel level = (GstDebugLevel)GPOINTER_TO_INT(data);
     GstObject *item = GST_OBJECT(g_value_get_object (vitem));
     if (GST_IS_BIN (item)) {
-      PrintPositionPerSink(GST_ELEMENT(item), level);
+      PrintPositionPerSrcAndSink(GST_ELEMENT(item), level);
     }
-    else if (GST_IS_BASE_SINK(item)) {
+    else if (GST_IS_BASE_SINK(item) || GST_IS_BASE_SRC(item)) {
       GstElement* el = GST_ELEMENT(item);
       gint64 position = -1;
       GstQuery* query = gst_query_new_position(GST_FORMAT_TIME);
@@ -976,24 +976,20 @@ static void PrintPositionPerSink(GstElement* element, GstDebugLevel level)
       GST_CAT_LEVEL_LOG (GST_CAT_DEFAULT, level, el,
         "Position from %s : %" GST_TIME_FORMAT, GST_ELEMENT_NAME(el), GST_TIME_ARGS(position));
     }
-    return TRUE;
   };
 
   GstBin *bin = GST_BIN_CAST (element);
-  GstIterator *iter = gst_bin_iterate_sinks (bin);
+  GstIterator *iter;
 
-  bool keep_going = true;
-  while (keep_going) {
-    GstIteratorResult ires;
-    ires = gst_iterator_fold (iter, fold_func, NULL, GINT_TO_POINTER(level));
-    switch (ires) {
-      case GST_ITERATOR_RESYNC:
-        gst_iterator_resync (iter);
-        break;
-      default:
-        keep_going = false;
-        break;
-    }
+  iter = gst_bin_iterate_sources (bin);
+  while (gst_iterator_foreach (iter, print_fn, GINT_TO_POINTER(level)) == GST_ITERATOR_RESYNC) {
+    gst_iterator_resync (iter);
+  }
+  gst_iterator_free (iter);
+
+  iter = gst_bin_iterate_sinks (bin);
+  while (gst_iterator_foreach (iter, print_fn, GINT_TO_POINTER(level)) == GST_ITERATOR_RESYNC) {
+    gst_iterator_resync (iter);
   }
   gst_iterator_free (iter);
 }
@@ -1034,6 +1030,33 @@ static void PrintCurrentLevels(GstElement* element, GstDebugLevel level)
                         current_level_buffers,
                         current_level_bytes / 1024u,
                         GST_TIME_ARGS(current_level_time));
+    }
+    else if (!g_strcmp0 (G_OBJECT_TYPE_NAME(G_OBJECT(item)), "GstBrcmAudFilter") ||
+             !g_strcmp0 (G_OBJECT_TYPE_NAME(G_OBJECT(item)), "GstBrcmVidFilter")) {
+      guint fifo_depth = 0;
+      guint buffered_bytes = 0;
+      g_object_get(
+        G_OBJECT(item),
+        "fifo-depth", &fifo_depth,
+        "buffered-bytes", &buffered_bytes,
+        nullptr);
+      GST_CAT_LEVEL_LOG (GST_CAT_DEFAULT, level, item,
+                         "levels: fifo-depth=%u, buffered-bytes=%u kb",
+                         fifo_depth,
+                         buffered_bytes / 1024u);
+    }
+    else if (!g_strcmp0 (G_OBJECT_TYPE_NAME(G_OBJECT(item)), "GstBrcmAudioDecoder")) {
+      guint queued_frames = 0;
+      guint buffered_bytes = 0;
+      g_object_get(
+        G_OBJECT(item),
+        "queued-frames", &queued_frames,
+        "buffered-bytes", &buffered_bytes,
+        nullptr);
+      GST_CAT_LEVEL_LOG (GST_CAT_DEFAULT, level, item,
+                         "levels: queued-frames=%u, buffered-bytes=%u kb",
+                         queued_frames,
+                         buffered_bytes / 1024u);
     }
     else if (GST_IS_BASE_SINK(item)) {
       if (g_str_has_prefix(GST_ELEMENT_NAME(item), "westerossink") &&
@@ -1901,7 +1924,7 @@ PlayerImpl::PlayerImpl(SbPlayer player,
       gst_element_state_get_name(pending),
       gst_element_state_change_return_get_name(result),
       GST_TIME_ARGS(position));
-    PrintPositionPerSink(player.pipeline_, GST_LEVEL_DEBUG);
+    PrintPositionPerSrcAndSink(player.pipeline_, GST_LEVEL_DEBUG);
     PrintCurrentLevels(player.pipeline_, GST_LEVEL_DEBUG);
     player.hang_monitor_.Reset();
     return G_SOURCE_CONTINUE;
@@ -3167,7 +3190,7 @@ void PlayerImpl::CheckBuffering(GstClockTime position) {
       DecoderNeedsData(lock, origin);
       buf_target_min_ts_ = position + kTargetBufferDurationNs;
     }
-    PrintPositionPerSink(pipeline_, GST_LEVEL_INFO);
+    PrintPositionPerSrcAndSink(pipeline_, GST_LEVEL_INFO);
     PrintCurrentLevels(pipeline_, GST_LEVEL_INFO);
     GST_INFO_OBJECT(pipeline_, "Pause for buffering. Pos: %" GST_TIME_FORMAT
                 ", min ts:%" GST_TIME_FORMAT, GST_TIME_ARGS(position), GST_TIME_ARGS(min_ts));
@@ -3242,14 +3265,14 @@ bool PlayerImpl::UpdateCachedPositionLocked(std::unique_lock<std::mutex>& lock) 
 
   if (GST_CLOCK_TIME_IS_VALID(prev_position) &&
       std::abs(GST_CLOCK_DIFF(GstClockTime(position), prev_position)) > GST_SECOND) {
-    PrintPositionPerSink(pipeline_, GST_LEVEL_WARNING);
+    PrintPositionPerSrcAndSink(pipeline_, GST_LEVEL_WARNING);
     GST_WARNING_OBJECT(pipeline_, "Unexpected position! More than 1 second jump detected: "
                 "%" GST_TIME_FORMAT " --> %" GST_TIME_FORMAT "",
                 GST_TIME_ARGS(prev_position),
                 GST_TIME_ARGS(position));
   }
   else {
-    PrintPositionPerSink(pipeline_, GST_LEVEL_TRACE);
+    PrintPositionPerSrcAndSink(pipeline_, GST_LEVEL_TRACE);
   }
 
   return true;

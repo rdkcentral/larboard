@@ -29,6 +29,7 @@
 
 #include <chrono>
 #include <cstring>
+#include <cmath>
 
 using namespace std::chrono_literals;
 using starboard::shared::starboard::media::MimeSupportabilityCache;
@@ -70,10 +71,30 @@ std::ostream& operator<<(std::ostream& out, const Firebolt::Error& e) {
 
 // FireboltDevice
 std::optional<Resolution> FireboltInterface::FireboltDevice::video_resolution() {
+  auto &display = Firebolt::IFireboltAccessor::Instance().DisplayInterface();
+  auto res = display.maxResolution();
+
+  if (!res) {
+    SB_LOG(ERROR) << "display.maxResolution() failed, error code = " << res.error();
+  } else {
+    return Resolution{res->width, res->height};
+  }
+
   return { };
 }
 
 std::optional<float> FireboltInterface::FireboltDevice::diagonal_size_in_inches() {
+  auto &display = Firebolt::IFireboltAccessor::Instance().DisplayInterface();
+  auto size = display.size();
+
+  if (!size) {
+    SB_LOG(ERROR) << "display.size() failed, error code = " << size.error();
+  } else {
+    const float width = static_cast<float>(size->width);
+    const float height = static_cast<float>(size->height);
+    return std::sqrt(width * width + height * height) / 2.54f;
+  }
+
   return { };
 }
 
@@ -157,6 +178,15 @@ std::optional<bool> FireboltInterface::FireboltDevice::is_connection_type_wirele
 }
 
 std::optional<bool> FireboltInterface::FireboltDevice::is_disconnected() {
+  auto &network = Firebolt::IFireboltAccessor::Instance().NetworkInterface();
+  auto connected = network.connected();
+
+  if (!connected) {
+    SB_LOG(ERROR) << "network.connected() failed, error code = " << connected.error();
+  } else {
+    return !connected.value();
+  }
+
   return {};
 }
 

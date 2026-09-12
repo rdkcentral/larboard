@@ -3091,7 +3091,7 @@ void PlayerImpl::SetBounds(int zindex, int x, int y, int w, int h) {
   if (g_object_class_find_property(G_OBJECT_GET_CLASS(vid_sink), "rectangle")) {
     gchar* rect = g_strdup_printf("%d,%d,%d,%d", x, y, w, h);
     g_object_set(vid_sink, "rectangle", rect, nullptr);
-    free(rect);
+    g_free(rect);
   }
   else {
     gst_video_overlay_set_render_rectangle(GST_VIDEO_OVERLAY(pipeline_), x, y, w, h);

@@ -67,7 +67,7 @@ namespace shared {
 
 namespace {
 
-const uint32_t kDefaultTimeoutMs = 100;
+const uint32_t kDefaultTimeoutMs = 1000;
 const char kDisplayInfoCallsign[] = "DisplayInfo.1";
 const char kPlayerInfoCallsign[] = "PlayerInfo.1";
 const char kNetworkCallsign[] = "org.rdk.NetworkManager.1";
@@ -917,6 +917,7 @@ private:
       return;
 
     uint32_t rc;
+    SB_LOG(INFO) << "Ume_kDefaultTimeoutMs: " << kDefaultTimeoutMs;
     if (!did_subscribe_.load()) {
       bool old_val = did_subscribe_.exchange(true);
       if (old_val == false) {

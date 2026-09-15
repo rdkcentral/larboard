@@ -75,8 +75,6 @@ const char kUserSetingsCallsign[] = "org.rdk.UserSettings.1";
 const char kDeviceInfoCallsign[] = "DeviceInfo.1";
 const char kBluetoothCallsign[] = "org.rdk.Bluetooth.1";
 
-const char kAuthServiceExperienceFile[] = "/opt/www/authService/experience.dat";
-
 const uint32_t kPriviligedRequestErrorCode = -32604U;
 
 class ServiceLink {
@@ -619,20 +617,6 @@ struct AuthServiceImpl {
       out = experience_;
       return true;
     }
-
-    // Try to read directly from file
-    ::starboard::ScopedFile file(kAuthServiceExperienceFile, O_RDONLY);
-    if ( file.IsValid() ) {
-      const int kBufferSize = 128;
-      char buffer[kBufferSize];
-      int bytes_read = file.ReadAll(buffer, kBufferSize);
-      bytes_read = std::min(bytes_read, kBufferSize - 1);
-      buffer[bytes_read] = '\0';
-      experience_.assign(buffer);
-      out = experience_;
-      return true;
-    }
-
     is_available_ = false;
     return false;
   }

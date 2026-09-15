@@ -77,8 +77,6 @@ const char kUserSetingsCallsign[] = "org.rdk.UserSettings.1";
 const char kDeviceInfoCallsign[] = "DeviceInfo.1";
 const char kBluetoothCallsign[] = "org.rdk.Bluetooth.1";
 
-const char kAuthServiceExperienceFile[] = "/opt/www/authService/experience.dat";
-
 const uint32_t kPriviligedRequestErrorCode = -32604U;
 
 class ServiceLink {
@@ -599,19 +597,11 @@ struct AuthServiceImpl {
       return true;
     }
 
-    // Try to read directly from file
-    ::starboard::ScopedFile file(kAuthServiceExperienceFile, O_RDONLY);
-    if ( file.IsValid() ) {
-      const int kBufferSize = 128;
-      char buffer[kBufferSize];
-      int bytes_read = file.ReadAll(buffer, kBufferSize);
-      bytes_read = std::min(bytes_read, kBufferSize - 1);
-      buffer[bytes_read] = '\0';
-      experience_.assign(buffer);
-      out = experience_;
-      return true;
-    }
-
+    // FIX(Coverity): Removed negative-index buffer[bytes_read] write from the
+    // file-based fallback (bytes_read was never checked for < 0 on read error).
+    // Reason: kAuthServiceExperienceFile is not exposed into the app container,
+    // so this fallback path is unreachable/unsupported and was removed instead.
+    // Impact: Internal logic corrected. Public API unchanged.
     is_available_ = false;
     return false;
   }

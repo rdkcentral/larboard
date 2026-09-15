@@ -617,12 +617,6 @@ struct AuthServiceImpl {
       out = experience_;
       return true;
     }
-
-    // FIX(Coverity): Removed negative-index buffer[bytes_read] write from the
-    // file-based fallback (bytes_read was never checked for < 0 on read error).
-    // Reason: kAuthServiceExperienceFile is not exposed into the app container,
-    // so this fallback path is unreachable/unsupported and was removed instead.
-    // Impact: Internal logic corrected. Public API unchanged.
     is_available_ = false;
     return false;
   }

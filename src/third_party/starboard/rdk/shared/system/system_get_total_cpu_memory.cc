@@ -49,13 +49,15 @@ int64_t SbSystemGetTotalCPUMemory() {
     const int kBufferSize = 512;
     char buffer[kBufferSize];
     int bytes_read = status_file.ReadAll(buffer, kBufferSize);
-    if (bytes_read == kBufferSize) {
-      bytes_read = kBufferSize - 1;
+    if (bytes_read != -1) {
+      if (bytes_read == kBufferSize) {
+        bytes_read = kBufferSize - 1;
+      }
+      buffer[bytes_read] = '\0';
+      int64_t val = strtoll(buffer, nullptr, 10);
+      if (val > 0)
+        limit_in_bytes = val;
     }
-    buffer[bytes_read] = '\0';
-    int64_t val = strtoll(buffer, nullptr, 10);
-    if (val > 0)
-      limit_in_bytes = val;
   }
 
   long pages = sysconf(_SC_PHYS_PAGES);     // NOLINT[runtime/int]

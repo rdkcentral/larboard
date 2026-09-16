@@ -1,0 +1,11 @@
+prefix=/home/jerald/Xumo_Flex2/Larb-cov/Cov-build/dependency/thunder/install
+exec_prefix=${prefix}
+libdir=${prefix}/lib
+includedir=${prefix}/include/WPEFramework
+
+Name: WPEFrameworkPlugins
+Version: 1.0.0
+Description: Basic library to realize the glue between a proprietary plugin and the framework host.
+
+Libs: -L${libdir}  -lWPEFrameworkPlugins -lWPEFrameworkCore -lWPEFrameworkCryptalgo -lWPEFrameworkMessaging -lWPEFrameworkCOM -lWPEFrameworkWebSocket 
+Cflags: -I${includedir}    -D__CORE_MESSAGING__ -D__CORE_NO_WCHAR_SUPPORT__

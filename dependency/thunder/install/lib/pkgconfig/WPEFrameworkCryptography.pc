@@ -1,0 +1,11 @@
+prefix=/home/jerald/Xumo_Flex2/Larb-cov/Cov-build/dependency/thunder/install
+exec_prefix=${prefix}
+libdir=${prefix}/lib
+includedir=${prefix}/include/WPEFramework/cryptography
+
+Name: WPEFrameworkCryptography
+Version: 1.0.0
+Description: A crypto wrapper library.
+
+Libs: -L${libdir}  -lWPEFrameworkCryptography 
+Cflags: -I${includedir}   

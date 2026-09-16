@@ -1,0 +1,2 @@
+# Place the Thunder / WPEFramework SDK here (pkg-config .pc files).
+# Add its lib/pkgconfig to PKG_CONFIG_PATH before building.

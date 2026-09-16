@@ -1,0 +1,216 @@
+# If not stated otherwise in this file or this component's license file the
+# following copyright and licenses apply:
+#
+# Copyright 2020 Metrological
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+## This is an stripped version of cmakepp
+##
+## https://github.com/toeb/cmakepp
+##
+
+macro(project_version)
+    string(REGEX REPLACE "^([0-9]+)\\.[0-9]+\\.[0-9]+.*" "\\1" _VERSION_MAJOR "${ARGV0}")
+    string(REGEX REPLACE "^[0-9]+\\.([0-9]+)\\.[0-9]+.*" "\\1" _VERSION_MINOR "${ARGV0}")
+    string(REGEX REPLACE "^[0-9]+\\.[0-9]+\\.([0-9]+).*" "\\1" _VERSION_PATCH "${ARGV0}")
+
+    set(PROJECT_VERSION_MAJOR ${_VERSION_MAJOR})
+    set(PROJECT_VERSION_MINOR ${_VERSION_MINOR})
+    set(PROJECT_VERSION_PATCH ${_VERSION_PATCH})
+
+    set(PROJECT_VERSION ${_VERSION_MAJOR}.${_VERSION_MINOR}.${_VERSION_PATCH})
+    set(VERSION ${PROJECT_VERSION})
+endmacro()
+
+get_property(is_included GLOBAL PROPERTY INCLUDE_GUARD)
+if(is_included)
+  return()
+endif()
+set_property(GLOBAL PROPERTY INCLUDE_GUARD true)
+
+if(POLICY CMP0007)
+    cmake_policy(SET CMP0007 NEW)
+endif()
+
+if(POLICY CMP0012)
+    cmake_policy(SET CMP0012 NEW)
+endif()
+
+if(POLICY CMP0066)
+    cmake_policy(SET CMP0066 NEW)
+endif()
+
+if(POLICY CMP0054)
+  cmake_policy(SET CMP0054 NEW)
+endif()
+
+set(NAMESPACE "WPEFramework" CACHE INTERNAL "" FORCE)
+set("${NAMESPACE}_FOUND" TRUE CACHE INTERNAL "" FORCE)
+
+add_definitions("-DTHUNDER_PLATFORM_PC_UNIX=1")
+
+string(TOLOWER ${NAMESPACE} _STORAGE_DIRECTORY)
+set(STORAGE_DIRECTORY ${_STORAGE_DIRECTORY} CACHE INTERNAL "" FORCE)
+
+if(NOT DEFINED HIDE_NON_EXTERNAL_SYMBOLS)
+    set(HIDE_NON_EXTERNAL_SYMBOLS ON)
+endif()
+
+if(HIDE_NON_EXTERNAL_SYMBOLS)
+    set(CMAKE_CXX_VISIBILITY_PRESET hidden CACHE INTERNAL "" FORCE)
+    set(CMAKE_VISIBILITY_INLINES_HIDDEN 1 CACHE INTERNAL "" FORCE)
+endif()
+
+if(NOT DEFINED LEGACY_CONFIG_GENERATOR)
+    set(LEGACY_CONFIG_GENERATOR ON CACHE INTERNAL "" FORCE)
+endif()
+
+set(CMAKE_BUILD_TYPE Release CACHE INTERNAL "" FORCE)
+
+# FIX_ME: Disable fortify source.
+#         https://jira.rdkcentral.com/jira/browse/METROL-483
+#         Enabled in upstream buildroot, generates a lot of warnings, caused by missing optimalisation flags.
+#         https://www.redhat.com/en/blog/enhance-application-security-fortifysource
+string(REGEX REPLACE "-D_FORTIFY_SOURCE=[0-3]" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+string(REGEX REPLACE "-D_FORTIFY_SOURCE=[0-3]" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+
+string(REGEX REPLACE "(-g[0123])" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+string(REGEX REPLACE "\\-\\g$" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} CACHE INTERNAL "" FORCE)
+string(REGEX REPLACE "(-O([0123gs]|fast))" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+string(REGEX REPLACE "(-g[0123])" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+string(REGEX REPLACE "\\-\\g$" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+set(CMAKE_C_FLAGS ${CMAKE_C_FLAGS} CACHE INTERNAL "" FORCE)
+
+if(NOT DEFINED ENABLE_STRICT_COMPILER_SETTINGS)
+    set(ENABLE_STRICT_COMPILER_SETTINGS OFF)
+endif()
+
+if(ENABLE_STRICT_COMPILER_SETTINGS)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "Compiling with Clang")
+        set(CMAKE_STRICT_COMPILER_SETTINGS "-Weverything -Wextra -Werror=return-type -Werror=array-bounds")
+        set(CMAKE_STRICT_CXX_COMPILER_SETTINGS "${CMAKE_STRICT_COMPILER_SETTINGS} -Wnon-virtual-dtor")
+    elseif(${CMAKE_COMPILER_IS_GNUCXX})
+        message(STATUS "Compiling with GCC")
+        set(CMAKE_STRICT_COMPILER_SETTINGS "-Wall -Wextra -Werror=return-type -Werror=array-bounds")
+        set(CMAKE_STRICT_CXX_COMPILER_SETTINGS "${CMAKE_STRICT_COMPILER_SETTINGS} -Wnon-virtual-dtor")
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+        message(STATUS "Compiling with MS Visual Studio")
+        set(CMAKE_STRICT_COMPILER_SETTINGS "/W4")
+    else()
+        message(STATUS "Compiler ${CMAKE_CXX_COMPILER_ID}")
+    endif()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_STRICT_CXX_COMPILER_SETTINGS}" CACHE INTERNAL "" FORCE)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_STRICT_COMPILER_SETTINGS}" CACHE INTERNAL "" FORCE)
+endif()
+
+set(MODULE_BASE_DIR "${CMAKE_CURRENT_LIST_DIR}" CACHE INTERNAL "" FORCE)
+list(APPEND CMAKE_MODULE_PATH "${MODULE_BASE_DIR}/common" "${CMAKE_SYSROOT}/home/jerald/Xumo_Flex2/Cov-build/dependency/thunder/install/include/${NAMESPACE}/Modules")
+
+if(NOT DEFINED TOOLS_SYSROOT)
+    set(TOOLS_SYSROOT )
+endif()
+
+if(TOOLS_SYSROOT)
+    list(APPEND CMAKE_MODULE_PATH
+        "${TOOLS_SYSROOT}//home/jerald/Xumo_Flex2/Cov-build/dependency/thunder/install/include/${NAMESPACE}/Modules")
+endif()
+
+list(REMOVE_DUPLICATES CMAKE_MODULE_PATH)
+list(SORT CMAKE_MODULE_PATH)
+
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} CACHE INTERNAL "" FORCE)
+
+get_directory_property(hasParent PARENT_DIRECTORY)
+if(hasParent)
+    set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} PARENT_SCOPE)
+endif()
+
+if(NOT COMMAND InstallCMakeConfig)
+    include(CmakeHelperFunctions)
+endif()
+
+# get temp dir which is needed by a couple of functions in cmakepp
+# first uses env variable TMP if it does not exists TMPDIR is used
+# if both do not exists current_list_dir/tmp is used
+if(UNIX)
+  set(TMP_DIR $ENV{TMPDIR} /var/tmp)
+else()
+  set(TMP_DIR $ENV{TMP}  ${CMAKE_CURRENT_LIST_DIR}/tmp)
+endif()
+list(GET TMP_DIR 0 TMP_DIR)
+file(TO_CMAKE_PATH "${TMP_DIR}" TMP_DIR)
+
+# dummy function which is overwritten and in this form just returns the temp_dir
+function(config_dir key)
+	return("${TMP_DIR}")
+endfunction()
+
+function(add_compiler_flags modulename options)
+    set(cleanLine ${options})
+    foreach(VAL ${cleanLine})
+        target_compile_options (${modulename} PRIVATE ${VAL})
+    endforeach()
+endfunction()
+
+function(add_linker_flags modulename options)
+    get_target_property(original ${modulename} LINK_FLAGS)
+    if (original)
+        set(cleanLine ${options} ${original})
+    else(original)
+        set(cleanLine ${options})
+    endif(original)
+    set (linkoptions "")
+
+    foreach(VAL ${options})
+        string(APPEND linkoptions "${VAL} ")
+    endforeach()
+
+    if (NOT "${linkoptions}" STREQUAL "")
+        set_target_properties(${modulename} PROPERTIES LINK_FLAGS "${linkoptions}")
+    endif()
+endfunction()# Get all propreties that cmake supports
+
+# for debugging cmake targets
+execute_process(COMMAND cmake --help-property-list OUTPUT_VARIABLE CMAKE_PROPERTY_LIST)
+
+# Convert command output into a CMake list
+STRING(REGEX REPLACE ";" "\\\\;" CMAKE_PROPERTY_LIST "${CMAKE_PROPERTY_LIST}")
+STRING(REGEX REPLACE "\n" ";" CMAKE_PROPERTY_LIST "${CMAKE_PROPERTY_LIST}")
+
+function(print_properties)
+    message ("CMAKE_PROPERTY_LIST = ${CMAKE_PROPERTY_LIST}")
+endfunction(print_properties)
+
+function(print_target_properties tgt)
+    if(NOT TARGET ${tgt})
+      message("There is no target named '${tgt}'")
+      return()
+    endif()
+
+    foreach (prop ${CMAKE_PROPERTY_LIST})
+        string(REPLACE "<CONFIG>" "${CMAKE_BUILD_TYPE}" prop ${prop})
+    # Fix https://stackoverflow.com/questions/32197663/how-can-i-remove-the-the-location-property-may-not-be-read-from-target-error-i
+    if(prop STREQUAL "LOCATION" OR prop MATCHES "^LOCATION_" OR prop MATCHES "_LOCATION$")
+        continue()
+    endif()
+        # message ("Checking ${prop}")
+        get_property(propval TARGET ${tgt} PROPERTY ${prop} SET)
+        if (propval)
+            get_target_property(propval ${tgt} ${prop})
+            message ("${tgt} ${prop} = ${propval}")
+        endif()
+    endforeach(prop)
+endfunction(print_target_properties)

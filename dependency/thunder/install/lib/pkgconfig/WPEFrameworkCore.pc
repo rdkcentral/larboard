@@ -1,0 +1,11 @@
+prefix=/home/jerald/Xumo_Flex2/Larb-cov/Cov-build/dependency/thunder/install
+exec_prefix=${prefix}
+libdir=${prefix}/lib
+includedir=${prefix}/include/WPEFramework
+
+Name: WPEFrameworkCore
+Version: 1.0.0
+Description: Abstraction layer basis for all core functionality
+
+Libs: -L${libdir}  -lWPEFrameworkCore 
+Cflags: -I${includedir}    -D__CORE_MESSAGING__ -D__CORE_NO_WCHAR_SUPPORT__

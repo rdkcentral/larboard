@@ -98,7 +98,7 @@ class ServiceLink {
     buffer.resize(kMaxBufferSize);
 
     for(int i = 0; i < 5; ++i) {
-      uint32_t inputLen = std::min(kMaxBufferSize, payload.length());
+      uint32_t inputLen = std::min(kMaxBufferSize, static_cast<uint32_t>(payload.length()));
       ::memcpy (buffer.data(), payload.c_str(), inputLen);
 
       int outputLen = GetToken(kMaxBufferSize, inputLen, buffer.data());

@@ -1,0 +1,11 @@
+prefix=/home/jerald/Xumo_Flex2/Larb-cov/Cov-build/dependency/gstreamer/install
+includedir=${prefix}/include
+libdir=${prefix}/lib/x86_64-linux-gnu
+
+Name: vorbisenc
+Description: vorbisenc is a library that provides a convenient API for setting up an encoding environment using libvorbis
+Version: 1.3.7
+Requires.private: vorbis, ogg
+Libs: -L${libdir} -lvorbisenc
+Libs.private: -lm
+Cflags: -I${includedir}

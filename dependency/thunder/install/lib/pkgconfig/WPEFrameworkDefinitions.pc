@@ -1,0 +1,11 @@
+prefix=/home/jerald/Xumo_Flex2/Larb-cov/Cov-build/dependency/thunder/install
+exec_prefix=${prefix}
+libdir=${prefix}/lib
+includedir=${prefix}/include/
+
+Name: WPEFrameworkDefinitions
+Version: 1.0.0
+Description: Share lookup tables associated with interface enums.
+
+Libs: -L${libdir}  -lWPEFrameworkDefinitions 
+Cflags: -I${includedir}   

@@ -44,6 +44,9 @@ int64_t SbSystemGetTotalGPUMemory() {
     const int kBufferSize = 512;
     char buffer[kBufferSize];
     int bytes_read = status_file.ReadAll(buffer, kBufferSize);
+    if (bytes_read < 0) {
+      return 0;
+    }
     if (bytes_read == kBufferSize) {
       bytes_read = kBufferSize - 1;
     }

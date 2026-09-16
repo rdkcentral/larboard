@@ -1,0 +1,11 @@
+prefix=/home/jerald/Xumo_Flex2/Larb-cov/Cov-build/dependency/thunder/install
+exec_prefix=${prefix}
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: WPEFrameworkSecurityAgent
+Version: 1.0.0
+Description: communications channel abstraction to get a SecurityToken over a process boundary.
+
+Libs: -L${libdir}  -lWPEFrameworkSecurityAgent 
+Cflags: -I${includedir}   

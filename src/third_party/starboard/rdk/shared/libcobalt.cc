@@ -308,6 +308,8 @@ int SbRdkGetSetting(const char* key, char** out_json) {
 
   if (result && !tmp.empty()) {
     char *out = (char*)malloc(tmp.size() + 1);
+    if (out == nullptr)
+      return -1;
     memcpy(out, tmp.c_str(), tmp.size());
     out[tmp.size()] = '\0';
     *out_json = out;

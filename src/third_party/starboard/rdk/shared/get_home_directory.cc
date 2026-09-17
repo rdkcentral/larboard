@@ -59,7 +59,7 @@ bool GetHomeDirectory(char* out_path, int path_size) {
   struct passwd* pw_result = NULL;
   int result =
       getpwuid_r(getuid(), &passwd, buffer, kBufferSize, &pw_result);
-  if (result != 0) {
+  if (result != 0 || pw_result == nullptr) {
     SB_DLOG(ERROR) << "getpwuid_r failed for uid " << getuid() << ": result = "
                    << result;
     delete[] buffer;

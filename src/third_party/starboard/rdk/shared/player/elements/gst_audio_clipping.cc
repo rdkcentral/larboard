@@ -133,8 +133,8 @@ static GstFlowReturn cobalt_audio_clipping_transform_ip(GstBaseTransform* base, 
 
 }  // namespace
 
-GstElement *CreateAudioClippingElement(const gchar* name) {
-  return GST_ELEMENT ( g_object_new (COBALT_AUDIO_CLIPPING_TYPE, name) );
+GstElement *CreateAudioClippingElement() {
+  return GST_ELEMENT ( g_object_new (COBALT_AUDIO_CLIPPING_TYPE, nullptr) );
 }
 
 }  // namespace elements

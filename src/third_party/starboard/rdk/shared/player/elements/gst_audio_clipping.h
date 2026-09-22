@@ -25,7 +25,7 @@ namespace shared {
 namespace player {
 namespace elements {
 
-GstElement *CreateAudioClippingElement(const gchar* name);
+GstElement *CreateAudioClippingElement();
 
 }  // namespace elements
 }  // namespace player

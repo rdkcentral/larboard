@@ -1904,7 +1904,7 @@ PlayerImpl::PlayerImpl(SbPlayer player,
   }
 
   if (audio_codec_ == kSbMediaAudioCodecPcm) {
-    GstElement* filter = elements::CreateAudioClippingElement(nullptr);
+    GstElement* filter = elements::CreateAudioClippingElement();
     g_object_set(pipeline_, "audio-filter", filter, nullptr);
   }
 

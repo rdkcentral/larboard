@@ -473,7 +473,7 @@ void gst_cobalt_src_setup_and_add_app_src(SbMediaType media_type,
   GST_DEBUG_OBJECT(element, "added appsrc media_type=%u, %" GST_PTR_FORMAT, media_type, appsrc);
 
   GstElement* src_elem = appsrc;
-  GstElement* decryptor = inject_decryptor ? CreateDecryptorElement(nullptr) : nullptr;
+  GstElement* decryptor = inject_decryptor ? CreateDecryptorElement() : nullptr;
   GstElement* payloader = decryptor && inject_payloader ? CreatePayloader() : nullptr;
 
   if (decryptor) {

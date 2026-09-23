@@ -621,8 +621,8 @@ static gboolean cobalt_ocdm_decryptor_start(GstBaseTransform *base) {
 
 }  // namespace
 
-GstElement *CreateDecryptorElement(const gchar* name) {
-  return GST_ELEMENT ( g_object_new (COBALT_OCDM_DECRYPTOR_TYPE, name) );
+GstElement *CreateDecryptorElement() {
+  return GST_ELEMENT ( g_object_new (COBALT_OCDM_DECRYPTOR_TYPE, nullptr) );
 }
 
 }  // namespace drm
@@ -639,7 +639,7 @@ namespace rdk {
 namespace shared {
 namespace drm {
 
-GstElement *CreateDecryptorElement(const gchar* name) {
+GstElement *CreateDecryptorElement() {
   return nullptr;
 }
 

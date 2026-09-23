@@ -129,7 +129,7 @@ class DrmSystemOcdm : public SbDrmSystemPrivate, public ::starboard::RefCountedT
   std::vector<Observer*> observers_;
   std::unordered_map<std::string, KeysWithStatus> session_keys_;
   mutable std::set<std::string> cached_ready_keys_;
-  SbEventId event_id_;
+  SbEventId event_id_ { kSbEventIdInvalid };
   ::starboard::Mutex mutex_;
 
   std::string metrics_;

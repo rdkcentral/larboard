@@ -25,7 +25,7 @@ namespace rdk {
 namespace shared {
 namespace drm {
 
-GstElement *CreateDecryptorElement(const gchar* name);
+GstElement *CreateDecryptorElement();
 
 }  // namespace drm
 }  // namespace shared

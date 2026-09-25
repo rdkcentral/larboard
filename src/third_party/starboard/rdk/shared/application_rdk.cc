@@ -162,6 +162,8 @@ void Application::Teardown() {
   if ( !(monitor_timer_fd_ < 0) )
       close(monitor_timer_fd_);
   ess_timer_fd_ = wakeup_fd_ = monitor_timer_fd_ = -1;
+
+  DestroyNativeWindow();
 }
 
 bool Application::MayHaveSystemEvents() {
@@ -248,7 +250,6 @@ bool Application::DestroySbWindow(SbWindow window) {
     return false;
   window_ = nullptr;
   delete window;
-  DestroyNativeWindow();
   return true;
 }
 
@@ -272,10 +273,22 @@ void Application::Inject(Event* e) {
 }
 
 void Application::OnSuspend() {
-  SbSpeechSynthesisCancel();
-  DestroyNativeWindow();
-  setTimerInterval(ess_timer_fd_, 1s);
-  platform::PlatformInterface::get().suspend();
+  // Defer platform suspend until after 'freeze' event is processed
+  Schedule([](void* data) {
+    auto *self = static_cast<Application*>(data);
+    State state = self->state();
+    if (state != kStateFrozen && state != kStateStopped) {
+      SB_LOG(WARNING) << "Skipping platform suspend due state change, "
+                      << "current app state = " << state;
+      return;
+    }
+
+    SbSpeechSynthesisCancel();
+    platform::PlatformInterface::get().suspend();
+
+    self->DestroyNativeWindow();
+    setTimerInterval(self->ess_timer_fd_, 1s);
+  }, this, 0);
 }
 
 void Application::OnResume() {
@@ -283,7 +296,6 @@ void Application::OnResume() {
     BuildEssosContext();
 
   setTimerInterval(ess_timer_fd_, kEssRunLoopPeriod);
-  MaterializeNativeWindow();
   platform::PlatformInterface::get().resume();
 }
 
@@ -341,6 +353,8 @@ void Application::MaterializeNativeWindow() {
 void Application::DestroyNativeWindow() {
   if (native_window_ == 0)
     return;
+
+  SB_DCHECK(!SbWindowIsValid(window_));
 
   if ( !EssContextDestroyNativeWindow(ctx_, native_window_) ) {
     const char *detail = EssContextGetLastErrorDetail(ctx_);

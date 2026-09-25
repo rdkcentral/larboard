@@ -3087,6 +3087,12 @@ void PlayerImpl::SetBounds(int zindex, int x, int y, int w, int h) {
     pending_bounds_ = PendingBounds{x, y, w, h};
     return;
   }
+
+  // Get current pipeline state to detect if we need refresh during pause
+  GstState current_state = GST_STATE_VOID_PENDING;
+  GstState pending_state = GST_STATE_VOID_PENDING;
+  gst_element_get_state(pipeline_, &current_state, &pending_state, 0);
+
   if (g_object_class_find_property(G_OBJECT_GET_CLASS(vid_sink), "rectangle")) {
     gchar* rect = g_strdup_printf("%d,%d,%d,%d", x, y, w, h);
     g_object_set(vid_sink, "rectangle", rect, nullptr);
@@ -3096,6 +3102,31 @@ void PlayerImpl::SetBounds(int zindex, int x, int y, int w, int h) {
     gst_video_overlay_set_render_rectangle(GST_VIDEO_OVERLAY(pipeline_), x, y, w, h);
   }
   gst_object_unref(GST_OBJECT(vid_sink));
+
+  // Fix for black screen during resolution change while paused:
+  // When bounds change during PAUSED state with no pending state change,
+  // trigger a display refresh by seeking to the current position to force the sink to redraw
+  if (current_state == GST_STATE_PAUSED && pending_state == GST_STATE_VOID_PENDING) {
+    GstClockTime current_position = GST_CLOCK_TIME_NONE;
+    gint64 pos_ns = 0;
+
+    // Try to get current position
+    if (gst_element_query_position(pipeline_, GST_FORMAT_TIME, &pos_ns)) {
+      current_position = pos_ns;
+    }
+
+    // Send a flush-seek to the current position to trigger display refresh
+    // This forces the video sink to redraw the current frame with new bounds
+    GST_DEBUG_OBJECT(pipeline_,
+      "Bounds changed during stable PAUSED state, triggering display refresh at position %" GST_TIME_FORMAT,
+      GST_TIME_ARGS(current_position));
+
+    gst_element_seek(pipeline_, 1.0,
+                    GST_FORMAT_TIME,
+                    static_cast<GstSeekFlags>(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE),
+                    GST_SEEK_TYPE_SET, current_position,
+                    GST_SEEK_TYPE_NONE, 0);
+  }
 }
 
 bool PlayerImpl::ChangePipelineState(GstState state) const {

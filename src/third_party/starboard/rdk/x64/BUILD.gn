@@ -28,40 +28,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import("//build/toolchain/gcc_toolchain.gni")
+static_library("starboard_platform") {
+  configs += [
+    "//starboard/build/config:starboard_implementation",
+  ]
 
-template("rdk_gcc_toolchain") {
-  gcc_toolchain(target_name) {
-    assert(defined(invoker.envprefix), "please specify \"envprefix\"")
-    envprefix = invoker.envprefix
+  public_deps = [
+    "//third_party/starboard/rdk/shared:starboard_platform",
+  ]
 
-    _cc_env  = string_split(getenv(envprefix + "CC"))
-    _cxx_env = string_split(getenv(envprefix + "CXX"))
-    _ar_env  = string_split(getenv(envprefix + "AR"))
+  sources = [
+    "configuration_constants.cc",
+  ]
+}
 
-    cc  = _cc_env[0]
-    cxx = _cxx_env[0]
-    ld  = cxx
-    ar  = _ar_env[0]
-
-    extra_cflags   = string_join(" ", _cc_env  - [ _cc_env[0] ])
-    extra_cxxflags = string_join(" ", _cxx_env - [ _cxx_env[0] ])
-    extra_ldflags  = extra_cxxflags
-    extra_asmflags = extra_cflags
-
-    extra_cflags   += " " + getenv(envprefix + "CFLAGS")
-    extra_cxxflags += " " + getenv(envprefix + "CXXFLAGS")
-    extra_ldflags  += " " + getenv(envprefix + "LDFLAGS")
-
-    forward_variables_from(invoker, "*", [ "toolchain_args" ])
-    toolchain_args = {
-      sysroot = getenv("PKG_CONFIG_SYSROOT_DIR")
-      if (defined(invoker.toolchain_args)) {
-        forward_variables_from(invoker.toolchain_args, "*")
-      }
-      is_clang = false
-      current_os = "linux"
-      use_cxx17 = true
-    }
+if (sb_is_modular) {
+  static_library("starboard_platform_with_main") {
+    check_includes = false
+    configs += [ "//starboard/build/config:starboard_implementation" ]
+    public_deps = [ ":starboard_platform" ]
   }
 }

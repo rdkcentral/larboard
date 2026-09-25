@@ -17,22 +17,31 @@
 #include "starboard/system.h"
 #include "starboard/common/log.h"
 
-bool SbSystemRaisePlatformError(SbSystemPlatformErrorType type,
-                                SbSystemPlatformErrorCallback callback,
-                                void* user_data) {
-  SB_LOG(INFO) << "SbSystemRaisePlatformError called with error type: " << type;
+bool SbSystemRaisePlatformError(
+    SbSystemPlatformErrorType type,
+    SbSystemPlatformErrorCallback callback,
+    void* user_data) {
 
-  // If no callback provided, platform cannot respond to this error
+  SB_LOG(ERROR)
+      << "[Pravakar] ENTER - type: " << static_cast<int>(type)
+      << ", callback: " << (callback ? "valid" : "null");
+
   if (!callback) {
-    SB_LOG(WARNING) << "SbSystemRaisePlatformError callback is null";
+    SB_LOG(ERROR)
+        << "[Pravakar] Callback is NULL - returning false";
     return false;
   }
 
-  // Invoke the callback to notify platform of error response
-  SB_LOG(INFO) << "SbSystemRaisePlatformError invoking callback with "
-               << "kSbSystemPlatformErrorResponseNegative";
-  callback(kSbSystemPlatformErrorResponseNegative, user_data);
+  SB_LOG(ERROR)
+      << "[Pravakar] BEFORE callback - sending POSITIVE";
 
-  // Platform handled the error successfully
+  callback(kSbSystemPlatformErrorResponsePositive, user_data);
+
+  SB_LOG(ERROR)
+      << "[Pravakar] AFTER callback - callback returned";
+
+  SB_LOG(ERROR)
+      << "[Pravakar] EXIT - returning true";
+
   return true;
 }

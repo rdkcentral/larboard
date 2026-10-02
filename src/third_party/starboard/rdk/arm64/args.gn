@@ -30,9 +30,9 @@
 
 import("//cobalt/build/configs/evergreen_common.gn")
 
-target_sysroot = getenv("PKG_CONFIG_SYSROOT_DIR")
+target_sysroot = getenv("OECORE_TARGET_SYSROOT")
 target_cpu = "arm64"
 target_os = "linux"
-starboard_target_platform = "rdk-arm64"
+starboard_path = "third_party/starboard/rdk/arm64"
 starboard_level_final_executable_type = "shared_library"
 arm_control_flow_integrity = "none"

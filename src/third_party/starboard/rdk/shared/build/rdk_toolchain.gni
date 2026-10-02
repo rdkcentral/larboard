@@ -55,7 +55,7 @@ template("rdk_gcc_toolchain") {
 
     forward_variables_from(invoker, "*", [ "toolchain_args" ])
     toolchain_args = {
-      sysroot = getenv("PKG_CONFIG_SYSROOT_DIR")
+      sysroot = getenv("OECORE_TARGET_SYSROOT")
       if (defined(invoker.toolchain_args)) {
         forward_variables_from(invoker.toolchain_args, "*")
       }

@@ -36,6 +36,7 @@
 // Licensed under UNICODE LICENSE V3 and the ICU License from https://github.com/unicode-org/icu/blob/main/LICENSE
 
 #include <limits.h>
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
@@ -79,6 +80,31 @@ const char* SbTimeZoneGetName() {
       strncpy(gTimeZoneBuffer, tz, sizeof(gTimeZoneBuffer));
       gTimeZoneBuffer[sizeof(gTimeZoneBuffer) - 1] = 0;
       gTimeZoneBufferPtr = &gTimeZoneBuffer[0];
+      fprintf(stderr, "[TZ DEBUG] Selected timezone from TZ: %s\n", gTimeZoneBuffer);
+    }
+  }
+
+  /* Check /etc/timezone file */
+  if (gTimeZoneBufferPtr == NULL) {
+    FILE* fp = fopen("/etc/timezone", "r");
+    if (fp != NULL) {
+      if (fgets(gTimeZoneBuffer, sizeof(gTimeZoneBuffer), fp) != NULL) {
+        /* Remove trailing newlines (\r\n or \n) */
+        size_t len = strlen(gTimeZoneBuffer);
+        if (len > 0 && gTimeZoneBuffer[len - 1] == '\n') {
+          gTimeZoneBuffer[--len] = 0;
+        }
+        if (len > 0 && gTimeZoneBuffer[len - 1] == '\r') {
+          gTimeZoneBuffer[--len] = 0;
+        }
+        /* Only accept non-empty, valid timezone IDs */
+        if (len > 0 && isValidOlsonID(gTimeZoneBuffer)) {
+          gTimeZoneBufferPtr = &gTimeZoneBuffer[0];
+          fprintf(stderr, "[TZ DEBUG] Selected timezone from /etc/timezone: %s\n",
+                  gTimeZoneBuffer);
+        }
+      }
+      fclose(fp);
     }
   }
 
@@ -99,9 +125,13 @@ const char* SbTimeZoneGetName() {
 
       if (tzZoneInfoTailPtr != NULL &&
           isValidOlsonID(tzZoneInfoTailPtr + tzZoneInfoTailLen)) {
-        return (gTimeZoneBufferPtr = tzZoneInfoTailPtr + tzZoneInfoTailLen);
+        gTimeZoneBufferPtr = tzZoneInfoTailPtr + tzZoneInfoTailLen;
+        fprintf(stderr, "[TZ DEBUG] Selected timezone from /etc/localtime symlink: %s\n",
+                gTimeZoneBufferPtr);
+        return gTimeZoneBufferPtr;
       }
     }
+    fprintf(stderr, "[TZ DEBUG] No valid timezone found (TZ, /etc/timezone, /etc/localtime)\n");
     SB_NOTREACHED();
     return "";
   } else {

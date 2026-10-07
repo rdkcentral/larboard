@@ -142,6 +142,8 @@ void Application::Initialize() {
   }
 #endif
 
+  platform::PlatformInterface::get().initialize();
+
   SbAudioSinkImpl::Initialize();
   libcobalt_api::Initialize();
   using ::starboard::KeySystemSupportabilityCache;

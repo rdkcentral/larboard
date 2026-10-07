@@ -21,11 +21,15 @@
 #include "starboard/extension/accessibility.h"
 #include "starboard/shared/starboard/media/mime_supportability_cache.h"
 
+#include "third_party/starboard/rdk/shared/platform/firebolt_lifecycle.h"
+#include "third_party/starboard/rdk/shared/platform/firebolt_utility.h"
 #include "third_party/starboard/rdk/shared/application_rdk.h"
 #include "third_party/starboard/rdk/shared/log_override.h"
 
 #include <firebolt/firebolt.h>
+#if defined(FIREBOLT_LEGACY_RPC_V1) && FIREBOLT_LEGACY_RPC_V1
 #include <firebolt/gateway.h>
+#endif
 
 #include <chrono>
 #include <cstring>
@@ -38,35 +42,6 @@ namespace starboard {
 namespace rdk {
 namespace shared {
 namespace platform {
-
-namespace {
-
-std::ostream& operator<<(std::ostream& out, const Firebolt::Error& e) {
-  const auto to_string = [](const Firebolt::Error& e) {
-    switch(e) {
-#define CASE(x) case Firebolt::Error::x: return #x
-      CASE(None);
-      CASE(General);
-      CASE(Timedout);
-      CASE(NotConnected);
-      CASE(AlreadyConnected);
-      CASE(InvalidRequest);
-      CASE(MethodNotFound);
-      CASE(InvalidParams);
-      CASE(CapabilityNotAvailable);
-      CASE(CapabilityNotSupported);
-      CASE(CapabilityGet);
-      CASE(CapabilityNotPermitted);
-#undef CASE
-      default:
-        return "Unknown";
-    }
-  };
-
-  return out << to_string(e) << '(' << static_cast<int32_t>(e) << ')';
-}
-
-} // namespace
 
 // FireboltDevice
 std::optional<Resolution> FireboltInterface::FireboltDevice::video_resolution() {
@@ -485,22 +460,8 @@ void FireboltInterface::FireboltAccessibility::lazy_init(std::unique_lock<std::m
   is_cc_enabled_ = cc_enabled;
 }
 
-FireboltInterface::FireboltInterface() {
-// This is a workaround to resolve App focus issue. This will be modified with
-// proper firebolt lifecycle implementation
-#if defined(ENABLE_FIREBOLT_LIFECYCLE) && ENABLE_FIREBOLT_LIFECYCLE
-  using namespace Firebolt;
-  lazy_init();
-
-  auto &lifecycle = IFireboltAccessor::Instance().LifecycleInterface();
-
-  Result<SubscriptionId> result = lifecycle.subscribeOnStateChanged([](const std::vector<Lifecycle::StateChange>&) { });
-
-  if (!result) {
-     SB_LOG(ERROR) << "lifecycle.subscribeOnStateChanged failed, error code = " << result.error();
-  }
-#endif
-}
+FireboltInterface::FireboltInterface() = default;
+FireboltInterface::~FireboltInterface() = default;
 
 // static
 bool FireboltInterface::is_available() {
@@ -521,20 +482,20 @@ void FireboltInterface::lazy_init() {
     return;
   }
 
+#if defined(FIREBOLT_LEGACY_RPC_V1) && FIREBOLT_LEGACY_RPC_V1
   const bool kEnableLegacyRPCv1 = ([]()->bool {
     if (const char* env = getenv("FIREBOLT_LEGACY_RPC_V1"); !!env) {
       return (0 == strncasecmp(env, "1", 1)) || (0 == strncasecmp(env, "true", 4));
     }
-#if defined(FIREBOLT_LEGACY_RPC_V1) && FIREBOLT_LEGACY_RPC_V1
     return true;
-#else
-    return false;
-#endif
   })();
+#endif
 
   Firebolt::Config cfg { };
   cfg.wsUrl = kFireboltEndpoint;
+#if defined(FIREBOLT_LEGACY_RPC_V1) && FIREBOLT_LEGACY_RPC_V1
   cfg.legacyRPCv1 = kEnableLegacyRPCv1;
+#endif
 #if !defined(COBALT_BUILD_TYPE_GOLD)
   cfg.log.level = Firebolt::LogLevel::Debug;
 #endif
@@ -546,10 +507,12 @@ void FireboltInterface::lazy_init() {
       if (!connected) {
         SB_LOG(INFO) << "Firebolt client disconnected, code = " << error;
       }
-      {
-        std::unique_lock<std::mutex> lock{mutex_};
+      std::unique_lock<std::mutex> lock{mutex_};
+      if (connected)
         connected_ = connected;
-      }
+      else
+        connected_.reset();  // reset the state to retry next time
+      lock.unlock();
       cv_.notify_all();
     });
 
@@ -569,11 +532,12 @@ void FireboltInterface::lazy_init() {
       break;
   }
 
-  if (*connected_) {
+  if (connected_.value_or(false)) {
     SB_LOG(INFO) << "Firebolt client connected.";
     const auto connected_tp = std::chrono::steady_clock::now();
     device_.init();
     text_to_speech_.init();
+    #if defined(FIREBOLT_LEGACY_RPC_V1) && FIREBOLT_LEGACY_RPC_V1
     if (cfg.legacyRPCv1) {
       // Let gateway know we're ready to receive notifications
       auto& gateway = Firebolt::Transport::GetGatewayInstance();
@@ -582,6 +546,7 @@ void FireboltInterface::lazy_init() {
         SB_LOG(ERROR) << "lifecycle.ready() failed, error code = " << result.error();
       }
     }
+    #endif
     const auto init_completed_tp = std::chrono::steady_clock::now();
     SB_LOG(INFO) << "Firebolt init completed."
                  << " Connect took: " << std::chrono::duration_cast<std::chrono::milliseconds>(connected_tp - start_tp).count() << " ms,"
@@ -610,7 +575,28 @@ IAdvertising& FireboltInterface::advertising() {
   return advertising_;
 }
 
+void FireboltInterface::initialize() {
+  lazy_init();
+
+#if defined(ENABLE_FIREBOLT_LIFECYCLE) && ENABLE_FIREBOLT_LIFECYCLE
+  SB_CHECK(connected_.value_or(false));
+  SB_LOG(INFO) << "Initializing Firebolt Lifecycle";
+  const auto start_tp = std::chrono::steady_clock::now();
+  lifecycle_ = std::make_unique<FireboltLifecycle>();
+  lifecycle_->initialize();
+  const auto end_tp = std::chrono::steady_clock::now();
+  SB_LOG(INFO) << "Firebolt Lifecycle initialization took:"
+               << std::chrono::duration_cast<std::chrono::milliseconds>(end_tp - start_tp).count() << " ms.";
+#endif
+}
+
 void FireboltInterface::teardown() {
+#if defined(ENABLE_FIREBOLT_LIFECYCLE) && ENABLE_FIREBOLT_LIFECYCLE
+  if (lifecycle_) {
+    lifecycle_->teardown();
+    lifecycle_.reset();
+  }
+#endif
   Firebolt::IFireboltAccessor::Instance().Disconnect();
 }
 

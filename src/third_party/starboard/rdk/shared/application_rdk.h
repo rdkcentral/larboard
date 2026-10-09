@@ -70,8 +70,9 @@ class Application : public ::starboard::QueueApplication {
   int GetWindowHeight() const { return window_height_; }
   void DisplayInfoChanged();
 
-  bool IsStartImmediate() override { return !HasPreloadSwitch(); }
-  bool IsPreloadImmediate() override { return HasPreloadSwitch(); }
+  bool IsStartImmediate() override { return !IsPreloadImmediate(); }
+  bool IsPreloadImmediate() override { return HasPreloadSwitch() || preload_immediate_; }
+  void SetPreloadImmediate() { preload_immediate_ = true; }
 
  protected:
   // --- Application overrides ---
@@ -115,6 +116,7 @@ class Application : public ::starboard::QueueApplication {
   int window_height_ { 0 };
   bool resize_pending_ { false };
   bool essos_context_recycle_ { false };
+  bool preload_immediate_ { false };
 
   std::chrono::time_point<std::chrono::steady_clock> ess_loop_last_ts_;
   int ess_timer_fd_ { -1 };

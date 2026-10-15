@@ -273,6 +273,8 @@ static_library("starboard_platform") {
     "system/system_properties_override.cc",
     "system/system_properties_override.h",
     "time_zone_get_name.cc",
+    "uri.cc",
+    "uri.h",
     "window/window_create.cc",
     "window/window_destroy.cc",
     "window/window_get_diagonal_size_in_inches.cc",
@@ -297,8 +299,13 @@ static_library("starboard_platform") {
     "dl",
   ]
 
+  deps = [
+    "//third_party/jsoncpp",
+  ]
+
   configs += [
     "//starboard/build/config:starboard_implementation",
+    "//third_party/jsoncpp:jsoncpp_config",
     ":glib",
     ":gstreamer",
     ":wpeframework",
@@ -331,6 +338,8 @@ static_library("starboard_platform") {
       "platform/firebolt_interface.h",
       "platform/firebolt_lifecycle.cc",
       "platform/firebolt_lifecycle.h",
+      "platform/firebolt_intentparams.cc",
+      "platform/firebolt_intentparams.h",
       "platform/firebolt_utility.cc",
       "platform/firebolt_utility.h",
     ]
@@ -361,7 +370,7 @@ static_library("starboard_platform") {
   ]
 
   if (sb_evergreen_compatible_use_libunwind) {
-    deps = [ "//third_party/llvm-project/libunwind:unwind_starboard" ]
+    deps += [ "//third_party/llvm-project/libunwind:unwind_starboard" ]
   }
 }
 

@@ -19,6 +19,8 @@
 
 #include "starboard/common/log.h"
 
+#include "third_party/starboard/rdk/shared/platform/firebolt_intentparams.h"
+
 #include <firebolt/firebolt.h>
 
 namespace third_party {
@@ -28,7 +30,13 @@ namespace shared {
 namespace platform {
 
 std::ostream& operator<<(std::ostream& out, const Firebolt::Error& e);
+std::ostream& operator<<(std::ostream& out, const Firebolt::ErrorInfo& info);
 std::ostream& operator<<(std::ostream& out, const Firebolt::Lifecycle::LifecycleState& state);
+std::ostream& operator<<(std::ostream& out, const IntentParams::Action& action);
+std::ostream& operator<<(std::ostream& out, const IntentParams::Source& source);
+std::ostream& operator<<(std::ostream& out, const IntentParams::EntityType& entity_type);
+std::ostream& operator<<(std::ostream& out, const IntentParams::Data& data);
+std::ostream& operator<<(std::ostream& out, const IntentParams& intent);
 
 }  // namespace platform
 }  // namespace shared

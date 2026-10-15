@@ -74,6 +74,8 @@ class Application : public ::starboard::QueueApplication {
   bool IsPreloadImmediate() override { return HasPreloadSwitch() || preload_immediate_; }
   void SetPreloadImmediate() { preload_immediate_ = true; }
 
+  using ::starboard::Application::SetStartLink;
+
  protected:
   // --- Application overrides ---
   void Initialize() override;

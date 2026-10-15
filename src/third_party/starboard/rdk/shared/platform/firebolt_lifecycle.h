@@ -18,6 +18,9 @@
 #pragma once
 
 #include "starboard/configuration.h"
+
+#include "third_party/starboard/rdk/shared/uri.h"
+
 #include <firebolt/firebolt.h>
 #include <mutex>
 
@@ -32,19 +35,21 @@ public:
   void initialize();
   void teardown();
 private:
-  void on_state_change(
+  void onStateChange(
     Firebolt::Lifecycle::LifecycleState new_state,
     Firebolt::Lifecycle::LifecycleState old_state);
 
-  void on_intent(const Firebolt::Actions::Intent& intent);
+  void onIntent(const Firebolt::Actions::Intent& intent, bool is_initial);
 
-  void on_focused_changed(const bool);
+  void onFocusedChanged(const bool);
 
   std::mutex mutex_;
   Firebolt::Lifecycle::LifecycleState lifecycle_state_ { Firebolt::Lifecycle::LifecycleState::INITIALIZING };
   bool is_focused_ { false };
   bool has_preload_action_ { false };
   uint32_t last_intent_id_ { -1u };
+  Uri link_ {};
+
 };
 
 }  // namespace platform

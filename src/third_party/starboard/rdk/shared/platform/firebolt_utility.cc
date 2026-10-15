@@ -18,6 +18,9 @@
 #include "third_party/starboard/rdk/shared/platform/firebolt_utility.h"
 #include "third_party/starboard/rdk/shared/log_override.h"
 
+template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+
 namespace third_party {
 namespace starboard {
 namespace rdk {
@@ -49,6 +52,10 @@ std::ostream& operator<<(std::ostream& out, const Firebolt::Error& e) {
   return out << to_string(e) << '(' << static_cast<int32_t>(e) << ')';
 }
 
+std::ostream& operator<<(std::ostream& out, const Firebolt::ErrorInfo& info) {
+  return out << info.message();
+}
+
 std::ostream& operator<<(std::ostream& out, const Firebolt::Lifecycle::LifecycleState& state) {
   const auto to_string = [](const Firebolt::Lifecycle::LifecycleState& state) {
     switch(state) {
@@ -67,6 +74,138 @@ std::ostream& operator<<(std::ostream& out, const Firebolt::Lifecycle::Lifecycle
   };
 
   return out << to_string(state) << '(' << static_cast<int32_t>(state) << ')';
+}
+
+std::ostream& operator<<(std::ostream& out, const IntentParams::Action& action) {
+  const auto to_string = [](const IntentParams::Action& action) {
+    switch(action) {
+#define CASE(x) case IntentParams::Action::x: return #x
+
+      CASE(Other);
+      CASE(Entity);
+      CASE(FastForward);
+      CASE(Home);
+      CASE(Launch);
+      CASE(Next);
+      CASE(Pause);
+      CASE(Play);
+      CASE(PlayEntity);
+      CASE(PlayQuery);
+      CASE(Playback);
+      CASE(PreLoad);
+      CASE(Previous);
+      CASE(Repeat);
+      CASE(Rewind);
+      CASE(Search);
+      CASE(Section);
+      CASE(Seek);
+      CASE(Shuffle);
+      CASE(SkipAd);
+      CASE(SkipIntro);
+      CASE(SkipRecap);
+      CASE(Tune);
+#undef CASE
+    }
+  };
+
+  return out << to_string(action) << '(' << static_cast<uint32_t>(action) << ')';
+}
+
+std::ostream& operator<<(std::ostream& out, const IntentParams::Source& source) {
+  const auto to_string = [](const IntentParams::Source& source) {
+    switch(source) {
+#define CASE(x) case IntentParams::Source::x: return #x
+
+      CASE(Other);
+      CASE(System);
+      CASE(Editorial);
+      CASE(AutomatedRail);
+      CASE(Voice);
+      CASE(Dial);
+      CASE(Dab);
+      CASE(Remote);
+      CASE(Text);
+      CASE(Promo);
+      CASE(Guide);
+      CASE(AppTile);
+      CASE(LinearRestart);
+      CASE(LinearTrigger);
+#undef CASE
+    }
+  };
+
+  return out << to_string(source) << '(' << static_cast<uint32_t>(source) << ')';
+}
+
+std::ostream& operator<<(std::ostream& out, const IntentParams::EntityType& entity_type) {
+  const auto to_string = [](const IntentParams::EntityType& entity_type) {
+    switch(entity_type) {
+#define CASE(x) case IntentParams::EntityType::x: return #x
+      CASE(Playlist);
+      CASE(Other);
+#undef CASE
+    }
+  };
+
+  return out << to_string(entity_type) << '(' << static_cast<uint32_t>(entity_type) << ')';
+}
+
+std::ostream& operator<<(std::ostream& out, const IntentParams::AppContentData& data) {
+  bool needs_separator = false;
+  out << '[';
+  for (const auto& it: data) {
+    if (needs_separator)
+      out << ',';
+    else
+      needs_separator = true;
+    out << '"' << it << '"';
+  }
+  out << ']';
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const IntentParams::Data& data) {
+  std::visit(overloaded{
+      [&out](const std::monostate&) {
+        out << "{}";
+      },
+      [&out](const IntentParams::DialData& data_dial) {
+        out << '{';
+        out << "\"dialPayload\":\"" << data_dial.dialPayload << "\""
+            << ",\"additionalDataUrl\":\"" << data_dial.additionalDataUrl << "\"";
+        if (data_dial.appContentData.has_value())
+          out << ",\"appContentData\":" << data_dial.appContentData.value();
+        out << '}';
+      },
+      [&out](const IntentParams::EntityData& data_entity) {
+        out << "{\"entityId\":\"" << data_entity.entityId << '"';
+        if (data_entity.appContentData.has_value())
+          out << ",\"appContentData\":" << data_entity.appContentData.value();
+        out << '}';
+      },
+      [&out](const IntentParams::LaunchData& data_launch) {
+        if (data_launch.appContentData.has_value())
+          out << "{\"appContentData\":" << data_launch.appContentData.value() << '}';
+      },
+      [&out](const IntentParams::PlayEntityData& data_playentity) {
+        out << "{\"entity\":{\"entityId\":\"" << data_playentity.entity.entityId << "\","
+            << "\"entityType\":\"" << data_playentity.entity.entityType << "\"}}";
+      },
+      [&out](const IntentParams::QueryData& data_query) {
+        out << "{\"query\":\"" << data_query.query << "\"}";
+      }
+    }, data);
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const IntentParams& intent) {
+  out << "action = " << intent.action
+      << ", source = " << intent.context.source;
+  if (intent.context.inApp.has_value())
+    out << ", inApp = " << intent.context.inApp.value();
+  if (intent.data.has_value())
+    out << ", data = " << intent.data.value();
+  return out;
 }
 
 }  // namespace platform

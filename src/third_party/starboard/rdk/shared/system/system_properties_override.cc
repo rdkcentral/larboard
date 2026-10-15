@@ -44,6 +44,8 @@ struct SystemPropertiesImpl {
       Add(_T("friendlyname"), &FriendlyName);
       Add(_T("devicetype"), &DeviceType);
       Add(_T("disableifa"), &DisableIFA);
+      Add(_T("voicesystem"), &VoiceSystem);
+      Add(_T("exitstrategy"), &ExitStrategy);
     }
     SystemPropertiesData(const SystemPropertiesData&) = delete;
     SystemPropertiesData& operator=(const SystemPropertiesData&) = delete;
@@ -57,6 +59,8 @@ struct SystemPropertiesImpl {
     Core::JSON::String FriendlyName;
     Core::JSON::String DeviceType;
     Core::JSON::Boolean DisableIFA;
+    Core::JSON::DecUInt32 VoiceSystem;
+    Core::JSON::String ExitStrategy;
   };
 
   void SetSettings(const std::string& json) {
@@ -67,6 +71,15 @@ struct SystemPropertiesImpl {
       SB_LOG(ERROR) << "Failed to parse systemproperties settings, error: "
                     << (error.IsSet() ? Core::JSON::ErrorDisplayMessage(error.Value()): "Unknown");
       return;
+    }
+
+    if ( props_.VoiceSystem.IsSet() ) {
+      unsigned int vs = props_.VoiceSystem.Value();
+      // valid values are 0 to 12
+      if (vs > 12) {
+        SB_LOG(ERROR) << "Invalid voice system value: " << vs << ", resetting to default";
+        props_.VoiceSystem.Clear();
+      }
     }
   }
 
@@ -150,6 +163,23 @@ struct SystemPropertiesImpl {
   bool IsIfaDisabled() const {
     std::lock_guard lock(mutex_);
     return props_.DisableIFA.IsSet() && props_.DisableIFA.Value();
+  }
+
+  unsigned int GetVoiceSystem() const {
+    std::lock_guard lock(mutex_);
+    if (props_.VoiceSystem.IsSet()) {
+      return props_.VoiceSystem.Value();
+    }
+    return 0;
+  }
+
+  bool GetExitStrategy(std::string &out) const {
+    std::lock_guard lock(mutex_);
+    if (props_.ExitStrategy.IsSet() && !props_.ExitStrategy.Value().empty()) {
+      out = props_.ExitStrategy.Value();
+      return true;
+    }
+    return false;
   }
 
 private:
@@ -269,6 +299,14 @@ bool SystemProperties::GetDeviceType(std::string &out) {
 
 bool SystemProperties::IsIfaDisabled() {
   return GetSystemProperties()->IsIfaDisabled();
+}
+
+bool SystemProperties::GetExitStrategy(std::string &out) {
+  return GetSystemProperties()->GetExitStrategy(out);
+}
+
+unsigned int SystemProperties::GetVoiceSystem() {
+  return GetSystemProperties()->GetVoiceSystem();
 }
 
 void AdvertisingId::SetSettings(const std::string& json) {

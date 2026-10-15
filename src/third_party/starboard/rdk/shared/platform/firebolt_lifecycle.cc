@@ -21,6 +21,9 @@
 #include "third_party/starboard/rdk/shared/libcobalt.h"
 #include "third_party/starboard/rdk/shared/log_override.h"
 
+#include <algorithm>
+#include <optional>
+#include <string_view>
 #include <cstring>
 
 using namespace Firebolt;
@@ -30,13 +33,6 @@ namespace starboard {
 namespace rdk {
 namespace shared {
 namespace platform {
-
-namespace {
-
-const char kPreloadAction[] = "pre-load";
-const char* kDefaultExitStrategy = "suspend";
-
-} // namespace
 
 void FireboltLifecycle::teardown() {
   auto &lifecycle = IFireboltAccessor::Instance().LifecycleInterface();
@@ -53,21 +49,28 @@ void FireboltLifecycle::teardown() {
 }
 
 void FireboltLifecycle::initialize() {
+  // TODO: get initial link from cli args
+  link_.setFromString("https://www.youtube.com/tv");
+
+  if (const char* env = getenv("ADDITIONAL_DATA_URL");
+      env && env[0] != '\0') {
+    _additional_data_url = env;
+  }
 
   // Actions
   {
     auto &actions = IFireboltAccessor::Instance().ActionsInterface();
-    auto result = actions.subscribeOnIntent([this](const Actions::Intent& intent){
-      on_intent(intent);
-    });
-    if (!result) {
-      SB_LOG(ERROR) << "actions.subscribeOnIntent failed, error code = " << result.error();
-    }
     auto intent = actions.intent();
     if (!intent) {
       SB_LOG(ERROR) << "actions.intent failed, error code = " << intent.error();
     } else {
-      on_intent(*intent);
+      onIntent(*intent, true);
+    }
+    auto result = actions.subscribeOnIntent([this](const Actions::Intent& intent){
+      onIntent(intent, false);
+    });
+    if (!result) {
+      SB_LOG(ERROR) << "actions.subscribeOnIntent failed, error code = " << result.error();
     }
   }
 
@@ -79,7 +82,7 @@ void FireboltLifecycle::initialize() {
         SB_LOG(INFO) << "lifecycle.OnStateChanged:"
                      << " new_state=" << change.newState << ','
                      << " old_state=" << change.oldState;
-        on_state_change(change.newState, change.oldState);
+        onStateChange(change.newState, change.oldState);
       }
     });
     if (!result) {
@@ -92,14 +95,14 @@ void FireboltLifecycle::initialize() {
     auto &presentation = IFireboltAccessor::Instance().PresentationInterface();
     auto result = presentation.subscribeOnFocusedChanged([this](const bool focused) {
       SB_LOG(INFO) << "presentation.onFocusedChanged: focused=" << focused;
-      on_focused_changed(focused);
+      onFocusedChanged(focused);
     });
     if (!result) {
       SB_LOG(ERROR) << "presentation.subscribeOnFocusedChanged failed, error code = " << result.error();
     }
   }
 
-  // Configure 'exit' strategy
+  // Configure exit strategy
   SbRdkSetConcealRequestHandler([](void*) -> int {
     SB_LOG(INFO) << "Conceal requested, sending lifecycle.close(DEACTIVATE).";
     auto &lifecycle = IFireboltAccessor::Instance().LifecycleInterface();
@@ -112,36 +115,59 @@ void FireboltLifecycle::initialize() {
     }
     return 0;  // prevent default handler
   }, nullptr);
-  SbRdkSetCobaltExitStrategy(kDefaultExitStrategy);
 }
 
-void FireboltLifecycle::on_intent(const Firebolt::Actions::Intent& intent) {
+void FireboltLifecycle::onIntent(const Firebolt::Actions::Intent& intent, bool is_initial) {
   std::unique_lock<std::mutex> lock { mutex_ };
   if (last_intent_id_ == intent.intentId)
     return;
 
-  auto* app = Application::Get();
-
-  bool has_preload_action = (0 == strncasecmp(intent.intent.action.c_str(), kPreloadAction, strlen(kPreloadAction)));
-  if (has_preload_action && lifecycle_state_ == Lifecycle::LifecycleState::INITIALIZING) {
-    SB_LOG(INFO) << "Setting preload immediate";
-    app->SetPreloadImmediate();
+  auto intent_params = IntentParams::fromString(intent.intent);
+  if (!intent_params) {
+    SB_LOG(INFO) << "Failed to parse actions.intent '" << intent.intent << "', "
+                 << "error = " << intent_params.error() << ", error info = "
+                 << intent_params.errorInfo();
+    return;
   }
 
-  // TODO: create and set deep link from intent data query
+  auto* app = Application::Get();
+
+  bool has_preload_action = (intent_params->action == IntentParams::Action::PreLoad);
+  if (has_preload_action) {
+    if (lifecycle_state_ == Lifecycle::LifecycleState::INITIALIZING) {
+      SB_LOG(INFO) << "Setting preload immediate";
+      app->SetPreloadImmediate();
+    } else {
+      SB_LOG(WARNING) << "Ignoring 'pre-load' intent(" << *intent_params
+                      << "), while in state=" << lifecycle_state_;
+    }
+  } else {
+    link_.setQuery(intent_params->toUriQuery(is_focused_, _additional_data_url));
+
+    auto link = link_.toString();
+    if (is_initial) {
+      SB_LOG(INFO) << "App::SetStartLink uri=" << link;
+      app->SetStartLink(link.c_str());
+    } else {
+      SB_LOG(INFO) << "App::Link uri=" << link;
+      app->Link(link.c_str());
+    }
+  }
 
   // if 'pre-load' intent got cleared then reveal the app to start rendering
   // to drive the platform lifecycle to Active
-  if (has_preload_action_ && !has_preload_action && lifecycle_state_ == Lifecycle::LifecycleState::PAUSED) {
-    SB_LOG(INFO) << "App::Reveal";
-    app->Reveal(nullptr, nullptr);
+  if (has_preload_action_ && !has_preload_action) {
+    if (lifecycle_state_ == Lifecycle::LifecycleState::PAUSED) {
+      SB_LOG(INFO) << "App::Reveal";
+      app->Reveal(nullptr, nullptr);
+    }
   }
 
   last_intent_id_ = intent.intentId;
   has_preload_action_ = has_preload_action;
 }
 
-void FireboltLifecycle::on_state_change(Lifecycle::LifecycleState new_state, Lifecycle::LifecycleState old_state) {
+void FireboltLifecycle::onStateChange(Lifecycle::LifecycleState new_state, Lifecycle::LifecycleState old_state) {
   std::unique_lock<std::mutex> lock { mutex_ };
   if (lifecycle_state_ == new_state)
     return;
@@ -227,7 +253,7 @@ void FireboltLifecycle::on_state_change(Lifecycle::LifecycleState new_state, Lif
   }
 }
 
-void FireboltLifecycle::on_focused_changed(const bool focused) {
+void FireboltLifecycle::onFocusedChanged(const bool focused) {
   std::unique_lock<std::mutex> lock { mutex_ };
   if (is_focused_ == focused)
     return;

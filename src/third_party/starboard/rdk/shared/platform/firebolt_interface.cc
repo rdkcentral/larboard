@@ -29,6 +29,7 @@
 
 #include <chrono>
 #include <cstring>
+#include <math.h>
 
 using namespace std::chrono_literals;
 using ::starboard::MimeSupportabilityCache;
@@ -74,7 +75,26 @@ std::optional<Resolution> FireboltInterface::FireboltDevice::video_resolution() 
 }
 
 std::optional<float> FireboltInterface::FireboltDevice::diagonal_size_in_inches() {
-  return { };
+  std::unique_lock<std::mutex> lock { mutex_ };
+
+  // lazy init
+  if (!diagonal_size_in_inches_.has_value()) {
+    // set default value
+    diagonal_size_in_inches_.emplace(.0f);
+
+    auto &display = Firebolt::IFireboltAccessor::Instance().DisplayInterface();
+    lock.unlock();
+    auto size = display.size();
+    lock.lock();
+
+    if (!size) {
+      SB_LOG(ERROR) << "display.size() failed, error code = " << size.error();
+    } else {
+      diagonal_size_in_inches_ = sqrtf(powf(static_cast<float>(size->width), 2.f) + powf(static_cast<float>(size->height), 2.f)) / 2.54f;
+    }
+  }
+
+  return diagonal_size_in_inches_;
 }
 
 std::optional<HDRFormat> FireboltInterface::FireboltDevice::hdr() {
@@ -197,6 +217,7 @@ void FireboltInterface::FireboltDevice::unsubscribe() {
     std::unique_lock<std::mutex> lock { mutex_ };
     on_hdr_format_changed_id = std::exchange(on_hdr_format_changed_id_, std::nullopt);
     hdr_format_.reset();
+    diagonal_size_in_inches_.reset();
   }
   auto &device = Firebolt::IFireboltAccessor::Instance().DeviceInterface();
   if (on_hdr_format_changed_id.has_value()) {

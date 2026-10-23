@@ -56,6 +56,7 @@ private:
     std::optional<std::string> chipset_id_;
     std::optional<HDRFormat> hdr_format_;
     std::optional<uint64_t> on_hdr_format_changed_id_;
+    std::optional<float> diagonal_size_in_inches_;
   };
 
   struct FireboltTextToSpeech final : public ITextToSpeech {

@@ -89,6 +89,7 @@ std::optional<float> FireboltInterface::FireboltDevice::diagonal_size_in_inches(
 
     if (!size) {
       SB_LOG(ERROR) << "display.size() failed, error code = " << size.error();
+      diagonal_size_in_inches_ = 0.f;
     } else {
       diagonal_size_in_inches_ = sqrtf(powf(static_cast<float>(size->width), 2.f) + powf(static_cast<float>(size->height), 2.f)) / 2.54f;
     }

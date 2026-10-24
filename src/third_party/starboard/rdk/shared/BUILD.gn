@@ -288,6 +288,13 @@ static_library("starboard_platform") {
     ]
   }
 
+  if (use_evergreen) {
+    sources += [
+      "//starboard/shared/starboard/native_stability.cc",
+      "//starboard/shared/starboard/native_stability.h",
+    ]
+  }
+
   cflags = []
 
   libs = [

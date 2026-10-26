@@ -2,9 +2,9 @@ name: Build Component in Native Environment
 
 on:
   push:
-    branches: [ main, 'sprint/**', 'release/**', develop ]
+    branches: [ main, 'sprint/**', 'release/**', develop , 'feature/coverity-integration' ]
   pull_request:
-    branches: [ main, 'sprint/**', 'release/**', topic/*, develop ]
+    branches: [ main, 'sprint/**', 'release/**', 'topic/*', develop ]
 
 jobs:
   build-larboard-on-pr:
@@ -17,6 +17,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Check native build environment
+        run: |
+          echo "Checking native build tools..."
+          cat /etc/os-release
+          command -v cmake || true
+          command -v ninja || true
+          command -v pkg-config || true
+          command -v c++ || true
+          git --version
+
       - name: native build
         run: |
-          sh -x cov_build.sh
+          bash -x cov_build.sh

@@ -54,6 +54,7 @@ private:
     std::mutex mutex_;
     std::optional<std::string> device_type_;
     std::optional<std::string> chipset_id_;
+    std::optional<std::string> firmware_version_;
     std::optional<HDRFormat> hdr_format_;
     std::optional<uint64_t> on_hdr_format_changed_id_;
   };

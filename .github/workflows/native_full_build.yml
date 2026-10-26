@@ -27,6 +27,17 @@ jobs:
           command -v c++ || true
           git --version
 
+      - name: Check Coverity tools
+        run: |
+          for tool in cov-build cov-capture cov-analyze cov-format-errors; do
+            if command -v "$tool" >/dev/null 2>&1; then
+              echo "$tool: found"
+              "$tool" --version || true
+            else
+              echo "$tool: not found"
+            fi
+          done
+
       - name: native build
         run: |
           bash -x cov_build.sh

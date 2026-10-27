@@ -153,12 +153,6 @@ class TracePlatformInterface final : public PlatformInterface {
       return ret;
     }
 
-    std::optional<bool> is_connection_type_wireless() override {
-      auto ret = device_.is_connection_type_wireless();
-      TRACE_INFO() << "device.is_connection_type_wireless: " << ret;
-      return ret;
-    }
-
     std::optional<bool> is_disconnected() override {
       auto ret = device_.is_disconnected();
       TRACE_INFO() << "device.is_disconnected: " << ret;
@@ -299,12 +293,6 @@ class CompositeInterface final : public PlatformInterface {
     std::optional<std::string> firmware_version() override {
       return parent_.forAnyDevice<std::string>([](IDevice& device) {
         return device.firmware_version();
-      });
-    }
-
-    std::optional<bool> is_connection_type_wireless() override {
-      return parent_.forAnyDevice<bool>([](IDevice& device) {
-        return device.is_connection_type_wireless();
       });
     }
 

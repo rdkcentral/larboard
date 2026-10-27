@@ -76,9 +76,6 @@ public:
   // Get the firmware version of the device.
   virtual std::optional<std::string> firmware_version() = 0;
 
-  // Check if the device has a wireless connection.
-  virtual std::optional<bool> is_connection_type_wireless() = 0;
-
   // Check if the device is currently disconnected.
   virtual std::optional<bool> is_disconnected() = 0;
 };

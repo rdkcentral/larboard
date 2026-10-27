@@ -804,8 +804,7 @@ private:
   ServiceLink network_link_ { kNetworkCallsign };
   std::atomic_bool needs_refresh_ { true };
   std::atomic_bool did_subscribe_ { false };
-  std::atomic_bool is_connected_  { false };
-  std::atomic_bool is_connection_type_wireless_ { false };
+  std::atomic_bool is_connected_  { true };
   std::mutex mutex_;
   SbEventId event_id_ { kSbEventIdInvalid };
 
@@ -816,34 +815,22 @@ private:
     }
     InterfaceInfo(const InterfaceInfo& other)
       : Core::JSON::Container()
-      , InterfaceType(other.InterfaceType)
       , InterfaceName(other.InterfaceName)
       , IsConnected(other.IsConnected)  {
       Init();
     }
     InterfaceInfo& operator=(const InterfaceInfo& rhs) {
-      InterfaceType = rhs.InterfaceType;
       InterfaceName = rhs.InterfaceName;
       IsConnected = rhs.IsConnected;
       return *this;
     }
-    Core::JSON::String  InterfaceType;
     Core::JSON::String  InterfaceName;
     Core::JSON::Boolean IsConnected;
   private:
     void Init() {
-      Add(_T("type"), &InterfaceType);
       Add(_T("name"), &InterfaceName);
       Add(_T("connected"), &IsConnected);
     }
-  };
-
-  struct PrimaryInterfaceInfo : public Core::JSON::Container {
-    PrimaryInterfaceInfo()
-      : Core::JSON::Container() {
-      Add(_T("interface"), &InterfaceName);
-    }
-    Core::JSON::String InterfaceName;
   };
 
   struct InterfacesInfo : public Core::JSON::Container {
@@ -891,7 +878,7 @@ private:
     }
 
     InterfacesInfo info;
-    rc = network_link_.Get(kDefaultTimeoutMs, "GetAvailableInterfaces", info);
+    rc = network_link_.Get(1000, "GetAvailableInterfaces", info);
     if (Core::ERROR_UNAVAILABLE == rc || kPriviligedRequestErrorCode == rc) {
       SB_LOG(ERROR) << "'" << kNetworkCallsign << ".GetAvailableInterfaces' failed, rc = " << rc
                     << " ( " << Core::ErrorToString(rc) << " )";
@@ -929,27 +916,6 @@ private:
       }
     }
 
-    PrimaryInterfaceInfo default_interface;
-    rc = network_link_.Get(kDefaultTimeoutMs, "GetPrimaryInterface", default_interface);
-    if (Core::ERROR_NONE == rc) {
-      std::string primary_name = default_interface.InterfaceName.Value();
-      SB_LOG(INFO) << "Primary interface: " << primary_name;
-      bool is_wireless = false;
-      auto iface_index(info.Interfaces.Elements());
-      while (iface_index.Next()) {
-        const auto& iface = iface_index.Current();
-        if (iface.InterfaceName.Value() == primary_name) {
-          is_wireless = (iface.InterfaceType.Value() == "WIFI");
-          SB_LOG(INFO) << "Primary interface type: " << iface.InterfaceType.Value();
-          break;
-        }
-      }
-      is_connection_type_wireless_.store(is_wireless);
-    }
-    else {
-      SB_LOG(INFO) << "Failed to get primary interface, rc = " << rc
-                   << " ( " << Core::ErrorToString(rc) << " )";
-    }
   }
 
   void OnInterfaceStateChange(const Core::JSON::String&) {
@@ -960,11 +926,6 @@ public:
   bool IsDisconnected() {
     Refresh();
     return !is_connected_.load();
-  }
-
-  bool IsConnectionTypeWireless() {
-    Refresh();
-    return is_connection_type_wireless_.load();
   }
 
   void Teardown() {
@@ -1601,10 +1562,6 @@ std::optional<std::string> RDKServicesInterface::RDKDevice::device_type() {
 
 std::optional<std::string> RDKServicesInterface::RDKDevice::firmware_version() {
   return GetDeviceInfo()->GetFirmwareVersion();
-}
-
-std::optional<bool> RDKServicesInterface::RDKDevice::is_connection_type_wireless() {
-  return GetNetworkInfo()->IsConnectionTypeWireless();
 }
 
 std::optional<bool> RDKServicesInterface::RDKDevice::is_disconnected() {

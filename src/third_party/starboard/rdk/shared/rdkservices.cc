@@ -878,7 +878,7 @@ private:
     }
 
     InterfacesInfo info;
-    rc = network_link_.Get(1000, "GetAvailableInterfaces", info);
+    rc = network_link_.Get(kDefaultTimeoutMs, "GetAvailableInterfaces", info);
     if (Core::ERROR_UNAVAILABLE == rc || kPriviligedRequestErrorCode == rc) {
       SB_LOG(ERROR) << "'" << kNetworkCallsign << ".GetAvailableInterfaces' failed, rc = " << rc
                     << " ( " << Core::ErrorToString(rc) << " )";

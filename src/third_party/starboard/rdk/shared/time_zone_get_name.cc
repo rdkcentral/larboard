@@ -36,6 +36,7 @@
 // Licensed under UNICODE LICENSE V3 and the ICU License from https://github.com/unicode-org/icu/blob/main/LICENSE
 
 #include <limits.h>
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
@@ -82,6 +83,25 @@ const char* SbTimeZoneGetName() {
     }
   }
 
+  /* Check /etc/timezone file */
+  if (gTimeZoneBufferPtr == NULL) {
+    FILE* fp = fopen("/etc/timezone", "r");
+    if (fp != NULL) {
+      if (fgets(gTimeZoneBuffer, sizeof(gTimeZoneBuffer), fp) != NULL) {
+        size_t len = strlen(gTimeZoneBuffer);
+        while (len > 0 && (gTimeZoneBuffer[len - 1] == '\n' ||
+                          gTimeZoneBuffer[len - 1] == '\r')) {
+          gTimeZoneBuffer[--len] = '\0';
+        }
+
+        if (isValidOlsonID(gTimeZoneBuffer)) {
+          gTimeZoneBufferPtr = &gTimeZoneBuffer[0];
+        }
+      }
+      fclose(fp);
+    }
+  }
+
   /*
   This is a trick to look at the name of the link to get the Olson ID
   because the tzfile contents is underspecified.
@@ -99,12 +119,13 @@ const char* SbTimeZoneGetName() {
 
       if (tzZoneInfoTailPtr != NULL &&
           isValidOlsonID(tzZoneInfoTailPtr + tzZoneInfoTailLen)) {
-        return (gTimeZoneBufferPtr = tzZoneInfoTailPtr + tzZoneInfoTailLen);
+        gTimeZoneBufferPtr = tzZoneInfoTailPtr + tzZoneInfoTailLen;
+        return gTimeZoneBufferPtr;
       }
     }
     SB_NOTREACHED();
     return "";
-  } else {
-    return gTimeZoneBufferPtr;
   }
+
+  return gTimeZoneBufferPtr;
 }

@@ -23,6 +23,7 @@
 #include <string>
 #include <chrono>
 #include <mutex>
+#include <memory>
 #include <optional>
 #include <condition_variable>
 
@@ -31,6 +32,8 @@ namespace starboard {
 namespace rdk {
 namespace shared {
 namespace platform {
+
+class FireboltLifecycle;
 
 class FireboltInterface final : public PlatformInterface {
 private:
@@ -109,7 +112,9 @@ private:
 
 public:
   FireboltInterface();
+  ~FireboltInterface() override;
 
+  void initialize() override;
   void teardown() override;
   void suspend() override;
   void resume() override;
@@ -131,6 +136,7 @@ private:
   FireboltTextToSpeech text_to_speech_;
   FireboltAccessibility accessibility_;
   FireboltAdvertising advertising_;
+  std::unique_ptr<FireboltLifecycle> lifecycle_;
 };
 
 }  // namespace platform

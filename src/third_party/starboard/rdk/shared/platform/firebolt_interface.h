@@ -43,7 +43,6 @@ private:
     std::optional<std::string> chipset() override;
     std::optional<std::string> device_type() override;
     std::optional<std::string> firmware_version() override;
-    std::optional<bool> is_connection_type_wireless() override;
     std::optional<bool> is_disconnected() override;
 
     void init();

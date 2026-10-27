@@ -152,10 +152,6 @@ std::optional<std::string> FireboltInterface::FireboltDevice::firmware_version()
   return {};
 }
 
-std::optional<bool> FireboltInterface::FireboltDevice::is_connection_type_wireless() {
-  return {};
-}
-
 std::optional<bool> FireboltInterface::FireboltDevice::is_disconnected() {
   return {};
 }

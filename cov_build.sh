@@ -13,10 +13,8 @@ set -Eeuo pipefail
 ###############################################################################
 
 # Resolve the Git repository root.
-ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null)" || {
-    echo "ERROR: Run this script from inside the larboard Git repository."
-    exit 1
-}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$SCRIPT_DIR"
 
 cd "$ROOT_DIR"
 

@@ -1,1 +1,0 @@
-/home/jerald/Xumo_Flex2/Cov-build/dependency/thunder/install/include/WPEFramework/interfaces/IDRM.h

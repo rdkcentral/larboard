@@ -16,6 +16,9 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$SCRIPT_DIR"
 
+# Allow Git to access the GitHub Actions checkout.
+git config --global --add safe.directory "$ROOT_DIR"
+
 cd "$ROOT_DIR"
 
 ###############################################################################

@@ -166,7 +166,10 @@ else
         cd "$META_DIR"
 
         # Architect's original environment setup.
+        # Yocto setup scripts may reference unset shell variables.
+        set +u
         source ./setup-environment
+        set -u
 
         echo "MACHINE=${MACHINE:-not-set}"
         echo "DISTRO=${DISTRO:-not-set}"

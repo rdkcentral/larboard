@@ -49,13 +49,19 @@ private:
     void unsubscribe();
   private:
     void set_hdr_format(HDRFormat hdr_format);
+    void set_is_disconnected(bool is_disconnected);
 
     std::mutex mutex_;
     std::optional<std::string> device_type_;
     std::optional<std::string> chipset_id_;
     std::optional<HDRFormat> hdr_format_;
     std::optional<uint64_t> on_hdr_format_changed_id_;
+<<<<<<< Updated upstream
     std::optional<float> diagonal_size_in_inches_;
+=======
+    std::optional<bool> is_disconnected_;
+    std::optional<uint64_t> on_connected_changed_id_;
+>>>>>>> Stashed changes
   };
 
   struct FireboltTextToSpeech final : public ITextToSpeech {

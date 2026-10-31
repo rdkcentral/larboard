@@ -174,7 +174,46 @@ std::optional<std::string> FireboltInterface::FireboltDevice::firmware_version()
 }
 
 std::optional<bool> FireboltInterface::FireboltDevice::is_disconnected() {
-  return {};
+  std::unique_lock<std::mutex> lock { mutex_ };
+
+  // lazy init
+  if (!is_disconnected_.has_value() && !on_connected_changed_id_.has_value()) {
+    auto &network = Firebolt::IFireboltAccessor::Instance().NetworkInterface();
+
+    // set default value
+    is_disconnected_ = false;
+
+    // subscribe to notifications first
+    lock.unlock();
+    auto subscribe_result = network.subscribeOnConnectedChanged([this](bool connected) {
+      set_is_disconnected(!connected);
+    });
+    lock.lock();
+    if (!subscribe_result) {
+      SB_LOG(ERROR) << "subscribeOnConnectedChanged() failed, error code = "
+                    << subscribe_result.error();
+    } else {
+      on_connected_changed_id_ = *subscribe_result;
+    }
+
+    // update the connection state
+    lock.unlock();
+    auto connected = network.connected();
+    lock.lock();
+    if (!connected) {
+      SB_LOG(ERROR) << "network.connected() failed, error code = "
+                    << connected.error();
+    } else {
+      is_disconnected_ = !*connected;
+    }
+  }
+
+  return is_disconnected_;
+}
+
+void FireboltInterface::FireboltDevice::set_is_disconnected(bool is_disconnected) {
+  std::unique_lock<std::mutex> lock { mutex_ };
+  is_disconnected_ = is_disconnected;
 }
 
 void FireboltInterface::FireboltDevice::init() {
@@ -209,18 +248,28 @@ void FireboltInterface::FireboltDevice::init() {
 }
 
 void FireboltInterface::FireboltDevice::unsubscribe() {
-  std::optional<uint64_t> on_hdr_format_changed_id;
+  std::optional<uint64_t> on_hdr_format_changed_id, on_connected_changed_id;
   {
     std::unique_lock<std::mutex> lock { mutex_ };
     on_hdr_format_changed_id = std::exchange(on_hdr_format_changed_id_, std::nullopt);
+    on_connected_changed_id = std::exchange(on_connected_changed_id_, std::nullopt);
     hdr_format_.reset();
     diagonal_size_in_inches_.reset();
+    is_disconnected_.reset();
   }
   auto &device = Firebolt::IFireboltAccessor::Instance().DeviceInterface();
   if (on_hdr_format_changed_id.has_value()) {
     auto result = device.unsubscribe(*on_hdr_format_changed_id);
     if (!result) {
       SB_LOG(ERROR) << "Failed to unsubscribe from OnHdrChanged, error code = " << result.error();
+    }
+  }
+  auto &network = Firebolt::IFireboltAccessor::Instance().NetworkInterface();
+  if (on_connected_changed_id.has_value()) {
+    auto result = network.unsubscribe(*on_connected_changed_id);
+    if (!result) {
+      SB_LOG(ERROR) << "unsubscribe OnConnectedChanged failed, error code = "
+                    << result.error();
     }
   }
 }

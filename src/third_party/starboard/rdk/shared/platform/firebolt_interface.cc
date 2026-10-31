@@ -254,11 +254,8 @@ void FireboltInterface::FireboltDevice::unsubscribe() {
     on_hdr_format_changed_id = std::exchange(on_hdr_format_changed_id_, std::nullopt);
     on_connected_changed_id = std::exchange(on_connected_changed_id_, std::nullopt);
     hdr_format_.reset();
-<<<<<<< Updated upstream
     diagonal_size_in_inches_.reset();
-=======
     is_disconnected_.reset();
->>>>>>> Stashed changes
   }
   auto &device = Firebolt::IFireboltAccessor::Instance().DeviceInterface();
   if (on_hdr_format_changed_id.has_value()) {

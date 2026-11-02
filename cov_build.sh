@@ -199,6 +199,20 @@ echo "Initializing SDK environment from: $SDK_DIR"
 # Yocto SDK setup scripts may reference unset shell variables.
 set +u
 source "$SDK_SETUP_RUNTIME"
+
+# Use host system CA certificates instead of SDK build-time certificate path.
+unset SSL_CERT_FILE SSL_CERT_DIR
+export GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt
+export CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+
+test -f "$GIT_SSL_CAINFO" || {
+    echo "ERROR: Host CA certificate bundle not found"
+    exit 1
+}
+
+git config --global http.sslCAInfo "$GIT_SSL_CAINFO"
+echo "Git SSL certificate: $GIT_SSL_CAINFO"
+
 set -u
 
 # Required for the successful manual RDK ARM build.

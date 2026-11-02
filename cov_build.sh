@@ -29,6 +29,43 @@ cd "$ROOT_DIR"
 
 # Prebuilt Yocto SDK committed to this repository using Git LFS.
 SDK_DIR="$ROOT_DIR/oecore-x86_64"
+
+# Create original SDK path for GitHub Actions.
+# The Yocto compiler has this path embedded as its ELF interpreter.
+if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+    ORIGINAL_SDK_PATH="/home/sranan984/oecore-x86_64"
+
+    if [ -e "$ORIGINAL_SDK_PATH" ] || [ -L "$ORIGINAL_SDK_PATH" ]; then
+        if [ "$(readlink -f "$ORIGINAL_SDK_PATH")" != "$(readlink -f "$SDK_DIR")" ]; then
+            echo "ERROR: SDK path already exists and points elsewhere: $ORIGINAL_SDK_PATH"
+            exit 1
+        fi
+    else
+        mkdir -p "$(dirname "$ORIGINAL_SDK_PATH")"
+        ln -s "$SDK_DIR" "$ORIGINAL_SDK_PATH"
+        echo "Created SDK symlink: $ORIGINAL_SDK_PATH -> $SDK_DIR"
+    fi
+
+    ls -l "$ORIGINAL_SDK_PATH"
+fi
+
+# Create the original SDK path expected by the Yocto compiler.
+ORIGINAL_SDK_PATH="/home/sranan984/oecore-x86_64"
+
+if [ "$SDK_DIR" != "$ORIGINAL_SDK_PATH" ]; then
+    mkdir -p "$(dirname "$ORIGINAL_SDK_PATH")"
+
+    if [ -e "$ORIGINAL_SDK_PATH" ] || [ -L "$ORIGINAL_SDK_PATH" ]; then
+        if [ "$(readlink -f "$ORIGINAL_SDK_PATH")" != "$(readlink -f "$SDK_DIR")" ]; then
+            echo "ERROR: Original SDK path already exists and points elsewhere: $ORIGINAL_SDK_PATH"
+            exit 1
+        fi
+    else
+        ln -s "$SDK_DIR" "$ORIGINAL_SDK_PATH"
+        echo "Created SDK symlink: $ORIGINAL_SDK_PATH -> $SDK_DIR"
+    fi
+fi
+
 SDK_SETUP="$SDK_DIR/environment-setup-armv7at2hf-neon-oe-linux-gnueabi"
 SDK_SETUP_RUNTIME=""
 

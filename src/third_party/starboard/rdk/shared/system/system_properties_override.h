@@ -36,6 +36,7 @@ public:
   static bool GetFriendlyName(std::string &out);
   static bool GetDeviceType(std::string &out);
   static bool IsIfaDisabled();
+  static unsigned int GetVoiceSystem();
 };
 
 class AdvertisingId {

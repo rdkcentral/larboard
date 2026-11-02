@@ -291,7 +291,12 @@ fi
 
 echo "Synchronizing Cobalt dependencies..."
 
-gclient sync --nohooks
+log "Syncing Cobalt dependencies with verbose logging"
+
+export GIT_TERMINAL_PROMPT=0
+export GIT_TRACE=1
+
+gclient sync --nohooks --verbose
 
 if [[ ! -d "$COBALT_DIR/.git" ]]; then
     fail "Cobalt source directory was not created by gclient."

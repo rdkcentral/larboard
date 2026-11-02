@@ -72,13 +72,12 @@ SDK_SETUP_RUNTIME=""
 DEPOT_TOOLS_DIR="$ROOT_DIR/depot_tools"
 COBALT_ROOT="$ROOT_DIR/cobalt-build"
 COBALT_DIR="$COBALT_ROOT/src"
-LARBOARD_DIR="$COBALT_ROOT/larboard"
+# Use the existing Larboard repository checkout.
+LARBOARD_DIR="$ROOT_DIR"
+STARBOARD_SOURCE="$LARBOARD_DIR/src/third_party/starboard"
 
 COBALT_REPO="https://github.com/youtube/cobalt.git"
 COBALT_TAG="27.lts.3"
-
-LARBOARD_REPO="https://github.com/rdkcentral/larboard.git"
-LARBOARD_COMMIT="980732e5ad863aefd2692307e08e36e3e325e07a"
 
 DEPOT_TOOLS_REPO="https://chromium.googlesource.com/chromium/tools/depot_tools.git"
 DEPOT_TOOLS_COMMIT="2cea9cdd785391335d448773124631cb711225e2"
@@ -308,16 +307,22 @@ git -C "$COBALT_DIR" checkout --detach "$COBALT_TAG"
 echo "Checking out Cobalt version: $COBALT_TAG"
 
 ###############################################################################
-# Phase 6: Prepare Larboard
+# Phase 6: Verify existing Larboard source
 ###############################################################################
 
-log "Phase 6: Preparing Larboard source"
+log "Phase 6: Verifying existing Larboard source"
 
-clone_or_update "$LARBOARD_REPO" "$LARBOARD_DIR"
-checkout_commit "$LARBOARD_DIR" "$LARBOARD_COMMIT"
+[[ -d "$STARBOARD_SOURCE" ]] ||
+    fail "Larboard Starboard source not found: $STARBOARD_SOURCE"
 
-echo "Larboard commit:"
+echo "Using existing Larboard repository:"
+echo "$LARBOARD_DIR"
+
+echo "Larboard repository commit:"
 git -C "$LARBOARD_DIR" log -1 --oneline
+
+echo "Starboard source:"
+echo "$STARBOARD_SOURCE"
 
 ###############################################################################
 # Phase 7: Run Cobalt hooks
@@ -335,7 +340,7 @@ gclient runhooks
 log "Phase 8: Configuring RDK ARM Starboard platform"
 
 STARBOARD_LINK="$COBALT_DIR/third_party/starboard"
-STARBOARD_TARGET="$LARBOARD_DIR/src/third_party/starboard"
+STARBOARD_TARGET="$STARBOARD_SOURCE"
 
 [[ -d "$STARBOARD_TARGET" ]] ||
     fail "Larboard Starboard source not found: $STARBOARD_TARGET"

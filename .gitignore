@@ -6,3 +6,10 @@
 /build-x86/
 /install-x86/
 
+
+# Local Cobalt/Larboard build workspace
+/cobalt-build/
+/depot_tools/
+/sdk-installer/
+/cov_build.log
+/cov_build.sh.backup

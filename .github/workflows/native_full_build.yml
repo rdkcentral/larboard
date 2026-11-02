@@ -1,31 +1,57 @@
-name: Build Component in Native Environment
+name: Build Larboard using Yocto SDK
 
 on:
   push:
-    branches: [ main, 'sprint/**', 'release/**', develop , 'feature/coverity-integration' ]
+    branches:
+      - main
+      - 'sprint/**'
+      - 'release/**'
+      - develop
+      - 'feature/coverity-integration'
+
   pull_request:
-    branches: [ main, 'sprint/**', 'release/**', 'topic/*', develop ]
+    branches:
+      - main
+      - 'sprint/**'
+      - 'release/**'
+      - 'topic/*'
+      - develop
 
 jobs:
-  build-larboard-on-pr:
-    name: Build larboard component in github rdkcentral
+  build-larboard:
+    name: Build Larboard component using Yocto SDK
     runs-on: ubuntu-latest
+
     container:
       image: ghcr.io/rdkcentral/docker-rdk-ci:latest
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+        with:
+          lfs: true
 
-      - name: Check native build environment
+      - name: Check build environment
         run: |
-          echo "Checking native build tools..."
+          echo "Checking build environment..."
           cat /etc/os-release
-          command -v cmake || true
-          command -v ninja || true
-          command -v pkg-config || true
-          command -v c++ || true
+
+          for tool in git curl python3 make gcc g++ tar; do
+            command -v "$tool" || exit 1
+          done
+
           git --version
+          python3 --version
+
+      - name: Verify Yocto SDK
+        run: |
+          SDK_DIR="oecore-x86_64"
+
+          test -f "$SDK_DIR/environment-setup-armv7at2hf-neon-oe-linux-gnueabi"
+          test -d "$SDK_DIR/sysroots/armv7at2hf-neon-oe-linux-gnueabi"
+          test -d "$SDK_DIR/sysroots/x86_64-bolt_distro-linux"
+
+          du -sh "$SDK_DIR"
 
       - name: Check Coverity tools
         run: |
@@ -38,6 +64,14 @@ jobs:
             fi
           done
 
-      - name: native build
+      - name: Build Larboard
         run: |
-          bash -x cov_build.sh
+          bash cov_build.sh
+
+      - name: Verify build output
+        run: |
+          OUTPUT="cobalt-build/src/out/rdk-arm_gold/starboard/obj/third_party/starboard/rdk/shared/libstarboard_platform.a"
+
+          test -f "$OUTPUT"
+          ls -lh "$OUTPUT"
+          echo "Larboard build completed successfully."

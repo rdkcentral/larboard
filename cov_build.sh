@@ -1,120 +1,105 @@
 
 #!/usr/bin/env bash
+
 set -Eeuo pipefail
 
 ###############################################################################
-# Cobalt 27 / Larboard RDK ARM build
+# Cobalt 27 / Larboard RDK ARM build using a prebuilt Yocto SDK
 #
-# Run from anywhere:
+# All SDK files, source repositories and build outputs are kept inside
+# this Larboard repository workspace.
+#
+# Local testing:
 #   bash cov_build.sh
 #
-# All downloaded sources, SDK files and build outputs are kept inside the
-# larboard Git repository workspace.
+# Future Artifactory testing:
+#   SDK_INSTALLER_URL="<Artifactory installer URL>" bash cov_build.sh
 ###############################################################################
 
-# Resolve the Git repository root.
+# Resolve repository directory from this script's location.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$SCRIPT_DIR"
 
-# Allow Git to access the GitHub Actions checkout.
 git config --global --add safe.directory "$ROOT_DIR"
-
 cd "$ROOT_DIR"
 
 ###############################################################################
 # Configuration
 ###############################################################################
 
-META_REPO="https://github.com/rdkcentral/meta-bolt-youtube.git"
-META_BRANCH="feature/cobalt-27-from-meta-rdk-video"
-
-COBALT_REPO="https://github.com/youtube/cobalt.git"
-COBALT_TAG="27.lts.3"
-
-DEPOT_TOOLS_REPO="https://chromium.googlesource.com/chromium/tools/depot_tools.git"
-DEPOT_TOOLS_COMMIT="2cea9cdd785391335d448773124631cb711225e2"
-
-# Use the current repository's origin for the Larboard source checkout.
-LARBOARD_REPO_URL="${LARBOARD_REPO_URL:-$(git remote get-url origin)}"
-LARBOARD_COMMIT="980732e5ad863aefd2692307e08e36e3e325e07a"
-
-META_DIR="$ROOT_DIR/meta-bolt-youtube"
+# Prebuilt Yocto SDK committed to this repository using Git LFS.
 SDK_DIR="$ROOT_DIR/oecore-x86_64"
 SDK_SETUP="$SDK_DIR/environment-setup-armv7at2hf-neon-oe-linux-gnueabi"
+SDK_SETUP_RUNTIME=""
 
 DEPOT_TOOLS_DIR="$ROOT_DIR/depot_tools"
-BIN_DIR="$ROOT_DIR/bin"
-
 COBALT_ROOT="$ROOT_DIR/cobalt-build"
 COBALT_DIR="$COBALT_ROOT/src"
 LARBOARD_DIR="$COBALT_ROOT/larboard"
 
+COBALT_REPO="https://github.com/youtube/cobalt.git"
+COBALT_TAG="27.lts.3"
+
+LARBOARD_REPO="https://github.com/rdkcentral/larboard.git"
+LARBOARD_COMMIT="980732e5ad863aefd2692307e08e36e3e325e07a"
+
+DEPOT_TOOLS_REPO="https://chromium.googlesource.com/chromium/tools/depot_tools.git"
+DEPOT_TOOLS_COMMIT="2cea9cdd785391335d448773124631cb711225e2"
+
 GN_OUT="$COBALT_DIR/out/rdk-arm_gold"
-
-SDK_INSTALLER=""
+NINJA_JOBS="${NINJA_JOBS:-4}"
 
 ###############################################################################
-# Common functions
+# Helper functions
 ###############################################################################
 
-log()
-{
+log() {
     echo
     echo "================================================================"
     echo " $1"
     echo "================================================================"
 }
 
-fail()
-{
-    echo "ERROR: $*" >&2
+fail() {
+    echo
+    echo "ERROR: $1"
     exit 1
 }
 
-require_command()
-{
+require_command() {
     command -v "$1" >/dev/null 2>&1 ||
         fail "Required command not found: $1"
 }
 
-clone_or_update()
-{
+clone_or_update() {
     local repo_url="$1"
     local repo_dir="$2"
-    local branch="${3:-}"
 
-    if [ -d "$repo_dir/.git" ]; then
+    mkdir -p "$(dirname "$repo_dir")"
+
+    if [[ -d "$repo_dir/.git" ]]; then
         echo "Reusing existing repository: $repo_dir"
-
         git -C "$repo_dir" remote set-url origin "$repo_url"
-        git -C "$repo_dir" fetch origin
-
-        if [ -n "$branch" ]; then
-            git -C "$repo_dir" checkout "$branch"
-            git -C "$repo_dir" pull --ff-only origin "$branch"
-        fi
+        git -C "$repo_dir" fetch --tags --prune origin
     else
-        if [ -e "$repo_dir" ]; then
-            fail "$repo_dir exists but is not a Git repository."
+        if [[ -e "$repo_dir" ]]; then
+            fail "$repo_dir exists but is not a Git repository. Please inspect it."
         fi
 
-        mkdir -p "$(dirname "$repo_dir")"
-
-        if [ -n "$branch" ]; then
-            git clone --branch "$branch" "$repo_url" "$repo_dir"
-        else
-            git clone "$repo_url" "$repo_dir"
-        fi
+        echo "Cloning $repo_url"
+        git clone "$repo_url" "$repo_dir"
     fi
 }
 
-checkout_commit()
-{
+checkout_commit() {
     local repo_dir="$1"
     local commit="$2"
 
-    git -C "$repo_dir" cat-file -e "${commit}^{commit}" 2>/dev/null ||
-        git -C "$repo_dir" fetch origin "$commit"
+    git -C "$repo_dir" fetch origin "$commit" ||
+        git -C "$repo_dir" fetch --tags origin
+
+    git -C "$repo_dir" cat-file -e "${commit}^{commit}" ||
+        fail "Commit $commit is not available in $repo_dir"
 
     git -C "$repo_dir" checkout --detach "$commit"
 }
@@ -125,75 +110,84 @@ checkout_commit()
 
 log "Phase 1: Checking host tools"
 
-for tool in git curl python3 make gcc g++; do
+for tool in git curl python3 make gcc g++ tar; do
     require_command "$tool"
 done
 
-mkdir -p "$BIN_DIR"
+# SDK is already present in the repository.
 
 ###############################################################################
-# Phase 2: Prepare repo launcher and Yocto source
+# Phase 2: Verify the prebuilt Yocto SDK
 ###############################################################################
 
-log "Phase 2: Preparing Yocto source"
+log "Phase 2: Verifying prebuilt Yocto SDK"
 
-if ! command -v repo >/dev/null 2>&1; then
-    echo "Installing repo launcher..."
+[[ -d "$SDK_DIR" ]] ||
+    fail "SDK directory not found: $SDK_DIR"
 
-    curl -fsSL \
-        https://storage.googleapis.com/git-repo-downloads/repo \
-        -o "$BIN_DIR/repo"
+[[ -f "$SDK_SETUP" ]] ||
+    fail "SDK environment setup file not found: $SDK_SETUP"
 
-    chmod +x "$BIN_DIR/repo"
+[[ -d "$SDK_DIR/sysroots/armv7at2hf-neon-oe-linux-gnueabi" ]] ||
+    fail "SDK target sysroot is missing."
+
+[[ -d "$SDK_DIR/sysroots/x86_64-bolt_distro-linux" ]] ||
+    fail "SDK host sysroot is missing."
+
+echo "Using repository SDK: $SDK_DIR"
+du -sh "$SDK_DIR"
+
+###############################################################################
+# Phase 3: Initialize the Yocto SDK
+###############################################################################
+
+log "Phase 3: Initializing Yocto SDK"
+
+# The original SDK setup file contains the DVM installation path.
+# Rewrite that path in a temporary copy so the SDK works from any workspace.
+SDK_SETUP_RUNTIME="$(mktemp)"
+
+sed "s|/home/sranan984/oecore-x86_64|$SDK_DIR|g" \
+    "$SDK_SETUP" > "$SDK_SETUP_RUNTIME"
+
+if grep -q '/home/sranan984/oecore-x86_64' "$SDK_SETUP_RUNTIME"; then
+    fail "SDK runtime setup still contains the original DVM path."
 fi
 
-export PATH="$BIN_DIR:$PATH"
+# Remove the temporary setup file when the script exits.
+trap 'rm -f "$SDK_SETUP_RUNTIME"' EXIT
 
-clone_or_update "$META_REPO" "$META_DIR" "$META_BRANCH"
+echo "Initializing SDK environment from: $SDK_DIR"
 
-###############################################################################
-# Phase 3: Generate and install Yocto SDK if needed
-###############################################################################
+# Yocto SDK setup scripts may reference unset shell variables.
+set +u
+source "$SDK_SETUP_RUNTIME"
+set -u
 
-log "Phase 3: Preparing Yocto SDK"
+# Required for the successful manual RDK ARM build.
+unset PKG_CONFIG_SYSROOT_DIR || true
 
-if [ -f "$SDK_SETUP" ]; then
-    echo "Existing Yocto SDK found. Reusing: $SDK_DIR"
-else
-    echo "Yocto SDK not found. Generating SDK..."
+# Verify the ARM cross-compiler and target sysroot.
+require_command arm-oe-linux-gnueabi-gcc
+require_command arm-oe-linux-gnueabi-g++
 
-    (
-        cd "$META_DIR"
+[[ -d "$SDKTARGETSYSROOT" ]] ||
+    fail "Target sysroot not found: $SDKTARGETSYSROOT"
 
-        # Architect's original environment setup.
-        # Yocto setup scripts may reference unset shell variables.
-        set +u
-        source ./setup-environment
-        set -u
+echo "ARM compiler:"
+arm-oe-linux-gnueabi-gcc --version | head -1
 
-        echo "MACHINE=${MACHINE:-not-set}"
-        echo "DISTRO=${DISTRO:-not-set}"
+echo "Compiler target:"
+arm-oe-linux-gnueabi-gcc -dumpmachine
 
-        bitbake cobalt27-bolt-image -c populate_sdk
-    )
+echo "Target sysroot: $SDKTARGETSYSROOT"
 
-    SDK_INSTALLER="$(find \
-        "$META_DIR/build/tmp-glibc/deploy/sdk" \
-        -maxdepth 1 \
-        -type f \
-        -name '*toolchain*.sh' \
-        -print -quit 2>/dev/null || true)"
+export DEPOT_TOOLS_UPDATE=0
+export DEPOT_TOOLS_METRICS=0
 
-    [ -n "$SDK_INSTALLER" ] ||
-        fail "Yocto SDK installer was not generated."
-
-    echo "Installing SDK from: $SDK_INSTALLER"
-
-    bash "$SDK_INSTALLER" -y -d "$SDK_DIR"
-
-    [ -f "$SDK_SETUP" ] ||
-        fail "SDK installation completed, but setup file is missing."
-fi
+echo "CC: $CC"
+echo "CXX: $CXX"
+echo "Target sysroot: $SDKTARGETSYSROOT"
 
 ###############################################################################
 # Phase 4: Prepare depot_tools
@@ -202,216 +196,209 @@ fi
 log "Phase 4: Preparing depot_tools"
 
 clone_or_update "$DEPOT_TOOLS_REPO" "$DEPOT_TOOLS_DIR"
-
 checkout_commit "$DEPOT_TOOLS_DIR" "$DEPOT_TOOLS_COMMIT"
 
 export PATH="$DEPOT_TOOLS_DIR:$PATH"
-export DEPOT_TOOLS_UPDATE=0
-export DEPOT_TOOLS_METRICS=0
 
-(
+if [[ -f "$DEPOT_TOOLS_DIR/bootstrap_python3" ]]; then
     cd "$DEPOT_TOOLS_DIR"
+    source ./bootstrap_python3
 
-    if [ -f ./bootstrap_python3 ]; then
-        source ./bootstrap_python3
+    if declare -F bootstrap_python3 >/dev/null 2>&1; then
         bootstrap_python3
     fi
-)
+fi
+
+export PATH="$DEPOT_TOOLS_DIR:$PATH"
 
 require_command gclient
-require_command gn
-require_command ninja
 
 ###############################################################################
-# Phase 5: Configure and download Cobalt
+# Phase 5: Prepare Cobalt workspace and synchronize dependencies
 ###############################################################################
 
-log "Phase 5: Preparing Cobalt"
+log "Phase 5: Preparing Cobalt workspace"
 
 mkdir -p "$COBALT_ROOT"
+cd "$COBALT_ROOT"
 
-if [ ! -f "$COBALT_ROOT/.gclient" ]; then
-    cat > "$COBALT_ROOT/.gclient" <<'EOF'
+if [[ ! -f .gclient ]]; then
+    cat > .gclient <<'GCLIENT'
 solutions = [
   {
+    "name": "src",
     "url": "https://github.com/youtube/cobalt.git",
     "managed": False,
-    "name": "src",
     "custom_deps": {},
-    "custom_vars": {
-      "checkout_configuration": "small",
-    },
+    "custom_vars": {},
   },
 ]
-EOF
+
+checkout_configuration = "small"
+GCLIENT
 fi
 
-if [ -d "$COBALT_DIR/.git" ]; then
-    echo "Cobalt source already exists. Reusing it."
-else
-    echo "Cobalt source not found. gclient will download it."
+echo "Synchronizing Cobalt dependencies..."
+
+gclient sync --nohooks
+
+if [[ ! -d "$COBALT_DIR/.git" ]]; then
+    fail "Cobalt source directory was not created by gclient."
 fi
-
-(
-    cd "$COBALT_ROOT"
-
-    gclient sync --nohooks
-)
-
-[ -d "$COBALT_DIR/.git" ] ||
-    fail "Cobalt source checkout failed."
 
 git -C "$COBALT_DIR" fetch origin --tags
 git -C "$COBALT_DIR" checkout --detach "$COBALT_TAG"
 
+echo "Checking out Cobalt version: $COBALT_TAG"
+
 ###############################################################################
-# Phase 6: Clone or reuse Larboard source
+# Phase 6: Prepare Larboard
 ###############################################################################
 
 log "Phase 6: Preparing Larboard source"
 
-clone_or_update "$LARBOARD_REPO_URL" "$LARBOARD_DIR"
-
+clone_or_update "$LARBOARD_REPO" "$LARBOARD_DIR"
 checkout_commit "$LARBOARD_DIR" "$LARBOARD_COMMIT"
+
+echo "Larboard commit:"
+git -C "$LARBOARD_DIR" log -1 --oneline
 
 ###############################################################################
 # Phase 7: Run Cobalt hooks
 ###############################################################################
 
-log "Phase 7: Running Cobalt hooks"
+log "Phase 7: Running gclient hooks"
 
-(
-    cd "$COBALT_ROOT"
-
-    gclient runhooks
-)
+cd "$COBALT_ROOT"
+gclient runhooks
 
 ###############################################################################
-# Phase 8: Configure Starboard and RDK ARM platform
+# Phase 8: Configure Starboard platform
 ###############################################################################
 
-log "Phase 8: Configuring Starboard and RDK ARM"
+log "Phase 8: Configuring RDK ARM Starboard platform"
 
 STARBOARD_LINK="$COBALT_DIR/third_party/starboard"
-STARBOARD_SOURCE="$LARBOARD_DIR/src/third_party/starboard"
+STARBOARD_TARGET="$LARBOARD_DIR/src/third_party/starboard"
 
-[ -d "$STARBOARD_SOURCE" ] ||
-    fail "Larboard Starboard source not found: $STARBOARD_SOURCE"
+[[ -d "$STARBOARD_TARGET" ]] ||
+    fail "Larboard Starboard source not found: $STARBOARD_TARGET"
 
-mkdir -p "$COBALT_DIR/third_party"
+if [[ -L "$STARBOARD_LINK" ]]; then
+    CURRENT_TARGET="$(readlink -f "$STARBOARD_LINK")"
+    EXPECTED_TARGET="$(readlink -f "$STARBOARD_TARGET")"
 
-if [ -L "$STARBOARD_LINK" ]; then
-    rm "$STARBOARD_LINK"
-elif [ -e "$STARBOARD_LINK" ]; then
-    fail "$STARBOARD_LINK exists and is not a symlink. Not replacing it."
+    if [[ "$CURRENT_TARGET" != "$EXPECTED_TARGET" ]]; then
+        rm "$STARBOARD_LINK"
+        ln -s "$STARBOARD_TARGET" "$STARBOARD_LINK"
+    fi
+elif [[ -e "$STARBOARD_LINK" ]]; then
+    fail "$STARBOARD_LINK exists and is not a symlink. Inspect it before continuing."
+else
+    ln -s "$STARBOARD_TARGET" "$STARBOARD_LINK"
 fi
-
-ln -s "$STARBOARD_SOURCE" "$STARBOARD_LINK"
 
 echo "Starboard link:"
 ls -ld "$STARBOARD_LINK"
 
-# Create RDK ARM GN arguments.
-mkdir -p "$COBALT_DIR/build/configs/rdk-arm"
+###############################################################################
+# Phase 9: Add RDK ARM platform to GN configuration
+###############################################################################
 
-cat > "$COBALT_DIR/build/configs/rdk-arm/args.gn" <<'EOF'
-import("//third_party/starboard/rdk/arm/args.gn")
+log "Phase 9: Updating Cobalt GN platform list"
 
-starboard_level_final_executable_type = "executable"
-EOF
+GN_PY="$COBALT_DIR/cobalt/build/gn.py"
+ARGS_DIR="$COBALT_DIR/cobalt/build/configs/rdk-arm"
+ARGS_FILE="$ARGS_DIR/args.gn"
 
-# Add rdk-arm to the supported Cobalt Starboard platforms.
-python3 - "$COBALT_DIR/build/gn.py" <<'PY'
-import pathlib
-import re
+[[ -f "$GN_PY" ]] || fail "Cobalt GN script not found: $GN_PY"
+
+python3 - "$GN_PY" <<'PY'
+from pathlib import Path
 import sys
 
-path = pathlib.Path(sys.argv[1])
+path = Path(sys.argv[1])
 content = path.read_text()
 
-pattern = r"(_COBALT_STARBOARD_PLATFORMS\s*=\s*\[)(.*?)(\])"
-match = re.search(pattern, content, re.DOTALL)
+marker = "_COBALT_STARBOARD_PLATFORMS"
 
-if not match:
-    raise SystemExit(
-        "ERROR: Could not find _COBALT_STARBOARD_PLATFORMS in gn.py"
-    )
+start = content.find(marker)
+if start == -1:
+    raise SystemExit("ERROR: Could not find _COBALT_STARBOARD_PLATFORMS in gn.py")
 
-platforms = match.group(2)
+open_bracket = content.find("[", start)
+close_bracket = content.find("]", open_bracket)
 
-if re.search(r"""['"]rdk-arm['"]""", platforms):
-    print("rdk-arm is already present in gn.py")
-else:
-    updated = (
-        match.group(1)
-        + platforms
+if open_bracket == -1 or close_bracket == -1:
+    raise SystemExit("ERROR: Could not locate the platform list in gn.py")
+
+platform_list = content[open_bracket:close_bracket]
+
+if "'rdk-arm'" not in platform_list and '"rdk-arm"' not in platform_list:
+    content = (
+        content[:close_bracket]
         + "\n    'rdk-arm',\n"
-        + match.group(3)
+        + content[close_bracket:]
     )
-
-    content = content[:match.start()] + updated + content[match.end():]
     path.write_text(content)
-
-    print("Added rdk-arm to gn.py")
+    print("Added rdk-arm to _COBALT_STARBOARD_PLATFORMS")
+else:
+    print("rdk-arm is already present in GN platform list")
 PY
 
-###############################################################################
-# Phase 9: Generate GN build files
-###############################################################################
+mkdir -p "$ARGS_DIR"
 
-log "Phase 9: Generating GN build files"
+cat > "$ARGS_FILE" <<'ARGS'
+import("//third_party/starboard/rdk/arm/args.gn")
+ARGS
 
-(
-    cd "$COBALT_DIR"
-
-    source "$SDK_SETUP"
-    unset PKG_CONFIG_SYSROOT_DIR
-
-    python3 cobalt/build/gn.py --no-rbe -p rdk-arm -c gold
-)
+echo "RDK ARM GN arguments:"
+cat "$ARGS_FILE"
 
 ###############################################################################
-# Phase 10: Build libstarboard_platform.a
+# Phase 10: Generate GN build files
 ###############################################################################
 
-log "Phase 10: Building libstarboard_platform.a"
+log "Phase 10: Generating RDK ARM GN build files"
 
-[ -d "$GN_OUT" ] ||
-    fail "GN output directory not found: $GN_OUT"
+cd "$COBALT_DIR"
 
-(
-    cd "$COBALT_DIR"
+python3 "$GN_PY" --no-rbe -p rdk-arm -c gold
 
-    source "$SDK_SETUP"
-    unset PKG_CONFIG_SYSROOT_DIR
-
-    ninja -C "$GN_OUT" -j4 \
-        starboard/obj/third_party/starboard/rdk/shared/libstarboard_platform.a
-)
+[[ -d "$GN_OUT" ]] ||
+    fail "GN output directory was not generated: $GN_OUT"
 
 ###############################################################################
-# Phase 11: Verify build output
+# Phase 11: Build libstarboard_platform.a
 ###############################################################################
 
-log "Phase 11: Verifying build output"
+log "Phase 11: Building libstarboard_platform.a"
 
-ARCHIVE="$GN_OUT/starboard/obj/third_party/starboard/rdk/shared/libstarboard_platform.a"
+require_command ninja
 
-[ -f "$ARCHIVE" ] ||
-    fail "Build completed but archive was not found: $ARCHIVE"
+ninja -C "$GN_OUT" -j"$NINJA_JOBS" \
+    starboard/obj/third_party/starboard/rdk/shared/libstarboard_platform.a
+
+###############################################################################
+# Phase 12: Verify build output
+###############################################################################
+
+log "Phase 12: Verifying build output"
+
+OUTPUT="$GN_OUT/starboard/obj/third_party/starboard/rdk/shared/libstarboard_platform.a"
+
+[[ -f "$OUTPUT" ]] ||
+    fail "Build finished but expected library was not found: $OUTPUT"
+
+ls -lh "$OUTPUT"
 
 echo
-echo "Build completed successfully."
+echo "================================================================"
+echo " BUILD COMPLETED SUCCESSFULLY"
+echo "================================================================"
 echo
-echo "Repository workspace : $ROOT_DIR"
-echo "Cobalt source        : $COBALT_DIR"
-echo "Larboard source      : $LARBOARD_DIR"
-echo "Yocto SDK            : $SDK_DIR"
-echo "Build output         : $ARCHIVE"
-echo
-
-ls -lh "$ARCHIVE"
-
-echo
-echo "All build files are located inside the larboard repository."
+echo "SDK: $SDK_DIR"
+echo "Cobalt: $COBALT_DIR"
+echo "Larboard: $LARBOARD_DIR"
+echo "Output: $OUTPUT"
 

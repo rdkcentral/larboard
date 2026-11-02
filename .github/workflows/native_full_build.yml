@@ -64,6 +64,13 @@ jobs:
             fi
           done
 
+      - name: Check SDK relocation permissions
+        run: |
+          id
+          ls -ld /home
+          ls -ld /home/sranan984 || true
+          test -w /home && echo "/home is writable" || echo "/home is not writable"
+
       - name: Build Larboard
         run: |
           bash cov_build.sh

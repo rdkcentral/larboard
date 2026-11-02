@@ -40,6 +40,9 @@ struct HDRFormat {
 struct Resolution {
   Resolution() = default;
   Resolution(int32_t w, int32_t h) : width(w), height(h) {}
+  bool operator==(const Resolution& other) const {
+    return width == other.width && height == other.height;
+  }
   int32_t width{1920};
   int32_t height{1080};
 };

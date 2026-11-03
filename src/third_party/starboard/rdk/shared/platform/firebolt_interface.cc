@@ -237,7 +237,7 @@ std::optional<std::string> FireboltInterface::FireboltDevice::device_type() {
 }
 
 std::optional<std::string> FireboltInterface::FireboltDevice::firmware_version() {
-  return {};
+  return firmware_version_;
 }
 
 std::optional<bool> FireboltInterface::FireboltDevice::is_disconnected() {
@@ -272,6 +272,13 @@ void FireboltInterface::FireboltDevice::init() {
     SB_LOG(ERROR) << "device.chipsetId() failed, error code = " << chipset_id.error();
   } else {
     chipset_id_ = *chipset_id;
+  }
+
+  auto firmware = device.firmware();
+  if (!firmware) {
+    SB_LOG(ERROR) << "device.firmware() failed, error code = " << firmware.error();
+  } else {
+    firmware_version_ = *firmware;
   }
 }
 

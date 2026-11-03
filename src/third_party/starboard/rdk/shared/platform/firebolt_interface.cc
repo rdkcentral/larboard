@@ -29,6 +29,7 @@
 
 #include <chrono>
 #include <cstring>
+#include <fstream>
 
 using namespace std::chrono_literals;
 using ::starboard::MimeSupportabilityCache;
@@ -485,6 +486,81 @@ void FireboltInterface::FireboltAccessibility::lazy_init(std::unique_lock<std::m
   is_cc_enabled_ = cc_enabled;
 }
 
+// FireboltLocalization
+std::optional<std::string> FireboltInterface::FireboltLocalization::time_zone() {
+  std::unique_lock<std::mutex> lock { mutex_ };
+  if (did_init_)
+    return time_zone_;
+
+  did_init_ = true;
+  const auto generation = ++generation_;
+
+  std::ifstream file("/etc/timezone");
+  std::string name;
+  if (std::getline(file, name)) {
+    if (!name.empty() && name.back() == '\r')
+      name.pop_back();
+    if (!name.empty()) {
+      SB_LOG(ERROR) << "pravakar_time_z source=Firebolt initial /etc/timezone value="
+                   << name;
+      time_zone_ = std::move(name);
+    }
+  }
+
+  auto& localization = Firebolt::IFireboltAccessor::Instance().LocalizationInterface();
+  lock.unlock();
+  auto result = localization.subscribeOnTimeZoneChanged(
+      [this, generation](const std::string& name) {
+        {
+          std::unique_lock<std::mutex> lock { mutex_ };
+          if (!did_init_ || generation != generation_)
+            return;
+          time_zone_ = name;
+        }
+        SB_LOG(ERROR) << "pravakar_time_z source=Firebolt TimeZoneChanged value="
+                     << name;
+        if (auto* application = Application::Get())
+          application->InjectDateTimeConfigurationChangedEvent();
+      });
+  lock.lock();
+
+  if (generation != generation_) {
+    auto value = time_zone_;
+    lock.unlock();
+    if (result)
+      localization.unsubscribe(*result);
+    return value;
+  }
+
+  if (!result) {
+    SB_LOG(ERROR) << "pravakar_time_z Firebolt subscription failed, error code = "
+                  << result.error();
+    did_init_ = false;
+  } else {
+    on_time_zone_changed_id_ = *result;
+  }
+  return time_zone_;
+}
+
+void FireboltInterface::FireboltLocalization::unsubscribe() {
+  std::optional<uint64_t> id;
+  {
+    std::unique_lock<std::mutex> lock { mutex_ };
+    ++generation_;
+    did_init_ = false;
+    time_zone_.reset();
+    id = std::exchange(on_time_zone_changed_id_, std::nullopt);
+  }
+  if (id.has_value()) {
+    auto result = Firebolt::IFireboltAccessor::Instance()
+                      .LocalizationInterface().unsubscribe(*id);
+    if (!result) {
+      SB_LOG(ERROR) << "pravakar_time_z Firebolt unsubscribe failed, error code = "
+                    << result.error();
+    }
+  }
+}
+
 FireboltInterface::FireboltInterface() {
 // This is a workaround to resolve App focus issue. This will be modified with
 // proper firebolt lifecycle implementation
@@ -611,6 +687,7 @@ IAdvertising& FireboltInterface::advertising() {
 }
 
 void FireboltInterface::teardown() {
+  localization_.unsubscribe();
   Firebolt::IFireboltAccessor::Instance().Disconnect();
 }
 
@@ -625,6 +702,11 @@ void FireboltInterface::suspend() {
 
 void FireboltInterface::resume() {
   // no-op
+}
+
+ILocalization& FireboltInterface::localization() {
+  lazy_init();
+  return localization_;
 }
 
 }  // namespace platform

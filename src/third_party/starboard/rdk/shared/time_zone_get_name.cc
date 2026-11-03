@@ -43,6 +43,7 @@
 
 #include "starboard/common/log.h"
 #include "starboard/time_zone.h"
+#include "third_party/starboard/rdk/shared/platform/platform_interface.h"
 
 #define TZDEFAULT "/etc/localtime"
 #define TZZONEINFOTAIL "/zoneinfo/"
@@ -73,17 +74,29 @@ static bool isValidOlsonID(const char* id) {
 // Similar to how ICU::putil.cpp gets IANA(Olsen) timezone ID.
 const char* SbTimeZoneGetName() {
   /* Check TZ variable */
-  if (gTimeZoneBufferPtr == NULL) {
-    const char* tz = getenv("TZ");
-    if (tz && *tz == ':') ++tz;
-    if (tz && isValidOlsonID(tz)) {
-      strncpy(gTimeZoneBuffer, tz, sizeof(gTimeZoneBuffer));
-      gTimeZoneBuffer[sizeof(gTimeZoneBuffer) - 1] = 0;
-      gTimeZoneBufferPtr = &gTimeZoneBuffer[0];
-    }
+  const char* tz = getenv("TZ");
+  if (tz && *tz == ':') ++tz;
+  if (tz && isValidOlsonID(tz)) {
+    strncpy(gTimeZoneBuffer, tz, sizeof(gTimeZoneBuffer));
+    gTimeZoneBuffer[sizeof(gTimeZoneBuffer) - 1] = 0;
+    gTimeZoneBufferPtr = &gTimeZoneBuffer[0];
+    SB_LOG(ERROR) << "pravakar_time_z source=TZ value=" << gTimeZoneBufferPtr;
+    return gTimeZoneBufferPtr;
   }
 
-  /* Check /etc/timezone file */
+  auto time_zone =
+      third_party::starboard::rdk::shared::platform::localization().time_zone();
+  if (time_zone && isValidOlsonID(time_zone->c_str())) {
+    strncpy(gTimeZoneBuffer, time_zone->c_str(), sizeof(gTimeZoneBuffer));
+    gTimeZoneBuffer[sizeof(gTimeZoneBuffer) - 1] = 0;
+    gTimeZoneBufferPtr = &gTimeZoneBuffer[0];
+    SB_LOG(ERROR) << "pravakar_time_z source=platform localization value="
+                 << gTimeZoneBufferPtr;
+    return gTimeZoneBufferPtr;
+  }
+
+  // Fall back to the local file when platform localization provides no valid
+  // timezone, including on platforms without Firebolt.
   if (gTimeZoneBufferPtr == NULL) {
     FILE* fp = fopen("/etc/timezone", "r");
     if (fp != NULL) {
@@ -96,11 +109,16 @@ const char* SbTimeZoneGetName() {
 
         if (isValidOlsonID(gTimeZoneBuffer)) {
           gTimeZoneBufferPtr = &gTimeZoneBuffer[0];
+          SB_LOG(ERROR) << "pravakar_time_z source=/etc/timezone fallback value="
+                       << gTimeZoneBufferPtr;
         }
       }
       fclose(fp);
     }
   }
+
+  if (gTimeZoneBufferPtr != NULL)
+    return gTimeZoneBufferPtr;
 
   /*
   This is a trick to look at the name of the link to get the Olson ID
@@ -120,6 +138,8 @@ const char* SbTimeZoneGetName() {
       if (tzZoneInfoTailPtr != NULL &&
           isValidOlsonID(tzZoneInfoTailPtr + tzZoneInfoTailLen)) {
         gTimeZoneBufferPtr = tzZoneInfoTailPtr + tzZoneInfoTailLen;
+        SB_LOG(ERROR) << "pravakar_time_z source=/etc/localtime symlink value="
+                     << gTimeZoneBufferPtr;
         return gTimeZoneBufferPtr;
       }
     }

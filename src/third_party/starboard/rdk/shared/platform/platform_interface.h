@@ -128,6 +128,15 @@ public:
   virtual std::optional<Ifa> advertising_id() = 0;
 };
 
+// Interface for querying localization settings.
+class ILocalization {
+public:
+  virtual ~ILocalization() = default;
+
+  // Get timezone name.
+  virtual std::optional<std::string> time_zone() = 0;
+};
+
 class PlatformInterface {
  protected:
   PlatformInterface() = default;
@@ -142,6 +151,7 @@ class PlatformInterface {
   virtual ITextToSpeech& text_to_speech() = 0;
   virtual IAccessibility& accessibility() = 0;
   virtual IAdvertising& advertising() = 0;
+  virtual ILocalization& localization();
 };
 
 inline IDevice& device() {
@@ -158,6 +168,10 @@ inline IAccessibility& accessibility() {
 
 inline IAdvertising& advertising() {
   return PlatformInterface::get().advertising();
+}
+
+inline ILocalization& localization() {
+  return PlatformInterface::get().localization();
 }
 
 }  // namespace third_party::starboard::rdk::shared::platform

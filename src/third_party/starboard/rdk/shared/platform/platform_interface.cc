@@ -86,6 +86,17 @@ std::ostream& operator<<(std::ostream& out, const std::optional<T>& v) {
 
 #define TRACE_INFO() SB_LOG(INFO) << std::boolalpha
 
+namespace {
+
+class EmptyLocalization final : public ILocalization {
+public:
+  std::optional<std::string> time_zone() override {
+    return {};
+  }
+};
+
+}  // namespace
+
 class TracePlatformInterface final : public PlatformInterface {
 
   struct TraceDevice final : public IDevice {
@@ -225,11 +236,25 @@ class TracePlatformInterface final : public PlatformInterface {
     }
   };
 
+  struct TraceLocalization final : public ILocalization {
+    ILocalization& localization_;
+
+    TraceLocalization(ILocalization& localization)
+        : localization_(localization) {}
+
+    std::optional<std::string> time_zone() override {
+      auto ret = localization_.time_zone();
+      TRACE_INFO() << "localization.time_zone: " << ret;
+      return ret;
+    }
+  };
+
   std::unique_ptr<PlatformInterface> api_;
   TraceDevice device_{api_->device()};
   TraceTextToSpeech text_to_speech_{api_->text_to_speech()};
   TraceAccessibility accessibility_{api_->accessibility()};
   TraceAdvertising advertising_{api_->advertising()};
+  TraceLocalization localization_{api_->localization()};
 
  public:
   TracePlatformInterface(std::unique_ptr<PlatformInterface>&& api) : api_(std::move(api)) {}
@@ -242,6 +267,7 @@ class TracePlatformInterface final : public PlatformInterface {
   ITextToSpeech& text_to_speech() override { return text_to_speech_; }
   IAccessibility& accessibility() override { return accessibility_; }
   IAdvertising& advertising() override { return advertising_; }
+  ILocalization& localization() override { return localization_; }
 };
 #undef TRACE_INFO
 
@@ -378,6 +404,20 @@ class CompositeInterface final : public PlatformInterface {
     }
   };
 
+  struct CompositeLocalization final : public ILocalization {
+    CompositeInterface& parent_;
+
+    CompositeLocalization(CompositeInterface& parent) : parent_(parent) {}
+
+    std::optional<std::string> time_zone() override {
+      for (auto& interface : parent_.interfaces_) {
+        if (auto ret = interface->localization().time_zone(); ret.has_value())
+          return ret;
+      }
+      return {};
+    }
+  };
+
   template<typename T>
   std::optional<T> forAnyDevice(std::function<std::optional<T>(IDevice&)>&& fn) {
     for (auto &i : interfaces_) {
@@ -423,6 +463,7 @@ class CompositeInterface final : public PlatformInterface {
   CompositeTextToSpeech text_to_speech_{ *this };
   CompositeAccessibility accessibility_{ *this };
   CompositeAdvertising advertising_{ *this };
+  CompositeLocalization localization_{ *this };
 
 public:
   CompositeInterface(std::vector<std::unique_ptr<PlatformInterface>> &&interfaces)
@@ -462,6 +503,10 @@ public:
   IAdvertising& advertising() override {
     return advertising_;
   }
+
+  ILocalization& localization() override {
+    return localization_;
+  }
 };
 
 PlatformInterface& PlatformInterface::get() {
@@ -494,6 +539,11 @@ PlatformInterface& PlatformInterface::get() {
 #endif
   });
   return *g_instance;
+}
+
+ILocalization& PlatformInterface::localization() {
+  static EmptyLocalization localization;
+  return localization;
 }
 
 }  // namespace third_party::starboard::rdk::shared::platform

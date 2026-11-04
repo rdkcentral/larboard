@@ -26,6 +26,11 @@ system `gcc` or `g++` prerequisite check. Existing SDK and source checkouts
 are reused; an incomplete SDK installation or conflicting Starboard path
 is reported as an error rather than overwritten.
 
+After sourcing the SDK, the script points SSL and Git at the host CA bundle
+`/etc/ssl/certs/ca-certificates.crt` so dependency downloads do not use the
+SDK build machine's certificate path. This does not change global Git
+configuration or disable certificate verification.
+
 The output is
 `cobalt-build/src/out/rdk-arm_gold/starboard/obj/third_party/starboard/rdk/shared/libstarboard_platform.a`.
 Set `NINJA_JOBS` to change the default of four parallel build jobs.

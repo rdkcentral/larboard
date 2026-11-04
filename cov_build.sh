@@ -59,7 +59,6 @@ fi
 git -C "$COBALT_DIR" checkout --detach "$COBALT_TAG"
 
 echo "Phase 3: Set the build environment"
-export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 export PYTHONPYCACHEPREFIX="$COBALT_ROOT/py-cache"
 export DEPOT_TOOLS_METRICS=0
 export DEPOT_TOOLS_UPDATE=0
@@ -70,6 +69,11 @@ set +u
 source "$SDK_SETUP"
 set -u
 unset PKG_CONFIG_SYSROOT_DIR
+
+# SDK Git may retain a certificate path from the SDK build machine.
+export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+[[ -r "$SSL_CERT_FILE" ]] || fail "Host CA certificate bundle not found: $SSL_CERT_FILE"
+export GIT_SSL_CAINFO="$SSL_CERT_FILE"
 
 export PATH="$PATH:$DEPOT_TOOLS_DIR"
 

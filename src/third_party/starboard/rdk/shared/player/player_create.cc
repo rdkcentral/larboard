@@ -44,6 +44,7 @@ SbPlayerCreate(SbWindow window,
                void* context,
                SbDecodeTargetGraphicsContextProvider* provider)
 {
+  SB_DLOG(INFO) << "SbPlayerCreate: Coverity PR smoke test.";
   if (!sample_deallocate_func || !decoder_status_func || !player_status_func || !player_error_func) {
     return kSbPlayerInvalid;
   }

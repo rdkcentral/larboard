@@ -1,1 +1,1 @@
-oecore-x86_64/** filter=lfs diff=lfs merge=lfs -text
+/oecore-x86_64-armv7at2hf-neon-toolchain-1.0.sh filter=lfs diff=lfs merge=lfs -text

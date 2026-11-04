@@ -31,27 +31,11 @@ jobs:
         with:
           lfs: true
 
-      - name: Check build environment
+      - name: Verify Yocto SDK installer
         run: |
-          echo "Checking build environment..."
-          cat /etc/os-release
-
-          for tool in git curl python3 make gcc g++ tar; do
-            command -v "$tool" || exit 1
-          done
-
-          git --version
-          python3 --version
-
-      - name: Verify Yocto SDK
-        run: |
-          SDK_DIR="oecore-x86_64"
-
-          test -f "$SDK_DIR/environment-setup-armv7at2hf-neon-oe-linux-gnueabi"
-          test -d "$SDK_DIR/sysroots/armv7at2hf-neon-oe-linux-gnueabi"
-          test -d "$SDK_DIR/sysroots/x86_64-bolt_distro-linux"
-
-          du -sh "$SDK_DIR"
+          SDK_INSTALLER="oecore-x86_64-armv7at2hf-neon-toolchain-1.0.sh"
+          test -f "$SDK_INSTALLER"
+          ls -lh "$SDK_INSTALLER"
 
       - name: Check Coverity tools
         run: |
@@ -63,13 +47,6 @@ jobs:
               echo "$tool: not found"
             fi
           done
-
-      - name: Check SDK relocation permissions
-        run: |
-          id
-          ls -ld /home
-          ls -ld /home/sranan984 || true
-          test -w /home && echo "/home is writable" || echo "/home is not writable"
 
       - name: Build Larboard
         run: |

@@ -8,6 +8,7 @@
 
 
 # Local Cobalt/Larboard build workspace
+/oecore-x86_64/
 /cobalt-build/
 /depot_tools/
 /sdk-installer/

@@ -17,6 +17,12 @@ COBALT_TAG="27.lts.3"
 DEPOT_TOOLS_COMMIT="2cea9cdd785391335d448773124631cb711225e2"
 NINJA_JOBS="${NINJA_JOBS:-4}"
 
+export PYTHONPYCACHEPREFIX="$COBALT_ROOT/py-cache"
+export DEPOT_TOOLS_METRICS=0
+export DEPOT_TOOLS_UPDATE=0
+export TERM=screen
+export PATH="$PATH:$DEPOT_TOOLS_DIR"
+
 fail() {
     echo "ERROR: $1" >&2
     exit 1
@@ -58,11 +64,7 @@ fi
 [[ -d "$COBALT_DIR/.git" ]] || fail "Cobalt is not a Git checkout: $COBALT_DIR"
 git -C "$COBALT_DIR" checkout --detach "$COBALT_TAG"
 
-echo "Phase 3: Set the build environment"
-export PYTHONPYCACHEPREFIX="$COBALT_ROOT/py-cache"
-export DEPOT_TOOLS_METRICS=0
-export DEPOT_TOOLS_UPDATE=0
-export TERM=screen
+echo "Phase 3: Initialize the SDK environment"
 
 # Yocto setup scripts may reference unset variables.
 set +u
@@ -74,8 +76,6 @@ unset PKG_CONFIG_SYSROOT_DIR
 export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 [[ -r "$SSL_CERT_FILE" ]] || fail "Host CA certificate bundle not found: $SSL_CERT_FILE"
 export GIT_SSL_CAINFO="$SSL_CERT_FILE"
-
-export PATH="$PATH:$DEPOT_TOOLS_DIR"
 
 echo "Phase 4: Configure and sync Cobalt dependencies"
 cd "$COBALT_ROOT"

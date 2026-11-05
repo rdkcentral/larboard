@@ -79,6 +79,10 @@ bool GetModelYear(char* out_value, int value_length) {
     return CopyStringAndTestIfSuccess(out_value, value_length, prop.c_str());
   }
 
+  if (const char* env = std::getenv("COBALT_MODEL_YEAR"); !!env) {
+    return CopyStringAndTestIfSuccess(out_value, value_length, env);
+  }
+
 #if defined(SB_PLATFORM_MODEL_YEAR)
   return CopyStringAndTestIfSuccess(out_value, value_length,
     std::to_string(SB_PLATFORM_MODEL_YEAR).c_str());

@@ -36,12 +36,14 @@
 // Licensed under UNICODE LICENSE V3 and the ICU License from https://github.com/unicode-org/icu/blob/main/LICENSE
 
 #include <limits.h>
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
 
 #include "starboard/common/log.h"
 #include "starboard/time_zone.h"
+#include "third_party/starboard/rdk/shared/platform/platform_interface.h"
 
 #define TZDEFAULT "/etc/localtime"
 #define TZZONEINFOTAIL "/zoneinfo/"
@@ -77,6 +79,17 @@ const char* SbTimeZoneGetName() {
     if (tz && *tz == ':') ++tz;
     if (tz && isValidOlsonID(tz)) {
       strncpy(gTimeZoneBuffer, tz, sizeof(gTimeZoneBuffer));
+      gTimeZoneBuffer[sizeof(gTimeZoneBuffer) - 1] = 0;
+      gTimeZoneBufferPtr = &gTimeZoneBuffer[0];
+    }
+  }
+
+  /* Try platform::localization api. */
+  if (gTimeZoneBufferPtr == NULL) {
+    using namespace third_party::starboard::rdk::shared;
+    auto time_zone = platform::localization().time_zone();
+    if (time_zone && isValidOlsonID(time_zone->c_str())) {
+      strncpy(gTimeZoneBuffer, time_zone->c_str(), sizeof(gTimeZoneBuffer));
       gTimeZoneBuffer[sizeof(gTimeZoneBuffer) - 1] = 0;
       gTimeZoneBufferPtr = &gTimeZoneBuffer[0];
     }

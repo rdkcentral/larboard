@@ -1601,6 +1601,10 @@ std::optional<Ifa> RDKServicesInterface::RDKAdvertising::advertising_id() {
   return {};
 }
 
+std::optional<std::string> RDKServicesInterface::RDKLocalization::time_zone() {
+  return {};
+}
+
 RDKServicesInterface::RDKServicesInterface() = default;
 
 // static

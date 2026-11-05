@@ -19,6 +19,7 @@
 
 #include "starboard/event.h"
 #include "starboard/extension/accessibility.h"
+#include "starboard/common/file.h"
 #include "starboard/shared/starboard/media/mime_supportability_cache.h"
 
 #include "third_party/starboard/rdk/shared/application_rdk.h"
@@ -581,6 +582,79 @@ void FireboltInterface::FireboltAccessibility::lazy_init(std::unique_lock<std::m
   is_cc_enabled_ = cc_enabled;
 }
 
+// FireboltLocalization
+std::optional<std::string> FireboltInterface::FireboltLocalization::time_zone() {
+  std::unique_lock<std::mutex> lock { mutex_ };
+  if (did_init_)
+    return time_zone_;
+
+  did_init_ = true;
+
+  ::starboard::ScopedFile file("/etc/timezone", O_RDONLY);
+  if (file.IsValid()) {
+    char buffer[PATH_MAX];
+    errno = 0;
+    const int bytes_read = file.ReadAll(buffer, sizeof(buffer));
+    if (bytes_read < 0 || errno != 0) {
+      SB_LOG(ERROR) << "Failed to read /etc/timezone";
+    } else {
+      std::string name(buffer, bytes_read);
+      const auto newline = name.find('\n');
+      if (newline != std::string::npos)
+        name.resize(newline);
+      if (!name.empty() && name.back() == '\r')
+        name.pop_back();
+      if (bytes_read == PATH_MAX && newline == std::string::npos) {
+        SB_LOG(ERROR) << "Timezone line in /etc/timezone fills PATH_MAX buffer";
+      } else if (!name.empty()) {
+        time_zone_ = std::move(name);
+      }
+    }
+  } else {
+    SB_LOG(INFO) << "Cannot open /etc/timezone";
+  }
+
+  auto& localization = Firebolt::IFireboltAccessor::Instance().LocalizationInterface();
+  lock.unlock();
+  auto result = localization.subscribeOnTimeZoneChanged(
+      [this](const std::string& name) {
+        {
+          std::unique_lock<std::mutex> lock { mutex_ };
+          if (time_zone_ == name)
+            return;
+          time_zone_ = name;
+        }
+        if (auto* application = Application::Get())
+          application->InjectDateTimeConfigurationChangedEvent();
+      });
+  lock.lock();
+
+  if (!result) {
+    SB_LOG(ERROR) << "localization.subscribeOnTimeZoneChanged() failed, error code = "
+                  << result.error();
+  } else {
+    on_time_zone_changed_id_ = *result;
+  }
+  return time_zone_;
+}
+
+void FireboltInterface::FireboltLocalization::unsubscribe() {
+  std::optional<uint64_t> id;
+  {
+    std::unique_lock<std::mutex> lock { mutex_ };
+    did_init_ = false;
+    id = std::exchange(on_time_zone_changed_id_, std::nullopt);
+  }
+  if (id.has_value()) {
+    auto result = Firebolt::IFireboltAccessor::Instance()
+                      .LocalizationInterface().unsubscribe(*id);
+    if (!result) {
+      SB_LOG(ERROR) << "Failed to unsubscribe from OnTimeZoneChanged, error code = "
+                    << result.error();
+    }
+  }
+}
+
 FireboltInterface::FireboltInterface() {
 // This is a workaround to resolve App focus issue. This will be modified with
 // proper firebolt lifecycle implementation
@@ -707,6 +781,7 @@ IAdvertising& FireboltInterface::advertising() {
 }
 
 void FireboltInterface::teardown() {
+  localization_.unsubscribe();
   Firebolt::IFireboltAccessor::Instance().Disconnect();
 }
 
@@ -716,11 +791,17 @@ void FireboltInterface::suspend() {
     accessibility_.unsubscribe();
     text_to_speech_.unsubscribe();
     device_.unsubscribe();
+    localization_.unsubscribe();
   }
 }
 
 void FireboltInterface::resume() {
   // no-op
+}
+
+ILocalization& FireboltInterface::localization() {
+  lazy_init();
+  return localization_;
 }
 
 }  // namespace platform

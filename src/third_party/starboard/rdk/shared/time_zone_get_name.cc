@@ -36,12 +36,14 @@
 // Licensed under UNICODE LICENSE V3 and the ICU License from https://github.com/unicode-org/icu/blob/main/LICENSE
 
 #include <limits.h>
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
 
 #include "starboard/common/log.h"
 #include "starboard/time_zone.h"
+#include "third_party/starboard/rdk/shared/platform/platform_interface.h"
 
 #define TZDEFAULT "/etc/localtime"
 #define TZZONEINFOTAIL "/zoneinfo/"
@@ -49,6 +51,7 @@
 
 static char gTimeZoneBuffer[PATH_MAX];
 static char* gTimeZoneBufferPtr = NULL;
+static bool gTimeZoneFromTZ = false;
 
 static bool isValidOlsonID(const char* id) {
   int32_t idx = 0;
@@ -71,6 +74,9 @@ static bool isValidOlsonID(const char* id) {
 
 // Similar to how ICU::putil.cpp gets IANA(Olsen) timezone ID.
 const char* SbTimeZoneGetName() {
+  if (gTimeZoneFromTZ)
+    return gTimeZoneBufferPtr;
+
   /* Check TZ variable */
   if (gTimeZoneBufferPtr == NULL) {
     const char* tz = getenv("TZ");
@@ -79,8 +85,42 @@ const char* SbTimeZoneGetName() {
       strncpy(gTimeZoneBuffer, tz, sizeof(gTimeZoneBuffer));
       gTimeZoneBuffer[sizeof(gTimeZoneBuffer) - 1] = 0;
       gTimeZoneBufferPtr = &gTimeZoneBuffer[0];
+      gTimeZoneFromTZ = true;
+      return gTimeZoneBufferPtr;
     }
   }
+
+  auto time_zone =
+      third_party::starboard::rdk::shared::platform::localization().time_zone();
+  if (time_zone && isValidOlsonID(time_zone->c_str())) {
+    strncpy(gTimeZoneBuffer, time_zone->c_str(), sizeof(gTimeZoneBuffer));
+    gTimeZoneBuffer[sizeof(gTimeZoneBuffer) - 1] = 0;
+    gTimeZoneBufferPtr = &gTimeZoneBuffer[0];
+    return gTimeZoneBufferPtr;
+  }
+
+  // Fall back to the local file when platform localization provides no valid
+  // timezone, including on platforms without Firebolt.
+  if (gTimeZoneBufferPtr == NULL) {
+    FILE* fp = fopen("/etc/timezone", "r");
+    if (fp != NULL) {
+      if (fgets(gTimeZoneBuffer, sizeof(gTimeZoneBuffer), fp) != NULL) {
+        size_t len = strlen(gTimeZoneBuffer);
+        while (len > 0 && (gTimeZoneBuffer[len - 1] == '\n' ||
+                          gTimeZoneBuffer[len - 1] == '\r')) {
+          gTimeZoneBuffer[--len] = '\0';
+        }
+
+        if (isValidOlsonID(gTimeZoneBuffer)) {
+          gTimeZoneBufferPtr = &gTimeZoneBuffer[0];
+        }
+      }
+      fclose(fp);
+    }
+  }
+
+  if (gTimeZoneBufferPtr != NULL)
+    return gTimeZoneBufferPtr;
 
   /*
   This is a trick to look at the name of the link to get the Olson ID
@@ -104,7 +144,7 @@ const char* SbTimeZoneGetName() {
     }
     SB_NOTREACHED();
     return "";
-  } else {
-    return gTimeZoneBufferPtr;
   }
+
+  return gTimeZoneBufferPtr;
 }

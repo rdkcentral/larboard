@@ -86,17 +86,6 @@ std::ostream& operator<<(std::ostream& out, const std::optional<T>& v) {
 
 #define TRACE_INFO() SB_LOG(INFO) << std::boolalpha
 
-namespace {
-
-class EmptyLocalization final : public ILocalization {
-public:
-  std::optional<std::string> time_zone() override {
-    return {};
-  }
-};
-
-}  // namespace
-
 class TracePlatformInterface final : public PlatformInterface {
 
   struct TraceDevice final : public IDevice {
@@ -161,12 +150,6 @@ class TracePlatformInterface final : public PlatformInterface {
     std::optional<std::string> firmware_version() override {
       auto ret = device_.firmware_version();
       TRACE_INFO() << "device.firmware_version: " << ret;
-      return ret;
-    }
-
-    std::optional<bool> is_connection_type_wireless() override {
-      auto ret = device_.is_connection_type_wireless();
-      TRACE_INFO() << "device.is_connection_type_wireless: " << ret;
       return ret;
     }
 
@@ -325,12 +308,6 @@ class CompositeInterface final : public PlatformInterface {
     std::optional<std::string> firmware_version() override {
       return parent_.forAnyDevice<std::string>([](IDevice& device) {
         return device.firmware_version();
-      });
-    }
-
-    std::optional<bool> is_connection_type_wireless() override {
-      return parent_.forAnyDevice<bool>([](IDevice& device) {
-        return device.is_connection_type_wireless();
       });
     }
 
@@ -539,11 +516,6 @@ PlatformInterface& PlatformInterface::get() {
 #endif
   });
   return *g_instance;
-}
-
-ILocalization& PlatformInterface::localization() {
-  static EmptyLocalization localization;
-  return localization;
 }
 
 }  // namespace third_party::starboard::rdk::shared::platform

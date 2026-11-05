@@ -19,6 +19,7 @@
 
 #include "starboard/event.h"
 #include "starboard/extension/accessibility.h"
+#include "starboard/common/file.h"
 #include "starboard/shared/starboard/media/mime_supportability_cache.h"
 
 #include "third_party/starboard/rdk/shared/application_rdk.h"
@@ -29,7 +30,7 @@
 
 #include <chrono>
 #include <cstring>
-#include <fstream>
+#include <math.h>
 
 using namespace std::chrono_literals;
 using ::starboard::MimeSupportabilityCache;
@@ -71,11 +72,98 @@ std::ostream& operator<<(std::ostream& out, const Firebolt::Error& e) {
 
 // FireboltDevice
 std::optional<Resolution> FireboltInterface::FireboltDevice::video_resolution() {
-  return { };
+  static const auto convert_resolution = [](const Firebolt::VideoOutput::VideoOutputResolution& resolution) {
+    if (resolution.height >= 2160) {
+      return Resolution(3840, 2160);
+    }
+    return Resolution(1920, 1080);
+  };
+
+  std::unique_lock<std::mutex> lock { mutex_ };
+  if (video_resolution_.has_value()) {
+    return video_resolution_;
+  }
+
+  auto &video_output = Firebolt::IFireboltAccessor::Instance().VideoOutputInterface();
+
+  if (!did_subscribe_video_resolution_) {
+    did_subscribe_video_resolution_ = true;
+    lock.unlock();
+    auto subscribe_result = video_output.subscribeOnResolutionChanged(
+      [this](const Firebolt::VideoOutput::VideoOutputResolution& resolution) {
+        SB_LOG(INFO) << "videoOutput.resolutionChanged, resolution = "
+                     << resolution.width << 'x' << resolution.height;
+        set_video_resolution(convert_resolution(resolution));
+      });
+    lock.lock();
+    if (!subscribe_result) {
+      SB_LOG(ERROR) << "videoOutput.subscribeOnResolutionChanged() failed, error code = " << subscribe_result.error();
+    } else {
+      on_video_resolution_changed_id_ = *subscribe_result;
+    }
+  }
+  lock.unlock();
+
+  Resolution resolution(1920, 1080);
+
+  auto output_resolution = video_output.resolution();
+  if (!output_resolution) {
+    SB_LOG(ERROR) << "videoOutput.resolution() failed, error code = " << output_resolution.error();
+  } else {
+    resolution = convert_resolution(*output_resolution);
+  }
+
+  lock.lock();
+  if (video_resolution_.has_value()) {
+    return video_resolution_;
+  }
+  video_resolution_ = resolution;
+  lock.unlock();
+
+  SB_LOG(INFO) << "Video resolution updated: " << resolution.width << 'x' << resolution.height;
+
+  return resolution;
+}
+
+void FireboltInterface::FireboltDevice::set_video_resolution(Resolution resolution) {
+  {
+    std::unique_lock<std::mutex> lock { mutex_ };
+    if (!did_subscribe_video_resolution_ || video_resolution_ == resolution) {
+      return;
+    }
+    video_resolution_ = resolution;
+  }
+  SB_LOG(INFO) << "Video resolution updated: " << resolution.width << 'x' << resolution.height;
+  if (Application::Get()) {
+    SbEventSchedule([](void* data) {
+      MimeSupportabilityCache::GetInstance()->ClearCachedMimeSupportabilities();
+      Application::Get()->DisplayInfoChanged();
+    }, nullptr, 0);
+  }
 }
 
 std::optional<float> FireboltInterface::FireboltDevice::diagonal_size_in_inches() {
-  return { };
+  std::unique_lock<std::mutex> lock { mutex_ };
+
+  // lazy init
+  if (!diagonal_size_in_inches_.has_value()) {
+    // set default value
+    diagonal_size_in_inches_.emplace(.0f);
+
+    auto &display = Firebolt::IFireboltAccessor::Instance().DisplayInterface();
+    lock.unlock();
+    auto size = display.size();
+    lock.lock();
+
+    if (!size) {
+      SB_LOG(ERROR) << "display.size() failed, error code = " << size.error();
+      diagonal_size_in_inches_ = 0.f;
+    } else {
+      diagonal_size_in_inches_ = sqrtf(powf(static_cast<float>(size->width), 2.f) + powf(static_cast<float>(size->height), 2.f)) / 2.54f;
+    }
+  }
+
+  return diagonal_size_in_inches_;
 }
 
 std::optional<HDRFormat> FireboltInterface::FireboltDevice::hdr() {
@@ -153,10 +241,6 @@ std::optional<std::string> FireboltInterface::FireboltDevice::firmware_version()
   return {};
 }
 
-std::optional<bool> FireboltInterface::FireboltDevice::is_connection_type_wireless() {
-  return {};
-}
-
 std::optional<bool> FireboltInterface::FireboltDevice::is_disconnected() {
   return {};
 }
@@ -194,10 +278,22 @@ void FireboltInterface::FireboltDevice::init() {
 
 void FireboltInterface::FireboltDevice::unsubscribe() {
   std::optional<uint64_t> on_hdr_format_changed_id;
+  std::optional<uint64_t> on_video_resolution_changed_id;
   {
     std::unique_lock<std::mutex> lock { mutex_ };
     on_hdr_format_changed_id = std::exchange(on_hdr_format_changed_id_, std::nullopt);
     hdr_format_.reset();
+    diagonal_size_in_inches_.reset();
+    on_video_resolution_changed_id = std::exchange(on_video_resolution_changed_id_, std::nullopt);
+    did_subscribe_video_resolution_ = false;
+    video_resolution_.reset();
+  }
+  if (on_video_resolution_changed_id.has_value()) {
+    auto &video_output = Firebolt::IFireboltAccessor::Instance().VideoOutputInterface();
+    auto result = video_output.unsubscribe(*on_video_resolution_changed_id);
+    if (!result) {
+      SB_LOG(ERROR) << "Failed to unsubscribe from OnResolutionChanged, error code = " << result.error();
+    }
   }
   auto &device = Firebolt::IFireboltAccessor::Instance().DeviceInterface();
   if (on_hdr_format_changed_id.has_value()) {
@@ -493,49 +589,49 @@ std::optional<std::string> FireboltInterface::FireboltLocalization::time_zone() 
     return time_zone_;
 
   did_init_ = true;
-  const auto generation = ++generation_;
 
-  std::ifstream file("/etc/timezone");
-  std::string name;
-  if (std::getline(file, name)) {
-    if (!name.empty() && name.back() == '\r')
-      name.pop_back();
-    if (!name.empty()) {
-      SB_LOG(ERROR) << "pravakar_time_z source=Firebolt initial /etc/timezone value="
-                   << name;
-      time_zone_ = std::move(name);
+  ::starboard::ScopedFile file("/etc/timezone", O_RDONLY);
+  if (file.IsValid()) {
+    char buffer[PATH_MAX];
+    errno = 0;
+    const int bytes_read = file.ReadAll(buffer, sizeof(buffer));
+    if (bytes_read < 0 || errno != 0) {
+      SB_LOG(ERROR) << "Failed to read /etc/timezone";
+    } else {
+      std::string name(buffer, bytes_read);
+      const auto newline = name.find('\n');
+      if (newline != std::string::npos)
+        name.resize(newline);
+      if (!name.empty() && name.back() == '\r')
+        name.pop_back();
+      if (bytes_read == PATH_MAX && newline == std::string::npos) {
+        SB_LOG(ERROR) << "Timezone line in /etc/timezone fills PATH_MAX buffer";
+      } else if (!name.empty()) {
+        time_zone_ = std::move(name);
+      }
     }
+  } else {
+    SB_LOG(INFO) << "Cannot open /etc/timezone";
   }
 
   auto& localization = Firebolt::IFireboltAccessor::Instance().LocalizationInterface();
   lock.unlock();
   auto result = localization.subscribeOnTimeZoneChanged(
-      [this, generation](const std::string& name) {
+      [this](const std::string& name) {
         {
           std::unique_lock<std::mutex> lock { mutex_ };
-          if (!did_init_ || generation != generation_)
+          if (time_zone_ == name)
             return;
           time_zone_ = name;
         }
-        SB_LOG(ERROR) << "pravakar_time_z source=Firebolt TimeZoneChanged value="
-                     << name;
         if (auto* application = Application::Get())
           application->InjectDateTimeConfigurationChangedEvent();
       });
   lock.lock();
 
-  if (generation != generation_) {
-    auto value = time_zone_;
-    lock.unlock();
-    if (result)
-      localization.unsubscribe(*result);
-    return value;
-  }
-
   if (!result) {
-    SB_LOG(ERROR) << "pravakar_time_z Firebolt subscription failed, error code = "
+    SB_LOG(ERROR) << "localization.subscribeOnTimeZoneChanged() failed, error code = "
                   << result.error();
-    did_init_ = false;
   } else {
     on_time_zone_changed_id_ = *result;
   }
@@ -546,16 +642,14 @@ void FireboltInterface::FireboltLocalization::unsubscribe() {
   std::optional<uint64_t> id;
   {
     std::unique_lock<std::mutex> lock { mutex_ };
-    ++generation_;
     did_init_ = false;
-    time_zone_.reset();
     id = std::exchange(on_time_zone_changed_id_, std::nullopt);
   }
   if (id.has_value()) {
     auto result = Firebolt::IFireboltAccessor::Instance()
                       .LocalizationInterface().unsubscribe(*id);
     if (!result) {
-      SB_LOG(ERROR) << "pravakar_time_z Firebolt unsubscribe failed, error code = "
+      SB_LOG(ERROR) << "Failed to unsubscribe from OnTimeZoneChanged, error code = "
                     << result.error();
     }
   }
@@ -697,6 +791,7 @@ void FireboltInterface::suspend() {
     accessibility_.unsubscribe();
     text_to_speech_.unsubscribe();
     device_.unsubscribe();
+    localization_.unsubscribe();
   }
 }
 

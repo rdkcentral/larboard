@@ -43,19 +43,23 @@ private:
     std::optional<std::string> chipset() override;
     std::optional<std::string> device_type() override;
     std::optional<std::string> firmware_version() override;
-    std::optional<bool> is_connection_type_wireless() override;
     std::optional<bool> is_disconnected() override;
 
     void init();
     void unsubscribe();
   private:
     void set_hdr_format(HDRFormat hdr_format);
+    void set_video_resolution(Resolution resolution);
 
     std::mutex mutex_;
     std::optional<std::string> device_type_;
     std::optional<std::string> chipset_id_;
     std::optional<HDRFormat> hdr_format_;
     std::optional<uint64_t> on_hdr_format_changed_id_;
+    std::optional<float> diagonal_size_in_inches_;
+    std::optional<Resolution> video_resolution_;
+    bool did_subscribe_video_resolution_ { false };
+    std::optional<uint64_t> on_video_resolution_changed_id_;
   };
 
   struct FireboltTextToSpeech final : public ITextToSpeech {
@@ -113,7 +117,6 @@ private:
   private:
     std::mutex mutex_;
     bool did_init_ { false };
-    uint64_t generation_ { 0 };
     std::optional<std::string> time_zone_;
     std::optional<uint64_t> on_time_zone_changed_id_;
   };

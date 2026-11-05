@@ -47,7 +47,6 @@ private:
     std::optional<std::string> chipset() override;
     std::optional<std::string> device_type() override;
     std::optional<std::string> firmware_version() override;
-    std::optional<bool> is_connection_type_wireless() override;
     std::optional<bool> is_disconnected() override;
   };
 
@@ -66,6 +65,10 @@ private:
   struct RDKAdvertising final : public IAdvertising {
     std::optional<Ifa> advertising_id() override;
   };
+
+  struct RDKLocalization final : public ILocalization {
+    std::optional<std::string> time_zone() override;
+  };
 public:
   RDKServicesInterface();
 
@@ -77,6 +80,7 @@ public:
   ITextToSpeech& text_to_speech() override { return text_to_speech_; }
   IAccessibility& accessibility() override { return accessibility_; }
   IAdvertising& advertising() override { return advertising_; }
+  ILocalization& localization() override { return localization_; }
 
   static bool is_available();
 private:
@@ -84,6 +88,7 @@ private:
   RDKTextToSpeech text_to_speech_;
   RDKAccessibility accessibility_;
   RDKAdvertising advertising_;
+  RDKLocalization localization_;
 };
 
 }  // namespace platform

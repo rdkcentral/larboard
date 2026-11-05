@@ -40,6 +40,9 @@ struct HDRFormat {
 struct Resolution {
   Resolution() = default;
   Resolution(int32_t w, int32_t h) : width(w), height(h) {}
+  bool operator==(const Resolution& other) const {
+    return width == other.width && height == other.height;
+  }
   int32_t width{1920};
   int32_t height{1080};
 };
@@ -75,9 +78,6 @@ public:
 
   // Get the firmware version of the device.
   virtual std::optional<std::string> firmware_version() = 0;
-
-  // Check if the device has a wireless connection.
-  virtual std::optional<bool> is_connection_type_wireless() = 0;
 
   // Check if the device is currently disconnected.
   virtual std::optional<bool> is_disconnected() = 0;
@@ -151,7 +151,7 @@ class PlatformInterface {
   virtual ITextToSpeech& text_to_speech() = 0;
   virtual IAccessibility& accessibility() = 0;
   virtual IAdvertising& advertising() = 0;
-  virtual ILocalization& localization();
+  virtual ILocalization& localization() = 0;
 };
 
 inline IDevice& device() {

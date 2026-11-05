@@ -51,6 +51,7 @@
 
 static char gTimeZoneBuffer[PATH_MAX];
 static char* gTimeZoneBufferPtr = NULL;
+static bool gTimeZoneFromTZ = false;
 
 static bool isValidOlsonID(const char* id) {
   int32_t idx = 0;
@@ -73,15 +74,20 @@ static bool isValidOlsonID(const char* id) {
 
 // Similar to how ICU::putil.cpp gets IANA(Olsen) timezone ID.
 const char* SbTimeZoneGetName() {
-  /* Check TZ variable */
-  const char* tz = getenv("TZ");
-  if (tz && *tz == ':') ++tz;
-  if (tz && isValidOlsonID(tz)) {
-    strncpy(gTimeZoneBuffer, tz, sizeof(gTimeZoneBuffer));
-    gTimeZoneBuffer[sizeof(gTimeZoneBuffer) - 1] = 0;
-    gTimeZoneBufferPtr = &gTimeZoneBuffer[0];
-    SB_LOG(ERROR) << "pravakar_time_z source=TZ value=" << gTimeZoneBufferPtr;
+  if (gTimeZoneFromTZ)
     return gTimeZoneBufferPtr;
+
+  /* Check TZ variable */
+  if (gTimeZoneBufferPtr == NULL) {
+    const char* tz = getenv("TZ");
+    if (tz && *tz == ':') ++tz;
+    if (tz && isValidOlsonID(tz)) {
+      strncpy(gTimeZoneBuffer, tz, sizeof(gTimeZoneBuffer));
+      gTimeZoneBuffer[sizeof(gTimeZoneBuffer) - 1] = 0;
+      gTimeZoneBufferPtr = &gTimeZoneBuffer[0];
+      gTimeZoneFromTZ = true;
+      return gTimeZoneBufferPtr;
+    }
   }
 
   auto time_zone =
@@ -90,8 +96,6 @@ const char* SbTimeZoneGetName() {
     strncpy(gTimeZoneBuffer, time_zone->c_str(), sizeof(gTimeZoneBuffer));
     gTimeZoneBuffer[sizeof(gTimeZoneBuffer) - 1] = 0;
     gTimeZoneBufferPtr = &gTimeZoneBuffer[0];
-    SB_LOG(ERROR) << "pravakar_time_z source=platform localization value="
-                 << gTimeZoneBufferPtr;
     return gTimeZoneBufferPtr;
   }
 
@@ -109,8 +113,6 @@ const char* SbTimeZoneGetName() {
 
         if (isValidOlsonID(gTimeZoneBuffer)) {
           gTimeZoneBufferPtr = &gTimeZoneBuffer[0];
-          SB_LOG(ERROR) << "pravakar_time_z source=/etc/timezone fallback value="
-                       << gTimeZoneBufferPtr;
         }
       }
       fclose(fp);
@@ -138,8 +140,6 @@ const char* SbTimeZoneGetName() {
       if (tzZoneInfoTailPtr != NULL &&
           isValidOlsonID(tzZoneInfoTailPtr + tzZoneInfoTailLen)) {
         gTimeZoneBufferPtr = tzZoneInfoTailPtr + tzZoneInfoTailLen;
-        SB_LOG(ERROR) << "pravakar_time_z source=/etc/localtime symlink value="
-                     << gTimeZoneBufferPtr;
         return gTimeZoneBufferPtr;
       }
     }

@@ -3,10 +3,14 @@
 set -Eeuo pipefail
 trap 'echo "ERROR: Build failed at line $LINENO: $BASH_COMMAND" >&2' ERR
 
-# Place the Yocto SDK installer beside this script, then run: bash cov_build.sh
+# Download the Yocto SDK installer from Artifactory, then install and build.
 # Generated SDK, dependency checkouts and build outputs stay in this workspace.
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SDK_INSTALLER="$ROOT_DIR/oecore-x86_64-armv7at2hf-neon-toolchain-1.0.sh"
+# SDK_INSTALLER="$ROOT_DIR/oecore-x86_64-armv7at2hf-neon-toolchain-1.0.sh"
+SDK_URL="https://artifactory.rdkcentral.com/artifactory/cov_larboard/oecore-x86_64-sdk.tar.gz"
+SDK_DOWNLOAD_DIR="$ROOT_DIR/sdk-installer"
+SDK_ARCHIVE="$SDK_DOWNLOAD_DIR/oecore-x86_64-sdk.tar.gz"
+SDK_INSTALLER="$SDK_DOWNLOAD_DIR/oecore-x86_64-armv7at2hf-neon-toolchain-1.0.sh"
 SDK_DIR="$ROOT_DIR/oecore-x86_64"
 SDK_SETUP="$SDK_DIR/environment-setup-armv7at2hf-neon-oe-linux-gnueabi"
 DEPOT_TOOLS_DIR="$ROOT_DIR/depot_tools"
@@ -33,12 +37,15 @@ fail() {
 
 echo "Phase 1: Install the Yocto SDK"
 if [[ ! -f "$SDK_SETUP" ]]; then
-    [[ -f "$SDK_INSTALLER" ]] || fail "SDK installer not found: $SDK_INSTALLER"
-    if grep -q '^version https://git-lfs.github.com/spec/v1$' "$SDK_INSTALLER"; then
-        fail "SDK installer is a Git LFS pointer. Run git lfs pull first."
-    fi
     [[ ! -e "$SDK_DIR" && ! -L "$SDK_DIR" ]] ||
         fail "SDK directory exists without its environment setup file. Inspect it before reinstalling: $SDK_DIR"
+    mkdir -p "$SDK_DOWNLOAD_DIR"
+    echo "Downloading SDK from Artifactory..."
+    curl --fail --location --show-error "$SDK_URL" -o "$SDK_ARCHIVE"
+    tar -xzf "$SDK_ARCHIVE" -C "$SDK_DOWNLOAD_DIR" \
+        oecore-x86_64-armv7at2hf-neon-toolchain-1.0.sh
+    [[ -f "$SDK_INSTALLER" ]] ||
+        fail "SDK installer not found after extraction: $SDK_INSTALLER"
     sh "$SDK_INSTALLER" -y -d "$SDK_DIR"
 else
     echo "Reusing installed SDK: $SDK_DIR"

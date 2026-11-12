@@ -6,10 +6,12 @@ If you would like to contribute code to this project you can do so through GitHu
 Building RDK ARM Starboard
 -------------------------
 
-Place the Yocto SDK installer
-`oecore-x86_64-armv7at2hf-neon-toolchain-1.0.sh` at the repository root.
-The installer is tracked with Git LFS; use `git lfs pull` to download it
-when it is available in the checkout. Do not commit the installed SDK.
+The script downloads `oecore-x86_64-sdk.tar.gz` from
+`https://artifactory.rdkcentral.com/artifactory/cov_larboard/oecore-x86_64-sdk.tar.gz`
+without authentication and extracts the SDK installer into `sdk-installer/`.
+Do not commit the downloaded archive or installed SDK.
+The original Git LFS installer remains tracked, but is no longer used by
+the script; repository checkout may still download it.
 
 On a Linux host suitable for the Yocto SDK, run:
 

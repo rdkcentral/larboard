@@ -7,9 +7,9 @@ trap 'echo "ERROR: Build failed at line $LINENO" >&2' ERR
 # Generated SDK, dependency checkouts and build outputs stay in this workspace.
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # SDK_INSTALLER="$ROOT_DIR/oecore-x86_64-armv7at2hf-neon-toolchain-1.0.sh"
-SDK_URL="https://artifactory.rdkcentral.com/artifactory/cov_larboard/oecore-x86_64-sdk.tar.gz"
+SDK_URL="https://artifactory.rdkcentral.com/artifactory/cov_larboard/oecore-installer.tar.gz"
 SDK_DOWNLOAD_DIR="$ROOT_DIR/sdk-installer"
-SDK_ARCHIVE="$SDK_DOWNLOAD_DIR/oecore-x86_64-sdk.tar.gz"
+SDK_ARCHIVE="$SDK_DOWNLOAD_DIR/oecore-installer.tar.gz"
 SDK_INSTALLER="$SDK_DOWNLOAD_DIR/oecore-x86_64-armv7at2hf-neon-toolchain-1.0.sh"
 SDK_DIR="$ROOT_DIR/oecore-x86_64"
 SDK_SETUP="$SDK_DIR/environment-setup-armv7at2hf-neon-oe-linux-gnueabi"

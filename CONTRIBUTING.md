@@ -6,8 +6,8 @@ If you would like to contribute code to this project you can do so through GitHu
 Building RDK ARM Starboard
 -------------------------
 
-The script downloads `oecore-x86_64-sdk.tar.gz` from
-`https://artifactory.rdkcentral.com/artifactory/cov_larboard/oecore-x86_64-sdk.tar.gz`
+The script downloads `oecore-installer.tar.gz` from
+`https://artifactory.rdkcentral.com/artifactory/cov_larboard/oecore-installer.tar.gz`
 using Bearer authentication and extracts the SDK installer into `sdk-installer/`.
 Configure the `ARTIFACTORY_TOKEN` Actions secret for GitHub builds, or supply
 the environment variable through your local/internal CI secret mechanism.

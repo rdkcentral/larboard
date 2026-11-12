@@ -49,6 +49,8 @@ jobs:
           done
 
       - name: Build Larboard
+        env:
+          ARTIFACTORY_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
         run: |
           bash cov_build.sh
 

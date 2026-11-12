@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 set -Eeuo pipefail
-trap 'echo "ERROR: Build failed at line $LINENO: $BASH_COMMAND" >&2' ERR
+trap 'echo "ERROR: Build failed at line $LINENO" >&2' ERR
 
 # Download the Yocto SDK installer from Artifactory, then install and build.
 # Generated SDK, dependency checkouts and build outputs stay in this workspace.
@@ -39,9 +39,13 @@ echo "Phase 1: Install the Yocto SDK"
 if [[ ! -f "$SDK_SETUP" ]]; then
     [[ ! -e "$SDK_DIR" && ! -L "$SDK_DIR" ]] ||
         fail "SDK directory exists without its environment setup file. Inspect it before reinstalling: $SDK_DIR"
+    [[ -n "${ARTIFACTORY_TOKEN:-}" ]] ||
+        fail "ARTIFACTORY_TOKEN is required to download the SDK."
     mkdir -p "$SDK_DOWNLOAD_DIR"
     echo "Downloading SDK from Artifactory..."
-    curl --fail --location --show-error "$SDK_URL" -o "$SDK_ARCHIVE"
+    curl --fail --location --show-error \
+        --header "Authorization: Bearer $ARTIFACTORY_TOKEN" \
+        "$SDK_URL" -o "$SDK_ARCHIVE"
     tar -xzf "$SDK_ARCHIVE" -C "$SDK_DOWNLOAD_DIR" \
         oecore-x86_64-armv7at2hf-neon-toolchain-1.0.sh
     [[ -f "$SDK_INSTALLER" ]] ||

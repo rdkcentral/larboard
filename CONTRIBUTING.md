@@ -8,8 +8,12 @@ Building RDK ARM Starboard
 
 The script downloads `oecore-x86_64-sdk.tar.gz` from
 `https://artifactory.rdkcentral.com/artifactory/cov_larboard/oecore-x86_64-sdk.tar.gz`
-without authentication and extracts the SDK installer into `sdk-installer/`.
-Do not commit the downloaded archive or installed SDK.
+using Bearer authentication and extracts the SDK installer into `sdk-installer/`.
+Configure the `ARTIFACTORY_TOKEN` Actions secret for GitHub builds, or supply
+the environment variable through your local/internal CI secret mechanism.
+The token is required only when downloading a fresh SDK. Do not commit the
+token, downloaded archive, or installed SDK, and do not enable shell tracing
+(`set -x`) when running the authenticated download.
 The original Git LFS installer remains tracked, but is no longer used by
 the script; repository checkout may still download it.
 

@@ -28,14 +28,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          lfs: true
-
-      - name: Verify Yocto SDK installer
-        run: |
-          SDK_INSTALLER="oecore-x86_64-armv7at2hf-neon-toolchain-1.0.sh"
-          test -f "$SDK_INSTALLER"
-          ls -lh "$SDK_INSTALLER"
 
       - name: Check Coverity tools
         run: |

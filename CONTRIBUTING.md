@@ -14,8 +14,8 @@ the environment variable through your local/internal CI secret mechanism.
 The token is required only when downloading a fresh SDK. Do not commit the
 token, downloaded archive, or installed SDK, and do not enable shell tracing
 (`set -x`) when running the authenticated download.
-The original Git LFS installer remains tracked, but is no longer used by
-the script; repository checkout may still download it.
+The installer is not tracked by Git; repository checkout does not need to
+download the SDK through Git LFS.
 
 On a Linux host suitable for the Yocto SDK, run:
 

@@ -9,6 +9,7 @@
 
 # Local Cobalt/Larboard build workspace
 /oecore-x86_64/
+/oecore-x86_64-armv7at2hf-neon-toolchain-1.0.sh
 /cobalt-build/
 /depot_tools/
 /sdk-installer/

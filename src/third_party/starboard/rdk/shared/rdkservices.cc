@@ -1608,6 +1608,9 @@ bool RDKServicesInterface::is_available() {
   return getenv("THUNDER_ACCESS") != nullptr || getenv("COBALT_ENABLE_OVERRIDES") != nullptr;
 }
 
+void RDKServicesInterface::initialize() {
+}
+
 void RDKServicesInterface::teardown() {
   TeardownJSONRPCLink();
 }

@@ -110,6 +110,17 @@ private:
     std::chrono::steady_clock::time_point cache_expiration_tp_ {};
   };
 
+  struct FireboltLocalization final : public ILocalization {
+    std::optional<std::string> time_zone() override;
+    void unsubscribe();
+
+  private:
+    std::mutex mutex_;
+    bool did_init_ { false };
+    std::optional<std::string> time_zone_;
+    std::optional<uint64_t> on_time_zone_changed_id_;
+  };
+
 public:
   FireboltInterface();
 
@@ -121,6 +132,7 @@ public:
   ITextToSpeech& text_to_speech() override;
   IAccessibility& accessibility() override;
   IAdvertising& advertising() override;
+  ILocalization& localization() override;
 
   static bool is_available();
 
@@ -134,6 +146,7 @@ private:
   FireboltTextToSpeech text_to_speech_;
   FireboltAccessibility accessibility_;
   FireboltAdvertising advertising_;
+  FireboltLocalization localization_;
 };
 
 }  // namespace platform

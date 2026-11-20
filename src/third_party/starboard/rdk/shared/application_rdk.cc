@@ -264,6 +264,10 @@ void Application::InjectInputEvent(SbInputData* data) {
                    &Application::DeleteDestructor<SbInputData>));
 }
 
+void Application::InjectDateTimeConfigurationChangedEvent() {
+  Inject(new Event(kSbEventDateTimeConfigurationChanged, nullptr, nullptr));
+}
+
 void Application::Inject(Event* e) {
   if (e && e->event && e->event->type == kSbEventTypeFreeze) {
     player::ForceStop();

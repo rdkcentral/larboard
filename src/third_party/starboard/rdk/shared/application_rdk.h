@@ -63,6 +63,7 @@ class Application : public ::starboard::QueueApplication {
   SbWindow CreateSbWindow(const SbWindowOptions* options);
   bool DestroySbWindow(SbWindow window);
   void InjectInputEvent(SbInputData* data);
+  void InjectDateTimeConfigurationChangedEvent();
 
   EssCtx *GetEssCtx() const { return ctx_; }
   NativeWindowType GetNativeWindow() const { return native_window_; }

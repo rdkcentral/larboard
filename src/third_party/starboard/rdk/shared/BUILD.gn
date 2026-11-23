@@ -272,6 +272,7 @@ static_library("starboard_platform") {
     "system/system_properties_override.h",
     "system/system_get_locale_id.cc",
     "time_zone_get_name.cc",
+    "time_zone_get_name.h",
     "uri.cc",
     "uri.h",
     "window/window_create.cc",

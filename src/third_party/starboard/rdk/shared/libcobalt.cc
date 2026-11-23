@@ -157,6 +157,8 @@ struct APIContext
       exit_strategy_ = "noexit";
     else
       exit_strategy_ = "stop";
+
+    SB_LOG(INFO) << "Updated exit strategy = " << exit_strategy_;
   }
 
   const char* GetCobaltExitStrategy()
@@ -277,6 +279,9 @@ void SbRdkSetSetting(const char* key, const char* json) {
 #endif
   if (strcmp(key, "systemproperties") == 0) {
     SystemProperties::SetSettings(json);
+    if (std::string exit_strategy; SystemProperties::GetExitStrategy(exit_strategy)) {
+      SbRdkSetCobaltExitStrategy(exit_strategy.c_str());
+    }
   }
   else if (strcmp(key, "advertisingid") == 0) {
     AdvertisingId::SetSettings(json);

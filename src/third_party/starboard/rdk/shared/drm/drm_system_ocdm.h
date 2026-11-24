@@ -74,15 +74,15 @@ class DrmSystemOcdm : public SbDrmSystemPrivate, public ::starboard::RefCountedT
   // SbDrmSystemPrivate
   void GenerateSessionUpdateRequest(int ticket,
                                     std::string_view type,
-                                    std::string_view initialization_data) override;
+                                    ::starboard::span<const uint8_t> initialization_data) override;
   void CloseSession(std::string_view session_id) override;
   void UpdateSession(int ticket,
-                     std::string_view key,
+                     ::starboard::span<const uint8_t> key,
                      std::string_view session_id) override;
   DecryptStatus Decrypt(::starboard::InputBuffer* buffer) override;
   bool IsServerCertificateUpdatable() override { return false; }
   void UpdateServerCertificate(int ticket,
-                               std::string_view certificate) override;
+                               ::starboard::span<const uint8_t> certificate) override;
 
   std::optional<std::string_view> GetMetrics() override;
 

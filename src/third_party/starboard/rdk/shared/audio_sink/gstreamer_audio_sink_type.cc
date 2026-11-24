@@ -75,7 +75,6 @@ class GStreamerAudioSink : public SbAudioSinkPrivate {
       int channels,
       int sampling_frequency_hz,
       SbMediaAudioSampleType audio_sample_type,
-      SbMediaAudioFrameStorageType audio_frame_storage_type,
       SbAudioSinkFrameBuffers frame_buffers,
       int frame_buffers_size_in_frames,
       SbAudioSinkUpdateSourceStatusFunc update_source_status_func,
@@ -83,8 +82,6 @@ class GStreamerAudioSink : public SbAudioSinkPrivate {
       SbAudioSinkPrivate::ErrorFunc error_func,
       void* context);
   ~GStreamerAudioSink() override;
-
-  bool IsType(Type* type) override { return type_ == type; }
 
   void SetPlaybackRate(double playback_rate) override {
     SB_NOTIMPLEMENTED();
@@ -145,7 +142,6 @@ GStreamerAudioSink::GStreamerAudioSink(
     int channels,
     int sampling_frequency_hz,
     SbMediaAudioSampleType audio_sample_type,
-    SbMediaAudioFrameStorageType audio_frame_storage_type,
     SbAudioSinkFrameBuffers frame_buffers,
     int frame_buffers_size_in_frames,
     SbAudioSinkUpdateSourceStatusFunc update_source_status_func,
@@ -166,10 +162,6 @@ GStreamerAudioSink::GStreamerAudioSink(
                           "Cobalt audio sink");
 
   GST_TRACE("TID: %d", gettid());
-
-  SB_DCHECK(audio_frame_storage_type == kSbMediaAudioFrameStorageTypeInterleaved)
-      << "It seems SbAudioSinkIsAudioFrameStorageTypeSupported() was changed "
-      << "without adjustng here.";
 
   main_loop_context_ = g_main_context_new();
   mainloop_ = g_main_loop_new(main_loop_context_, FALSE);
@@ -490,7 +482,6 @@ SbAudioSink GStreamerAudioSinkType::Create(
     int channels,
     int sampling_frequency_hz,
     SbMediaAudioSampleType audio_sample_type,
-    SbMediaAudioFrameStorageType audio_frame_storage_type,
     SbAudioSinkFrameBuffers frame_buffers,
     int frame_buffers_size_in_frames,
     SbAudioSinkUpdateSourceStatusFunc update_source_status_func,
@@ -499,7 +490,7 @@ SbAudioSink GStreamerAudioSinkType::Create(
     void* context) {
   return new GStreamerAudioSink(
       this, channels, sampling_frequency_hz, audio_sample_type,
-      audio_frame_storage_type, frame_buffers, frame_buffers_size_in_frames,
+      frame_buffers, frame_buffers_size_in_frames,
       update_source_status_func, consume_frames_func, error_func, context);
 }
 
